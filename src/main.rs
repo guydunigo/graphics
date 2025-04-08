@@ -74,6 +74,13 @@ impl ApplicationHandler for App {
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
                 buffer.fill(0xff181818);
+                for i in 0..size.width / 2 {
+                    for j in 0..size.height / 2 {
+                        buffer
+                            [(i + size.width / 4 + (j + size.height / 4) * size.width) as usize] =
+                            0xffffff00;
+                    }
+                }
                 buffer
                     .present()
                     .expect("Failed to present the softbuffer buffer");
