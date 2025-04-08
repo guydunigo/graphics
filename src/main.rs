@@ -1,3 +1,6 @@
+use std::{num::NonZeroU32, rc::Rc};
+
+use softbuffer::{Context, Surface};
 use winit::{
     application::ApplicationHandler,
     event::{ElementState, KeyEvent, WindowEvent},
@@ -8,16 +11,26 @@ use winit::{
 
 #[derive(Default)]
 struct App {
-    window: Option<Window>,
+    graphics: Option<(
+        Rc<Window>,
+        Surface<Rc<Window>, Rc<Window>>,
+        Context<Rc<Window>>,
+    )>,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.window = Some(
+        let window = Rc::new(
             event_loop
                 .create_window(Window::default_attributes())
                 .unwrap(),
         );
+
+        let context = Context::new(window.clone()).expect("Failed to create a softbuffer context");
+        let surface =
+            Surface::new(&context, window.clone()).expect("Failed to create a softbuffer surface");
+
+        self.graphics = Some((window, surface, context));
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -33,6 +46,7 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
+                // TODO: drop surface
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
@@ -42,14 +56,34 @@ impl ApplicationHandler for App {
                 // this event rather than in AboutToWait, since rendering in here allows
                 // the program to gracefully handle redraws requested by the OS.
 
+                let (window, surface, _) = self.graphics.as_mut().unwrap();
+
                 // Draw.
+                let size = window.inner_size();
+                let (Some(width), Some(height)) =
+                    (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
+                else {
+                    return;
+                };
+
+                // Fill a buffer with a solid color
+                surface
+                    .resize(width, height)
+                    .expect("Failed to resize the softbuffer surface");
+                let mut buffer = surface
+                    .buffer_mut()
+                    .expect("Failed to get the softbuffer buffer");
+                buffer.fill(0xff181818);
+                buffer
+                    .present()
+                    .expect("Failed to present the softbuffer buffer");
 
                 // Queue a RedrawRequested event.
                 //
                 // You only need to call this if you've determined that you need to redraw in
                 // applications which do not always need to. Applications that redraw continuously
                 // can render here instead.
-                self.window.as_ref().unwrap().request_redraw();
+                window.request_redraw();
             }
             _ => (),
         }
