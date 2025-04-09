@@ -1,3 +1,8 @@
+use std::ops::{Deref, DerefMut};
+
+use softbuffer::Buffer;
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+
 use crate::maths::Vec3f;
 
 #[derive(Debug, Clone, Copy)]
@@ -46,12 +51,40 @@ impl Default for Triangle {
 }
 
 impl Triangle {
-    pub fn world_to_raster(&self, cam: Camera, screen_width: u32, screen_height: u32) -> Self {
+    fn world_to_raster(&self, cam: Camera, screen_width: u32, screen_height: u32) -> Self {
         Triangle {
             p0: self.p0.world_to_raster(cam, screen_width, screen_height),
             p1: self.p1.world_to_raster(cam, screen_width, screen_height),
             p2: self.p2.world_to_raster(cam, screen_width, screen_height),
         }
+    }
+
+    fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
+        buffer: &mut B,
+        screen_width: u32,
+        screen_height: u32,
+        v: &Vertice,
+    ) {
+        if let Some(i) = v.pos.buffer_index(screen_width, screen_height) {
+            buffer[i] = v.color;
+            buffer[i - 1] = v.color;
+            buffer[i + 1] = v.color;
+            buffer[i - (screen_width as usize)] = v.color;
+            buffer[i + (screen_width as usize)] = v.color;
+        }
+    }
+
+    pub fn raster<B: DerefMut<Target = [u32]>>(
+        &self,
+        buffer: &mut B,
+        cam: Camera,
+        screen_width: u32,
+        screen_height: u32,
+    ) {
+        let self_raster = self.world_to_raster(cam, screen_width, screen_height);
+        Self::draw_vertice_basic(buffer, screen_width, screen_height, &self_raster.p0);
+        Self::draw_vertice_basic(buffer, screen_width, screen_height, &self_raster.p1);
+        Self::draw_vertice_basic(buffer, screen_width, screen_height, &self_raster.p2);
     }
 }
 

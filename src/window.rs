@@ -51,17 +51,7 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(KeyCode::Escape),
-                        state: ElementState::Pressed,
-                        repeat: false,
-                        ..
-                    },
-                ..
-            } => {
+            WindowEvent::CloseRequested => {
                 // TODO: drop surface
                 event_loop.exit();
             }
@@ -74,12 +64,13 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => match key {
+                KeyCode::Escape | KeyCode::KeyQ => event_loop.exit(),
                 KeyCode::ArrowLeft | KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
                 KeyCode::ArrowRight | KeyCode::KeyD => self.world.camera.pos.x += 0.1,
                 KeyCode::ArrowUp => self.world.camera.pos.y += 0.1,
                 KeyCode::ArrowDown => self.world.camera.pos.y -= 0.1,
-                KeyCode::KeyW => self.world.camera.pos.z += 0.1,
-                KeyCode::KeyS => self.world.camera.pos.z -= 0.1,
+                KeyCode::KeyW => self.world.camera.pos.z -= 0.1,
+                KeyCode::KeyS => self.world.camera.pos.z += 0.1,
                 _ => (),
             },
             WindowEvent::RedrawRequested => {
@@ -122,29 +113,9 @@ impl ApplicationHandler for App {
                 }
                 */
 
-                let faces = self.world.world_to_raster(size.width, size.height);
-                faces.iter().for_each(|f| {
-                    if let Some(i) = f.p0.pos.buffer_index(size.width, size.height) {
-                        buffer[i] = f.p0.color;
-                        buffer[i - 1] = f.p0.color;
-                        buffer[i + 1] = f.p0.color;
-                        buffer[i - (size.width as usize)] = f.p0.color;
-                        buffer[i + (size.width as usize)] = f.p0.color;
-                    }
-                    if let Some(i) = f.p1.pos.buffer_index(size.width, size.height) {
-                        buffer[i] = f.p1.color;
-                        buffer[i - 1] = f.p1.color;
-                        buffer[i + 1] = f.p1.color;
-                        buffer[i - (size.width as usize)] = f.p1.color;
-                        buffer[i + (size.width as usize)] = f.p1.color;
-                    }
-                    if let Some(i) = f.p2.pos.buffer_index(size.width, size.height) {
-                        buffer[i] = f.p2.color;
-                        buffer[i - 1] = f.p2.color;
-                        buffer[i + 1] = f.p2.color;
-                        buffer[i - (size.width as usize)] = f.p2.color;
-                        buffer[i + (size.width as usize)] = f.p2.color;
-                    }
+                // TODO: move all code to rasterizer struct
+                self.world.faces.iter().for_each(|f| {
+                    f.raster(&mut buffer, self.world.camera, size.width, size.height)
                 });
                 buffer
                     .present()

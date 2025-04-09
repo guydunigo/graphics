@@ -52,8 +52,11 @@ impl Vec3f {
     }
 
     pub fn buffer_index(&self, width: u32, height: u32) -> Option<usize> {
-        if self.x >= 0. && self.x < (width as f64) && self.y >= 0. && self.y < (height as f64) {
-            Some(self.x.round() as usize + self.y.round() as usize * width as usize)
+        let x = self.x.round();
+        let y = self.y.round();
+        // TODO: if self.x >= 0. && x < (width as f64) && self.y >= 0. && y < (height as f64) {
+        if self.x >= 1. && x < (width as f64) - 1. && self.y >= 1. && y < (height as f64) - 1. {
+            Some(x as usize + y as usize * width as usize)
         } else {
             None
         }
