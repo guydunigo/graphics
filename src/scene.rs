@@ -24,11 +24,17 @@ pub struct Triangle {
 
 impl Default for Triangle {
     fn default() -> Self {
-        Triangle {
-            p0: Vertice::new(0., 1., -12., 0xffff0000),
-            p1: Vertice::new(0., 0., -10., 0xff00ff00),
-            p2: Vertice::new(0., 0., -14., 0xff0000ff),
-        }
+        Triangle::new(
+            Vertice::new(0., 1., -12., 0xffff0000),
+            Vertice::new(0., 0., -10., 0xff00ff00),
+            Vertice::new(0., 0., -14., 0xff0000ff),
+        )
+    }
+}
+
+impl Triangle {
+    fn new(p0: Vertice, p1: Vertice, p2: Vertice) -> Self {
+        Triangle { p0, p1, p2 }
     }
 }
 
@@ -63,7 +69,34 @@ pub struct World {
 impl Default for World {
     fn default() -> Self {
         World {
-            triangles: vec![Triangle::default()],
+            triangles: vec![
+                Triangle::default(),
+                Triangle::new(
+                    Vertice::new(3., 0., -19., 0xffff0000),
+                    Vertice::new(4., 0., -19., 0xffff0000),
+                    Vertice::new(4., 1., -10., 0xffff0000),
+                ),
+                Triangle::new(
+                    Vertice::new(4., 0., -19., 0xffff0000),
+                    Vertice::new(5., 0., -19., 0xffff0000),
+                    Vertice::new(4., 1., -10., 0xffff0000),
+                ),
+                Triangle::new(
+                    Vertice::new(3., 2., -19., 0xff0000ff),
+                    Vertice::new(4., 1., -10., 0xff0000ff),
+                    Vertice::new(5., 2., -19., 0xff0000ff),
+                ),
+                Triangle::new(
+                    Vertice::new(3., 0., -19., 0xff00ff00),
+                    Vertice::new(4., 1., -10., 0xff00ff00),
+                    Vertice::new(3., 2., -19., 0xff00ff00),
+                ),
+                Triangle::new(
+                    Vertice::new(5., 2., -19., 0xffffff00),
+                    Vertice::new(4., 1., -10., 0xffffff00),
+                    Vertice::new(5., 0., -19., 0xffffff00),
+                ),
+            ],
             camera: Default::default(),
         }
     }

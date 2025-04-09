@@ -34,7 +34,7 @@ fn world_to_raster_vertice(vertice: &Vertice, cam: &Camera, size: &PhysicalSize<
     }
 }
 
-fn world_to_raster_triangle(
+pub fn world_to_raster_triangle(
     triangle: &Triangle,
     cam: &Camera,
     size: &PhysicalSize<u32>,
@@ -72,12 +72,13 @@ fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
     }
 }
 
+// Calculates the area of the parallelogram from vectors ab and ap
+// Positive if p is "right" of ab
 fn edge_function(ab: Vec3f, tri_a: Vec3f, p: Vec3f) -> f64 {
     let ap = p - tri_a;
     ap.x * ab.y - ap.y * ab.x
 }
 
-/*
 fn buffer_index(p: Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
     if p.x >= 0. && p.x < (size.width as f64) && p.y >= 0. && p.y < (size.height as f64) {
         Some(p.x as usize + p.y as usize * size.width as usize)
@@ -105,7 +106,6 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
         }
     }
 }
-*/
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     triangle: &Triangle,
@@ -137,34 +137,36 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             let e12 = edge_function(p12, tri_raster.p1.pos, pixel);
             let e20 = edge_function(p20, tri_raster.p2.pos, pixel);
             if e01 >= 0. && e12 >= 0. && e20 >= 0. {
-                let col_2 = Vec4u::from_color_u32(tri_raster.p2.color);
-                buffer[(pixel.x as usize) + (pixel.y as usize) * size.width as usize] =
-                //    (Vec4u::from_color_u32(tri_raster.p2.color) * (e01 / tri_area)
-                //        + Vec4u::from_color_u32(tri_raster.p0.color) * (e12 / tri_area)
-                //        + Vec4u::from_color_u32(tri_raster.p1.color) * (e20 / tri_area))
-                //        .to_color_u32();
-                // Z = Z0 + \lambda_1(Z1 - Z0) + \lambda_2(Z2 - Z0).
+                let a12 = e12 / tri_area;
+                let a20 = e20 / tri_area;
+
+                // let depth = tri_raster.p2.pos.z * (e01 / tri_area)
+                //     + tri_raster.p0.pos.z * a12
+                //     + tri_raster.p1.pos.z * a20;
+                // Because a01 + a12 + a20 = 1., we can avoid a division and not compute a01.
                 // The terms Z1-Z0 and Z2-Z0 can generally be precomputed, which simplifies the computation of Z to two additions and two multiplications. This optimization is worth mentioning because GPUs utilize it, and it's often discussed for essentially this reason.
-                 (col_2
-                 + (Vec4u::from_color_u32(tri_raster.p0.color) - col_2) * (e12 / tri_area)
-                 + (Vec4u::from_color_u32(tri_raster.p1.color) - col_2) * (e20 / tri_area)).as_color_u32();
-                //
-                // 0xff000000
-                //     | (((0xff * e01 as u32) / tri_area as u32) << 16)
-                //     | (((0xff * e12 as u32) / tri_area as u32) << 8)
-                //     | ((0xff * e20 as u32) / tri_area as u32);
-                /*
-                println!(
-                    "{0:x} {0}",
-                    buffer[(pixel.x as usize) + (pixel.y as usize) * size.width as usize],
-                );
-                */
+                let depth = tri_raster.p2.pos.z
+                    + (tri_raster.p0.pos.z - tri_raster.p2.pos.z) * a12
+                    + (tri_raster.p1.pos.z - tri_raster.p2.pos.z) * a20;
+
+                if depth > 0.5 {
+                    let occlusion = (1. - depth / 20.).clamp(0., 1.);
+
+                    let col_2 = Vec4u::from_color_u32(tri_raster.p2.color);
+                    let col = (col_2
+                        + (Vec4u::from_color_u32(tri_raster.p0.color) - col_2) * a12
+                        + (Vec4u::from_color_u32(tri_raster.p1.color) - col_2) * a20)
+                        * occlusion;
+
+                    buffer[(pixel.x as usize) + (pixel.y as usize) * size.width as usize] =
+                        col.as_color_u32();
+                }
             }
         });
 
-    // draw_vertice_basic(buffer, size, &tri_raster.p0);
-    // draw_vertice_basic(buffer, size, &tri_raster.p1);
-    // draw_vertice_basic(buffer, size, &tri_raster.p2);
+    draw_vertice_basic(buffer, size, &tri_raster.p0);
+    draw_vertice_basic(buffer, size, &tri_raster.p1);
+    draw_vertice_basic(buffer, size, &tri_raster.p2);
 }
 
 pub fn rasterize<B: DerefMut<Target = [u32]>>(

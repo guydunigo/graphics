@@ -9,8 +9,8 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::rasterizer::rasterize;
-use crate::scene::World;
+use crate::{maths::Vec3f, rasterizer::rasterize};
+use crate::{rasterizer::world_to_raster_triangle, scene::World};
 
 struct Graphics {
     window: Rc<Window>,
@@ -28,7 +28,7 @@ impl App {
         let event_loop = EventLoop::new().unwrap();
         // ControlFlow::Poll : Run in a loop (game)
         // Wait : Runs only on event (apps)
-        event_loop.set_control_flow(ControlFlow::Wait);
+        event_loop.set_control_flow(ControlFlow::Poll);
 
         let mut app = App::default();
         event_loop.run_app(&mut app).unwrap();
@@ -93,6 +93,14 @@ impl ApplicationHandler for App {
                 KeyCode::ArrowDown => self.world.camera.pos.y -= 0.1,
                 KeyCode::KeyW => self.world.camera.pos.z -= 0.1,
                 KeyCode::KeyS => self.world.camera.pos.z += 0.1,
+                KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -9.),
+                KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
+                    dbg!(world_to_raster_triangle(
+                        &f,
+                        &self.world.camera,
+                        &self.graphics.as_ref().unwrap().window.inner_size()
+                    ));
+                }),
                 _ => (),
             },
             WindowEvent::RedrawRequested => {
@@ -125,15 +133,6 @@ impl ApplicationHandler for App {
 
                 // Fill a buffer with a solid color
                 buffer.fill(0xff181818);
-                /*
-                for i in 0..size.width / 2 {
-                    for j in 0..size.height / 2 {
-                        buffer
-                            [(i + size.width / 4 + (j + size.height / 4) * size.width) as usize] =
-                            0xffffff00;
-                    }
-                }
-                */
 
                 rasterize(&self.world, &mut buffer, &size);
 
