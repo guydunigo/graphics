@@ -9,6 +9,8 @@ use winit::{
     window::{Window, WindowId},
 };
 
+use crate::scene::World;
+
 #[derive(Default)]
 pub struct App {
     graphics: Option<(
@@ -16,6 +18,7 @@ pub struct App {
         Surface<Rc<Window>, Rc<Window>>,
         Context<Rc<Window>>,
     )>,
+    world: World,
 }
 
 impl App {
@@ -82,10 +85,12 @@ impl ApplicationHandler for App {
                 surface
                     .resize(width, height)
                     .expect("Failed to resize the softbuffer surface");
+
                 let mut buffer = surface
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
                 buffer.fill(0xff181818);
+                /*
                 for i in 0..size.width / 2 {
                     for j in 0..size.height / 2 {
                         buffer
@@ -93,6 +98,20 @@ impl ApplicationHandler for App {
                             0xffffff00;
                     }
                 }
+                */
+
+                let faces = self.world.world_to_raster(size.width, size.height);
+                faces.iter().for_each(|f| {
+                    if let Some(i) = f.p0.pos.buffer_index(size.width, size.height) {
+                        buffer[i] = f.p0.color;
+                    }
+                    if let Some(i) = f.p1.pos.buffer_index(size.width, size.height) {
+                        buffer[i] = f.p1.color;
+                    }
+                    if let Some(i) = f.p2.pos.buffer_index(size.width, size.height) {
+                        buffer[i] = f.p2.color;
+                    }
+                });
                 buffer
                     .present()
                     .expect("Failed to present the softbuffer buffer");

@@ -1,6 +1,6 @@
 use std::ops::{Add, Sub};
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct Vec2f {
     pub x: f64,
     pub y: f64,
@@ -12,7 +12,7 @@ impl Vec2f {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Vec3f {
     pub x: f64,
     pub y: f64,
@@ -29,8 +29,8 @@ impl Vec3f {
         cam_p: Vec3f,
         z_near: f64,
         canvas_side: f64,
-        screen_width: f64,
-        screen_height: f64,
+        screen_width: u32,
+        screen_height: u32,
     ) -> Self {
         let p_cam = *self - cam_p;
         let p_screen = Vec3f {
@@ -45,9 +45,17 @@ impl Vec3f {
         };
         // [0,1]
         Self {
-            x: (p_ndc.x + 1.) / 2. * screen_width,
-            y: (1. - p_ndc.y) / 2. * screen_height,
+            x: (p_ndc.x + 1.) / 2. * (screen_width as f64),
+            y: (1. - p_ndc.y) / 2. * (screen_height as f64),
             z: p_screen.z,
+        }
+    }
+
+    pub fn buffer_index(&self, width: u32, height: u32) -> Option<usize> {
+        if self.x >= 0. && self.x < (width as f64) && self.y >= 0. && self.y < (height as f64) {
+            Some(self.x.round() as usize + self.y.round() as usize * width as usize)
+        } else {
+            None
         }
     }
 }
