@@ -1,30 +1,58 @@
 use std::ops::{Add, Sub};
 
-#[derive(Default, Debug)]
-pub struct Vec3<T> {
-    pub x: T,
-    pub y: T,
-    pub z: T,
+#[derive(Default, Debug, Clone, Copy)]
+struct Vec2f {
+    pub x: f64,
+    pub y: f64,
 }
 
-impl<T: Clone> Clone for Vec3<T> {
-    fn clone(&self) -> Self {
+impl Vec2f {
+    pub fn new(x: f64, y: f64) -> Self {
+        Self { x, y }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Vec3f {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+impl Vec3f {
+    pub fn new(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+
+    pub fn world_to_raster(
+        &self,
+        cam_p: Vec3f,
+        z_near: f64,
+        canvas_side: f64,
+        screen_width: f64,
+        screen_height: f64,
+    ) -> Self {
+        let p_cam = *self - cam_p;
+        let p_screen = Vec3f {
+            x: p_cam.x * z_near / -p_cam.z,
+            y: p_cam.y * z_near / -p_cam.z,
+            z: -p_cam.z,
+        };
+        // [-1,1]
+        let p_ndc = Vec2f {
+            x: p_screen.x / canvas_side,
+            y: p_screen.y / canvas_side,
+        };
+        // [0,1]
         Self {
-            x: self.x.clone(),
-            y: self.y.clone(),
-            z: self.z.clone(),
+            x: (p_ndc.x + 1.) / 2. * screen_width,
+            y: (1. - p_ndc.y) / 2. * screen_height,
+            z: p_screen.z,
         }
     }
 }
-impl<T: Copy> Copy for Vec3<T> {}
 
-impl<T> Vec3<T> {
-    pub fn new(x: T, y: T, z: T) -> Self {
-        Self { x, y, z }
-    }
-}
-
-impl<T: Add<Output = T>> Add for Vec3<T> {
+impl Add for Vec3f {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -36,7 +64,7 @@ impl<T: Add<Output = T>> Add for Vec3<T> {
     }
 }
 
-impl<T: Sub<Output = T>> Sub for Vec3<T> {
+impl Sub for Vec3f {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
