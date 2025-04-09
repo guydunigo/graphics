@@ -11,13 +11,14 @@ use winit::{
 
 use crate::scene::World;
 
+struct Graphics {
+    window: Rc<Window>,
+    surface: Surface<Rc<Window>, Rc<Window>>,
+}
+
 #[derive(Default)]
 pub struct App {
-    graphics: Option<(
-        Rc<Window>,
-        Surface<Rc<Window>, Rc<Window>>,
-        Context<Rc<Window>>,
-    )>,
+    graphics: Option<Graphics>,
     world: World,
 }
 
@@ -45,7 +46,7 @@ impl ApplicationHandler for App {
         let surface =
             Surface::new(&context, window.clone()).expect("Failed to create a softbuffer surface");
 
-        self.graphics = Some((window, surface, context));
+        self.graphics = Some(Graphics { window, surface });
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -64,6 +65,23 @@ impl ApplicationHandler for App {
                 // TODO: drop surface
                 event_loop.exit();
             }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(key),
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                ..
+            } => match key {
+                KeyCode::ArrowLeft | KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
+                KeyCode::ArrowRight | KeyCode::KeyD => self.world.camera.pos.x += 0.1,
+                KeyCode::ArrowUp => self.world.camera.pos.y += 0.1,
+                KeyCode::ArrowDown => self.world.camera.pos.y -= 0.1,
+                KeyCode::KeyW => self.world.camera.pos.z += 0.1,
+                KeyCode::KeyS => self.world.camera.pos.z -= 0.1,
+                _ => (),
+            },
             WindowEvent::RedrawRequested => {
                 // Redraw the application.
                 //
@@ -71,24 +89,28 @@ impl ApplicationHandler for App {
                 // this event rather than in AboutToWait, since rendering in here allows
                 // the program to gracefully handle redraws requested by the OS.
 
-                let (window, surface, _) = self.graphics.as_mut().unwrap();
+                let gfx = self.graphics.as_mut().unwrap();
 
                 // Draw.
-                let size = window.inner_size();
-                let (Some(width), Some(height)) =
-                    (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-                else {
-                    return;
-                };
+                let size = gfx.window.inner_size();
+                {
+                    let (Some(width), Some(height)) =
+                        (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
+                    else {
+                        return;
+                    };
 
-                // Fill a buffer with a solid color
-                surface
-                    .resize(width, height)
-                    .expect("Failed to resize the softbuffer surface");
+                    gfx.surface
+                        .resize(width, height)
+                        .expect("Failed to resize the softbuffer surface");
+                }
 
-                let mut buffer = surface
+                let mut buffer = gfx
+                    .surface
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
+
+                // Fill a buffer with a solid color
                 buffer.fill(0xff181818);
                 /*
                 for i in 0..size.width / 2 {
@@ -104,12 +126,24 @@ impl ApplicationHandler for App {
                 faces.iter().for_each(|f| {
                     if let Some(i) = f.p0.pos.buffer_index(size.width, size.height) {
                         buffer[i] = f.p0.color;
+                        buffer[i - 1] = f.p0.color;
+                        buffer[i + 1] = f.p0.color;
+                        buffer[i - (size.width as usize)] = f.p0.color;
+                        buffer[i + (size.width as usize)] = f.p0.color;
                     }
                     if let Some(i) = f.p1.pos.buffer_index(size.width, size.height) {
                         buffer[i] = f.p1.color;
+                        buffer[i - 1] = f.p1.color;
+                        buffer[i + 1] = f.p1.color;
+                        buffer[i - (size.width as usize)] = f.p1.color;
+                        buffer[i + (size.width as usize)] = f.p1.color;
                     }
                     if let Some(i) = f.p2.pos.buffer_index(size.width, size.height) {
                         buffer[i] = f.p2.color;
+                        buffer[i - 1] = f.p2.color;
+                        buffer[i + 1] = f.p2.color;
+                        buffer[i - (size.width as usize)] = f.p2.color;
+                        buffer[i + (size.width as usize)] = f.p2.color;
                     }
                 });
                 buffer
@@ -121,7 +155,7 @@ impl ApplicationHandler for App {
                 // You only need to call this if you've determined that you need to redraw in
                 // applications which do not always need to. Applications that redraw continuously
                 // can render here instead.
-                window.request_redraw();
+                gfx.window.request_redraw();
             }
             _ => (),
         }

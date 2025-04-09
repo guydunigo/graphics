@@ -38,9 +38,9 @@ pub struct Triangle {
 impl Default for Triangle {
     fn default() -> Self {
         Triangle {
-            p0: Vertice::new(1., 1., 10., 0xffff0000),
-            p1: Vertice::new(0., 1., 10., 0xff00ff00),
-            p2: Vertice::new(0., 0., 12., 0xff0000ff),
+            p0: Vertice::new(0., 1., -12., 0xffff0000),
+            p1: Vertice::new(0., 0., -10., 0xff00ff00),
+            p2: Vertice::new(0., 0., -14., 0xff9999ff),
         }
     }
 }
@@ -71,7 +71,7 @@ impl Default for Camera {
     fn default() -> Self {
         Camera {
             pos: Vec3f::new(1., 1., 0.),
-            z_near: -0.5,
+            z_near: 0.5,
             canvas_side: 0.1,
         }
     }
