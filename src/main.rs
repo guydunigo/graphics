@@ -1,4 +1,5 @@
 mod maths;
+mod rasterizer;
 mod scene;
 mod window;
 

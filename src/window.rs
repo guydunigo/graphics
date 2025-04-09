@@ -5,10 +5,11 @@ use winit::{
     application::ApplicationHandler,
     event::{ElementState, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
+    keyboard::{Key, KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
 
+use crate::rasterizer::rasterize;
 use crate::scene::World;
 
 struct Graphics {
@@ -51,8 +52,30 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => {
-                // TODO: drop surface
+            WindowEvent::CloseRequested
+            | WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::Escape),
+                        state: ElementState::Pressed,
+                        repeat: false,
+                        ..
+                    },
+                ..
+            } => {
+                // TODO: drop surface = cleaner ?
+                event_loop.exit();
+            }
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        logical_key: Key::Character(c),
+                        state: ElementState::Pressed,
+                        repeat: false,
+                        ..
+                    },
+                ..
+            } if c.eq("q") => {
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput {
@@ -64,7 +87,6 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => match key {
-                KeyCode::Escape | KeyCode::KeyQ => event_loop.exit(),
                 KeyCode::ArrowLeft | KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
                 KeyCode::ArrowRight | KeyCode::KeyD => self.world.camera.pos.x += 0.1,
                 KeyCode::ArrowUp => self.world.camera.pos.y += 0.1,
@@ -113,10 +135,8 @@ impl ApplicationHandler for App {
                 }
                 */
 
-                // TODO: move all code to rasterizer struct
-                self.world.faces.iter().for_each(|f| {
-                    f.raster(&mut buffer, self.world.camera, size.width, size.height)
-                });
+                rasterize(&self.world, &mut buffer, &size);
+
                 buffer
                     .present()
                     .expect("Failed to present the softbuffer buffer");
