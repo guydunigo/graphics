@@ -1,9 +1,9 @@
-use std::ops::DerefMut;
+use std::{ops::DerefMut, time::Instant};
 
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    maths::{Vec2f, Vec3f},
+    maths::{Vec2f, Vec3f, Vec4u},
     scene::{Camera, Triangle, Vertice, World},
 };
 
@@ -46,14 +46,6 @@ fn world_to_raster_triangle(
     }
 }
 
-fn buffer_index(p: Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
-    if p.x >= 0. && p.x < (size.width as f64) && p.y >= 0. && p.y < (size.height as f64) {
-        Some(p.x as usize + p.y as usize * size.width as usize)
-    } else {
-        None
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct Rect {
     pub x: u32,
@@ -68,9 +60,9 @@ fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
     let max_x =
         (f64::max(f64::max(t.p0.pos.x, t.p1.pos.x), t.p2.pos.x) as u32).clamp(0, size.width - 1);
     let min_y =
-        (f64::min(f64::min(t.p0.pos.y, t.p1.pos.y), t.p2.pos.y) as u32).clamp(0, size.width - 1);
+        (f64::min(f64::min(t.p0.pos.y, t.p1.pos.y), t.p2.pos.y) as u32).clamp(0, size.height - 1);
     let max_y =
-        (f64::max(f64::max(t.p0.pos.y, t.p1.pos.y), t.p2.pos.y) as u32).clamp(0, size.width - 1);
+        (f64::max(f64::max(t.p0.pos.y, t.p1.pos.y), t.p2.pos.y) as u32).clamp(0, size.height - 1);
 
     Rect {
         x: min_x,
@@ -80,11 +72,18 @@ fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
     }
 }
 
-fn edge_function(tri_a: Vec3f, tri_b: Vec3f, p: Vec3f) -> f64 {
-    let ab = tri_b - tri_a;
+fn edge_function(ab: Vec3f, tri_a: Vec3f, p: Vec3f) -> f64 {
     let ap = p - tri_a;
-
     ap.x * ab.y - ap.y * ab.x
+}
+
+/*
+fn buffer_index(p: Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
+    if p.x >= 0. && p.x < (size.width as f64) && p.y >= 0. && p.y < (size.height as f64) {
+        Some(p.x as usize + p.y as usize * size.width as usize)
+    } else {
+        None
+    }
 }
 
 fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
@@ -106,6 +105,7 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
         }
     }
 }
+*/
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     triangle: &Triangle,
@@ -115,7 +115,15 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
 ) {
     let tri_raster = world_to_raster_triangle(triangle, cam, size);
 
-    let bb = dbg!(bounding_box_triangle(&tri_raster, size));
+    let bb = bounding_box_triangle(&tri_raster, size);
+
+    let p01 = tri_raster.p1.pos - tri_raster.p0.pos;
+    let p12 = tri_raster.p2.pos - tri_raster.p1.pos;
+    let p20 = tri_raster.p0.pos - tri_raster.p2.pos;
+
+    let tri_area = edge_function(p01, Vec3f::default(), -p20);
+
+    // TODO: Paralléliser
     (bb.x..(bb.x + bb.width))
         .flat_map(|x| {
             (bb.y..(bb.y + bb.height)).map(move |y| Vec3f {
@@ -125,17 +133,38 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             })
         })
         .for_each(|pixel| {
-            if edge_function(tri_raster.p0.pos, tri_raster.p1.pos, pixel) >= 0.
-                && edge_function(tri_raster.p1.pos, tri_raster.p2.pos, pixel) >= 0.
-                && edge_function(tri_raster.p2.pos, tri_raster.p0.pos, pixel) >= 0.
-            {
-                buffer[(pixel.x + pixel.y * size.width as f64) as usize] = tri_raster.p1.color;
+            let e01 = edge_function(p01, tri_raster.p0.pos, pixel);
+            let e12 = edge_function(p12, tri_raster.p1.pos, pixel);
+            let e20 = edge_function(p20, tri_raster.p2.pos, pixel);
+            if e01 >= 0. && e12 >= 0. && e20 >= 0. {
+                let col_2 = Vec4u::from_color_u32(tri_raster.p2.color);
+                buffer[(pixel.x as usize) + (pixel.y as usize) * size.width as usize] =
+                //    (Vec4u::from_color_u32(tri_raster.p2.color) * (e01 / tri_area)
+                //        + Vec4u::from_color_u32(tri_raster.p0.color) * (e12 / tri_area)
+                //        + Vec4u::from_color_u32(tri_raster.p1.color) * (e20 / tri_area))
+                //        .to_color_u32();
+                // Z = Z0 + \lambda_1(Z1 - Z0) + \lambda_2(Z2 - Z0).
+                // The terms Z1-Z0 and Z2-Z0 can generally be precomputed, which simplifies the computation of Z to two additions and two multiplications. This optimization is worth mentioning because GPUs utilize it, and it's often discussed for essentially this reason.
+                 (col_2
+                 + (Vec4u::from_color_u32(tri_raster.p0.color) - col_2) * (e12 / tri_area)
+                 + (Vec4u::from_color_u32(tri_raster.p1.color) - col_2) * (e20 / tri_area)).as_color_u32();
+                //
+                // 0xff000000
+                //     | (((0xff * e01 as u32) / tri_area as u32) << 16)
+                //     | (((0xff * e12 as u32) / tri_area as u32) << 8)
+                //     | ((0xff * e20 as u32) / tri_area as u32);
+                /*
+                println!(
+                    "{0:x} {0}",
+                    buffer[(pixel.x as usize) + (pixel.y as usize) * size.width as usize],
+                );
+                */
             }
         });
 
-    draw_vertice_basic(buffer, size, &tri_raster.p0);
-    draw_vertice_basic(buffer, size, &tri_raster.p1);
-    draw_vertice_basic(buffer, size, &tri_raster.p2);
+    // draw_vertice_basic(buffer, size, &tri_raster.p0);
+    // draw_vertice_basic(buffer, size, &tri_raster.p1);
+    // draw_vertice_basic(buffer, size, &tri_raster.p2);
 }
 
 pub fn rasterize<B: DerefMut<Target = [u32]>>(
@@ -143,8 +172,14 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
     buffer: &mut B,
     size: &PhysicalSize<u32>,
 ) {
+    let inst = Instant::now();
+    // TODO: paralléliser
     world
         .triangles
         .iter()
         .for_each(|f| rasterize_triangle(f, buffer, &world.camera, size));
+    println!(
+        "Render duration : {}",
+        Instant::now().duration_since(inst).as_millis()
+    );
 }

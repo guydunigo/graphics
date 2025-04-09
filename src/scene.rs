@@ -27,7 +27,7 @@ impl Default for Triangle {
         Triangle {
             p0: Vertice::new(0., 1., -12., 0xffff0000),
             p1: Vertice::new(0., 0., -10., 0xff00ff00),
-            p2: Vertice::new(0., 0., -14., 0xff9999ff),
+            p2: Vertice::new(0., 0., -14., 0xff0000ff),
         }
     }
 }
