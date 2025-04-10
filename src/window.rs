@@ -140,11 +140,11 @@ impl ApplicationHandler for App {
 
                 let display = format!(
                     "fps : {}{}",
-                    1000. / Instant::now().duration_since(inst).as_millis() as f64,
+                    (1000. / Instant::now().duration_since(inst).as_millis() as f64).round(),
                     self.cursor.map_or(String::default(), |cursor| format!(
                         "\n({},{}) 0x{:x}",
-                        cursor.x,
-                        cursor.y,
+                        cursor.x.floor(),
+                        cursor.y.floor(),
                         buffer[cursor.x as usize + (cursor.y as usize) * size.width as usize]
                     ))
                 );
