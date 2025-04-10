@@ -1,4 +1,4 @@
-use std::{ops::DerefMut, time::Instant};
+use std::ops::DerefMut;
 
 use winit::dpi::PhysicalSize;
 
@@ -183,17 +183,9 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
     buffer: &mut B,
     size: &PhysicalSize<u32>,
 ) {
-    let inst = Instant::now();
     // TODO: paralléliser
     world
         .triangles
         .iter()
         .for_each(|f| rasterize_triangle(f, buffer, &world.camera, size));
-
-    /*
-    println!(
-        "Render duration : {}",
-        Instant::now().duration_since(inst).as_millis()
-    );
-    */
 }

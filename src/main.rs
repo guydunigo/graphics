@@ -1,3 +1,4 @@
+mod font;
 mod maths;
 mod rasterizer;
 mod scene;

@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, rc::Rc};
+use std::{num::NonZeroU32, rc::Rc, time::Instant};
 
 use softbuffer::{Context, Surface};
 use winit::{
@@ -10,8 +10,8 @@ use winit::{
     window::{Window, WindowId},
 };
 
+use crate::{font::TextWriter, scene::World};
 use crate::{maths::Vec3f, rasterizer::rasterize};
-use crate::{rasterizer::world_to_raster_triangle, scene::World};
 
 struct Graphics {
     window: Rc<Window>,
@@ -23,7 +23,6 @@ pub struct App {
     graphics: Option<Graphics>,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
-    show_cursor_pos: bool,
 }
 
 impl App {
@@ -98,7 +97,6 @@ impl ApplicationHandler for App {
                 KeyCode::KeyS => self.world.camera.pos.z += 0.1,
                 KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                 // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
-                KeyCode::KeyH => self.show_cursor_pos = !self.show_cursor_pos,
                 _ => (),
             },
             WindowEvent::CursorMoved { position, .. } => {
@@ -135,18 +133,22 @@ impl ApplicationHandler for App {
                 // Fill a buffer with a solid color
                 buffer.fill(0xff181818);
 
+                let inst = Instant::now();
                 rasterize(&self.world, &mut buffer, &size);
 
-                if self.show_cursor_pos {
-                    if let Some(cursor) = self.cursor {
-                        println!(
-                            "{:?} {:x}",
-                            cursor,
-                            buffer[cursor.x as usize + (cursor.y as usize) * size.width as usize]
-                        );
-                        self.show_cursor_pos = false;
-                    }
-                }
+                let mut tw = TextWriter::default();
+
+                let display = format!(
+                    "fps : {}{}",
+                    1000. / Instant::now().duration_since(inst).as_millis() as f64,
+                    self.cursor.map_or(String::default(), |cursor| format!(
+                        "\n({},{}) 0x{:x}",
+                        cursor.x,
+                        cursor.y,
+                        buffer[cursor.x as usize + (cursor.y as usize) * size.width as usize]
+                    ))
+                );
+                tw.rasterize(&mut buffer, size, &display[..]);
 
                 buffer
                     .present()
