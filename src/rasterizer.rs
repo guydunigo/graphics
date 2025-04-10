@@ -9,10 +9,19 @@ use crate::{
 
 fn world_to_raster(p_world: &Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
     let p_cam = *p_world - cam.pos;
-    let p_screen = Vec3f {
-        x: p_cam.x * cam.z_near / -p_cam.z,
-        y: p_cam.y * cam.z_near / -p_cam.z,
-        z: -p_cam.z,
+    let p_screen = if p_cam.z < -0.001 {
+        Vec3f {
+            x: p_cam.x * cam.z_near / -p_cam.z,
+            y: p_cam.y * cam.z_near / -p_cam.z,
+            z: -p_cam.z,
+        }
+    } else {
+        // 0 divide getting too near the camera and reversing problem behind...
+        Vec3f {
+            x: p_cam.x * cam.z_near / 0.1,
+            y: p_cam.y * cam.z_near / 0.1,
+            z: -p_cam.z,
+        }
     };
     // [-1,1]
     let p_ndc = Vec2f {
@@ -124,9 +133,9 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let tri_area = edge_function(p01, Vec3f::default(), -p20);
 
     // TODO: Paralléliser
-    (bb.x..(bb.x + bb.width))
+    (bb.x..=(bb.x + bb.width))
         .flat_map(|x| {
-            (bb.y..(bb.y + bb.height)).map(move |y| Vec3f {
+            (bb.y..=(bb.y + bb.height)).map(move |y| Vec3f {
                 x: x as f64,
                 y: y as f64,
                 z: 0.,
@@ -149,7 +158,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                     + (tri_raster.p0.pos.z - tri_raster.p2.pos.z) * a12
                     + (tri_raster.p1.pos.z - tri_raster.p2.pos.z) * a20;
 
-                if depth > 0.5 {
+                if depth > 0. {
                     let occlusion = (1. - depth / 20.).clamp(0., 1.);
 
                     let col_2 = Vec4u::from_color_u32(tri_raster.p2.color);
@@ -180,8 +189,11 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
         .triangles
         .iter()
         .for_each(|f| rasterize_triangle(f, buffer, &world.camera, size));
+
+    /*
     println!(
         "Render duration : {}",
         Instant::now().duration_since(inst).as_millis()
     );
+    */
 }

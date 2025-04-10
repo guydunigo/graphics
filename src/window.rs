@@ -3,6 +3,7 @@ use std::{num::NonZeroU32, rc::Rc};
 use softbuffer::{Context, Surface};
 use winit::{
     application::ApplicationHandler,
+    dpi::PhysicalPosition,
     event::{ElementState, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, KeyCode, PhysicalKey},
@@ -21,6 +22,8 @@ struct Graphics {
 pub struct App {
     graphics: Option<Graphics>,
     world: World,
+    cursor: Option<PhysicalPosition<f64>>,
+    show_cursor_pos: bool,
 }
 
 impl App {
@@ -93,16 +96,14 @@ impl ApplicationHandler for App {
                 KeyCode::ArrowDown => self.world.camera.pos.y -= 0.1,
                 KeyCode::KeyW => self.world.camera.pos.z -= 0.1,
                 KeyCode::KeyS => self.world.camera.pos.z += 0.1,
-                KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -9.),
-                KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
-                    dbg!(world_to_raster_triangle(
-                        &f,
-                        &self.world.camera,
-                        &self.graphics.as_ref().unwrap().window.inner_size()
-                    ));
-                }),
+                KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
+                // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
+                KeyCode::KeyH => self.show_cursor_pos = !self.show_cursor_pos,
                 _ => (),
             },
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor = Some(position);
+            }
             WindowEvent::RedrawRequested => {
                 // Redraw the application.
                 //
@@ -135,6 +136,17 @@ impl ApplicationHandler for App {
                 buffer.fill(0xff181818);
 
                 rasterize(&self.world, &mut buffer, &size);
+
+                if self.show_cursor_pos {
+                    if let Some(cursor) = self.cursor {
+                        println!(
+                            "{:?} {:x}",
+                            cursor,
+                            buffer[cursor.x as usize + (cursor.y as usize) * size.width as usize]
+                        );
+                        self.show_cursor_pos = false;
+                    }
+                }
 
                 buffer
                     .present()

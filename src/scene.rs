@@ -84,17 +84,32 @@ impl Default for World {
                 Triangle::new(
                     Vertice::new(3., 2., -19., 0xff0000ff),
                     Vertice::new(4., 1., -10., 0xff0000ff),
+                    Vertice::new(4., 2., -19., 0xff0000ff),
+                ),
+                Triangle::new(
+                    Vertice::new(4., 1., -10., 0xff0000ff),
                     Vertice::new(5., 2., -19., 0xff0000ff),
+                    Vertice::new(4., 2., -19., 0xff0000ff),
                 ),
                 Triangle::new(
                     Vertice::new(3., 0., -19., 0xff00ff00),
                     Vertice::new(4., 1., -10., 0xff00ff00),
-                    Vertice::new(3., 2., -19., 0xff00ff00),
+                    Vertice::new(3., 1., -19., 0xff00ff00),
                 ),
                 Triangle::new(
-                    Vertice::new(5., 2., -19., 0xffffff00),
+                    Vertice::new(3., 2., -19., 0xff00ff00),
+                    Vertice::new(3., 1., -19., 0xff00ff00),
+                    Vertice::new(4., 1., -10., 0xff00ff00),
+                ),
+                Triangle::new(
+                    Vertice::new(5., 1., -19., 0xffffff00),
                     Vertice::new(4., 1., -10., 0xffffff00),
                     Vertice::new(5., 0., -19., 0xffffff00),
+                ),
+                Triangle::new(
+                    Vertice::new(4., 1., -10., 0xffffff00),
+                    Vertice::new(5., 1., -19., 0xffffff00),
+                    Vertice::new(5., 2., -19., 0xffffff00),
                 ),
             ],
             camera: Default::default(),
