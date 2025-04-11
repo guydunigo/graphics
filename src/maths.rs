@@ -17,6 +17,29 @@ impl Vec3f {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
     }
+
+    /*
+    pub fn norm(&self) -> f64 {
+        f64::sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
+    }
+
+    pub fn normalize(&mut self) {
+        let norm = self.norm();
+        if norm != 1. {
+            self.x /= norm;
+            self.y /= norm;
+            self.z /= norm;
+        }
+    }
+    */
+
+    pub fn rotate(self, new_base: Rotation) -> Self {
+        Self {
+            x: self.x * new_base.u.x + self.y * new_base.v.x + self.z * new_base.w.x,
+            y: self.x * new_base.u.y + self.y * new_base.v.y + self.z * new_base.w.y,
+            z: self.x * new_base.u.z + self.y * new_base.v.z + self.z * new_base.w.z,
+        }
+    }
 }
 
 impl Add for Vec3f {
@@ -113,6 +136,41 @@ impl Mul<f64> for Vec4u {
             y: self.y * other,
             z: self.z * other,
             w: self.w * other,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Rotation {
+    pub u: Vec3f,
+    pub v: Vec3f,
+    pub w: Vec3f,
+}
+
+impl Default for Rotation {
+    fn default() -> Self {
+        Self {
+            u: Vec3f::new(1., 0., 0.),
+            v: Vec3f::new(0., 1., 0.),
+            w: Vec3f::new(0., 0., 1.),
+        }
+    }
+}
+
+impl Rotation {
+    /// Rotation around x axis, y axis, z axis.
+    pub fn from_angles(angles: &Vec3f) -> Self {
+        let x_cos = angles.x.cos();
+        let x_sin = angles.x.sin();
+        let y_cos = angles.y.cos();
+        let y_sin = angles.y.sin();
+        let z_cos = angles.z.cos();
+        let z_sin = angles.z.sin();
+
+        Self {
+            u: Vec3f::new(y_cos * z_cos, z_sin, -y_sin),
+            v: Vec3f::new(-z_sin, x_cos * z_cos, x_sin),
+            w: Vec3f::new(y_sin, -x_sin, x_cos * y_cos),
         }
     }
 }

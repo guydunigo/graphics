@@ -1,4 +1,4 @@
-use crate::maths::Vec3f;
+use crate::maths::{Rotation, Vec3f};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Vertice {
@@ -43,19 +43,16 @@ pub struct Camera {
     pub pos: Vec3f,
     pub z_near: f64,
     pub canvas_side: f64,
-    // Pour commencer, on fixe le regard selon Z qui diminue.
-    // TODO: matrice 4x4 : missing double angle (autours + débullé)
-    // pub dir: Vec3f,
-    // TODO: not focale
-    // pub focale: f64,
+    pub rot: Rotation,
 }
 
 impl Default for Camera {
     fn default() -> Self {
-        Camera {
+        Self {
             pos: Vec3f::new(1., 1., 0.),
             z_near: 0.5,
             canvas_side: 0.1,
+            rot: Default::default(),
         }
     }
 }

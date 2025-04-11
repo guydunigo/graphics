@@ -8,7 +8,7 @@ use crate::{
 };
 
 fn world_to_raster(p_world: &Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
-    let p_cam = *p_world - cam.pos;
+    let p_cam = (*p_world - cam.pos).rotate(cam.rot);
     let p_screen = if p_cam.z < -0.001 {
         Vec3f {
             x: p_cam.x * cam.z_near / -p_cam.z,

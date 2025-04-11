@@ -1,17 +1,18 @@
-use std::{num::NonZeroU32, rc::Rc, time::Instant};
+use std::{f64::consts::PI, num::NonZeroU32, rc::Rc, time::Instant};
 
 use softbuffer::{Context, Surface};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
-    event::{ElementState, KeyEvent, WindowEvent},
+    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, KeyCode, PhysicalKey},
-    window::{Window, WindowId},
+    platform::x11::ActiveEventLoopExtX11,
+    window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::{font::TextWriter, scene::World};
-use crate::{maths::Vec3f, rasterizer::rasterize};
+use crate::{font::TextWriter, maths::Vec3f, scene::World};
+use crate::{maths::Rotation, rasterizer::rasterize};
 
 struct Graphics {
     window: Rc<Window>,
@@ -23,6 +24,7 @@ pub struct App {
     graphics: Option<Graphics>,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
+    mouse_left_held: bool,
 }
 
 impl App {
@@ -88,19 +90,65 @@ impl ApplicationHandler for App {
                         ..
                     },
                 ..
-            } => match key {
-                KeyCode::ArrowLeft | KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
-                KeyCode::ArrowRight | KeyCode::KeyD => self.world.camera.pos.x += 0.1,
-                KeyCode::ArrowUp => self.world.camera.pos.y += 0.1,
-                KeyCode::ArrowDown => self.world.camera.pos.y -= 0.1,
-                KeyCode::KeyW => self.world.camera.pos.z -= 0.1,
-                KeyCode::KeyS => self.world.camera.pos.z += 0.1,
-                KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
-                // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
-                _ => (),
-            },
+            } => {
+                match key {
+                    KeyCode::Space => self.world.camera.pos.y += 0.1,
+                    KeyCode::ShiftLeft => self.world.camera.pos.y -= 0.1,
+                    KeyCode::KeyW => self.world.camera.pos.z -= 0.1,
+                    KeyCode::KeyS => self.world.camera.pos.z += 0.1,
+                    KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
+                    KeyCode::KeyD => self.world.camera.pos.x += 0.1,
+                    // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
+                    // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
+                    _ => (),
+                }
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Left,
+                ..
+            } => {
+                let window = &self.graphics.as_ref().unwrap().window;
+                match state {
+                    ElementState::Pressed => {
+                        window
+                            .set_cursor_grab(CursorGrabMode::Confined)
+                            .expect("Can't grab cursor.");
+                        window.set_cursor_visible(false);
+                        // Not all platforms support Confined or Locked
+                        // X11 doesn't support Locked and Wayland doesn't support setting cursor position without locking
+                        // .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
+
+                        if event_loop.is_x11() {
+                            let size = window.inner_size();
+                            window
+                                .set_cursor_position(PhysicalPosition::new(
+                                    size.width / 2,
+                                    size.height / 2,
+                                ))
+                                .expect("Could not center cursor");
+                            self.mouse_left_held = true;
+                        }
+                    }
+                    ElementState::Released => {
+                        window
+                            .set_cursor_grab(CursorGrabMode::None)
+                            .expect("Can't release grab on cursor.");
+                        window.set_cursor_visible(true);
+                        self.mouse_left_held = false;
+                    }
+                }
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = Some(position);
+                if self.mouse_left_held {
+                    let size = &self.graphics.as_ref().unwrap().window.inner_size();
+                    self.world.camera.rot = Rotation::from_angles(&Vec3f::new(
+                        (position.y / size.height as f64 / 2. - 0.25) * PI,
+                        (position.x / size.width as f64 / 2. - 0.25) * PI,
+                        0.,
+                    ));
+                }
             }
             WindowEvent::RedrawRequested => {
                 // Redraw the application.
@@ -141,12 +189,16 @@ impl ApplicationHandler for App {
                 let display = format!(
                     "fps : {}{}",
                     (1000. / Instant::now().duration_since(inst).as_millis() as f64).round(),
-                    self.cursor.map_or(String::default(), |cursor| format!(
-                        "\n({},{}) 0x{:x}",
-                        cursor.x.floor(),
-                        cursor.y.floor(),
-                        buffer[cursor.x as usize + (cursor.y as usize) * size.width as usize]
-                    ))
+                    self.cursor
+                        .and_then(|cursor| buffer
+                            .get(cursor.x as usize + cursor.y as usize * size.width as usize)
+                            .map(|c| format!(
+                                "\n({},{}) 0x{:x}",
+                                cursor.x.floor(),
+                                cursor.y.floor(),
+                                c
+                            )))
+                        .unwrap_or(String::from("\nNo cursor position"))
                 );
                 tw.rasterize(&mut buffer, size, &display[..]);
 
