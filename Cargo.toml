@@ -7,3 +7,6 @@ edition = "2024"
 fontdue = { version = "0.9.3", features = ["std"] }
 softbuffer = "0.4.6"
 winit = "0.30.9"
+
+[profile.dev.package."*"]
+opt-level = 3
