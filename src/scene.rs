@@ -118,6 +118,16 @@ impl Default for World {
                     Vertice::new(4., 1.5, -15., 0xff00ffff),
                     Vertice::new(2., 1.5, -19., 0xff00ffff),
                 ),
+                Triangle::new(
+                    Vertice::new(0.7, 0.7, -12., 0xffff00ff),
+                    Vertice::new(1.3, 0.7, -12., 0xffff00ff),
+                    Vertice::new(0.7, 1.3, -12., 0xffff00ff),
+                ),
+                Triangle::new(
+                    Vertice::new(1.3, 0.7, -12., 0xffff00ff),
+                    Vertice::new(1.3, 1.3, -12., 0xffff00ff),
+                    Vertice::new(0.7, 1.3, -12., 0xffff00ff),
+                ),
             ],
             camera: Default::default(),
         }

@@ -119,6 +119,7 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     triangle: &Triangle,
     buffer: &mut B,
+    depth_buffer: &mut [f64],
     cam: &Camera,
     size: &PhysicalSize<u32>,
 ) {
@@ -159,16 +160,21 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                     + (tri_raster.p1.pos.z - tri_raster.p2.pos.z) * a20;
 
                 if depth > 0. {
-                    let occlusion = (1. - depth / 20.).clamp(0., 1.);
+                    let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
-                    let col_2 = Vec4u::from_color_u32(tri_raster.p2.color);
-                    let col = (col_2
-                        + (Vec4u::from_color_u32(tri_raster.p0.color) - col_2) * a12
-                        + (Vec4u::from_color_u32(tri_raster.p1.color) - col_2) * a20)
-                        * occlusion;
+                    if depth < depth_buffer[index] {
+                        let occlusion = (1. - depth / 20.).clamp(0., 1.);
 
-                    buffer[(pixel.x as usize) + (pixel.y as usize) * size.width as usize] =
-                        col.as_color_u32();
+                        let col_2 = Vec4u::from_color_u32(tri_raster.p2.color);
+                        let col = (col_2
+                            + (Vec4u::from_color_u32(tri_raster.p0.color) - col_2) * a12
+                            + (Vec4u::from_color_u32(tri_raster.p1.color) - col_2) * a20)
+                            * occlusion;
+
+                        buffer[index] = col.as_color_u32();
+
+                        depth_buffer[index] = depth;
+                    }
                 }
             }
         });
@@ -181,11 +187,12 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
 pub fn rasterize<B: DerefMut<Target = [u32]>>(
     world: &World,
     buffer: &mut B,
+    depth_buffer: &mut [f64],
     size: &PhysicalSize<u32>,
 ) {
     // TODO: paralléliser
     world
         .triangles
         .iter()
-        .for_each(|f| rasterize_triangle(f, buffer, &world.camera, size));
+        .for_each(|f| rasterize_triangle(f, buffer, depth_buffer, &world.camera, size));
 }

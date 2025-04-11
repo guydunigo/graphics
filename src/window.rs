@@ -25,6 +25,7 @@ pub struct App {
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
+    depth_buffer: Vec<f64>,
 }
 
 impl App {
@@ -182,7 +183,10 @@ impl ApplicationHandler for App {
                 buffer.fill(0xff181818);
 
                 let inst = Instant::now();
-                rasterize(&self.world, &mut buffer, &size);
+                self.depth_buffer
+                    .resize(size.width as usize * size.height as usize, f64::INFINITY);
+                self.depth_buffer.fill(f64::INFINITY);
+                rasterize(&self.world, &mut buffer, &mut self.depth_buffer[..], &size);
 
                 let mut tw = TextWriter::default();
 
