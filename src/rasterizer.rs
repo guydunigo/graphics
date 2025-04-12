@@ -4,7 +4,7 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     maths::{Vec2f, Vec3f, Vec4u},
-    scene::{Camera, Triangle, Vertice, World},
+    scene::{Camera, Triangle, Vertex, World},
 };
 
 fn world_to_raster(p_world: &Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
@@ -36,8 +36,8 @@ fn world_to_raster(p_world: &Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> V
     }
 }
 
-fn world_to_raster_vertice(vertice: &Vertice, cam: &Camera, size: &PhysicalSize<u32>) -> Vertice {
-    Vertice {
+fn world_to_raster_vertice(vertice: &Vertex, cam: &Camera, size: &PhysicalSize<u32>) -> Vertex {
+    Vertex {
         pos: world_to_raster(&vertice.pos, cam, size),
         color: vertice.color,
     }
@@ -99,7 +99,7 @@ fn buffer_index(p: Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
 fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
     buffer: &mut B,
     size: &PhysicalSize<u32>,
-    v: &Vertice,
+    v: &Vertex,
 ) {
     if v.pos.x >= 1.
         && v.pos.x < (size.width as f64) - 1.

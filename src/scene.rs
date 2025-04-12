@@ -1,12 +1,12 @@
 use crate::maths::{Rotation, Vec3f};
 
 #[derive(Debug, Clone, Copy)]
-pub struct Vertice {
+pub struct Vertex {
     pub pos: Vec3f,
     pub color: u32,
 }
 
-impl Vertice {
+impl Vertex {
     pub fn new(x: f64, y: f64, z: f64, color: u32) -> Self {
         Self {
             pos: Vec3f::new(x, y, z),
@@ -17,23 +17,23 @@ impl Vertice {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Triangle {
-    pub p0: Vertice,
-    pub p1: Vertice,
-    pub p2: Vertice,
+    pub p0: Vertex,
+    pub p1: Vertex,
+    pub p2: Vertex,
 }
 
 impl Default for Triangle {
     fn default() -> Self {
         Triangle::new(
-            Vertice::new(0., 1., -12., 0xffff0000),
-            Vertice::new(0., 0., -10., 0xff00ff00),
-            Vertice::new(0., 0., -14., 0xff0000ff),
+            Vertex::new(0., 1., -12., 0xffff0000),
+            Vertex::new(0., 0., -10., 0xff00ff00),
+            Vertex::new(0., 0., -14., 0xff0000ff),
         )
     }
 }
 
 impl Triangle {
-    fn new(p0: Vertice, p1: Vertice, p2: Vertice) -> Self {
+    fn new(p0: Vertex, p1: Vertex, p2: Vertex) -> Self {
         Triangle { p0, p1, p2 }
     }
 
@@ -73,64 +73,64 @@ impl Default for World {
             triangles: vec![
                 Triangle::default(),
                 Triangle::new(
-                    Vertice::new(3., 0., -19., 0xffff0000),
-                    Vertice::new(4., 0., -19., 0xffff0000),
-                    Vertice::new(4., 1., -10., 0xffff0000),
+                    Vertex::new(3., 0., -19., 0xffff0000),
+                    Vertex::new(4., 0., -19., 0xffff0000),
+                    Vertex::new(4., 1., -10., 0xffff0000),
                 ),
                 Triangle::new(
-                    Vertice::new(4., 0., -19., 0xffff0000),
-                    Vertice::new(5., 0., -19., 0xffff0000),
-                    Vertice::new(4., 1., -10., 0xffff0000),
+                    Vertex::new(4., 0., -19., 0xffff0000),
+                    Vertex::new(5., 0., -19., 0xffff0000),
+                    Vertex::new(4., 1., -10., 0xffff0000),
                 ),
                 Triangle::new(
-                    Vertice::new(3., 2., -19., 0xff0000ff),
-                    Vertice::new(4., 1., -10., 0xff0000ff),
-                    Vertice::new(4., 2., -19., 0xff0000ff),
+                    Vertex::new(3., 2., -19., 0xff0000ff),
+                    Vertex::new(4., 1., -10., 0xff0000ff),
+                    Vertex::new(4., 2., -19., 0xff0000ff),
                 ),
                 Triangle::new(
-                    Vertice::new(4., 1., -10., 0xff0000ff),
-                    Vertice::new(5., 2., -19., 0xff0000ff),
-                    Vertice::new(4., 2., -19., 0xff0000ff),
+                    Vertex::new(4., 1., -10., 0xff0000ff),
+                    Vertex::new(5., 2., -19., 0xff0000ff),
+                    Vertex::new(4., 2., -19., 0xff0000ff),
                 ),
                 Triangle::new(
-                    Vertice::new(3., 0., -19., 0xff00ff00),
-                    Vertice::new(4., 1., -10., 0xff00ff00),
-                    Vertice::new(3., 1., -19., 0xff00ff00),
+                    Vertex::new(3., 0., -19., 0xff00ff00),
+                    Vertex::new(4., 1., -10., 0xff00ff00),
+                    Vertex::new(3., 1., -19., 0xff00ff00),
                 ),
                 Triangle::new(
-                    Vertice::new(3., 2., -19., 0xff00ff00),
-                    Vertice::new(3., 1., -19., 0xff00ff00),
-                    Vertice::new(4., 1., -10., 0xff00ff00),
+                    Vertex::new(3., 2., -19., 0xff00ff00),
+                    Vertex::new(3., 1., -19., 0xff00ff00),
+                    Vertex::new(4., 1., -10., 0xff00ff00),
                 ),
                 Triangle::new(
-                    Vertice::new(5., 1., -19., 0xffffff00),
-                    Vertice::new(4., 1., -10., 0xffffff00),
-                    Vertice::new(5., 0., -19., 0xffffff00),
+                    Vertex::new(5., 1., -19., 0xffffff00),
+                    Vertex::new(4., 1., -10., 0xffffff00),
+                    Vertex::new(5., 0., -19., 0xffffff00),
                 ),
                 Triangle::new(
-                    Vertice::new(4., 1., -10., 0xffffff00),
-                    Vertice::new(5., 1., -19., 0xffffff00),
-                    Vertice::new(5., 2., -19., 0xffffff00),
+                    Vertex::new(4., 1., -10., 0xffffff00),
+                    Vertex::new(5., 1., -19., 0xffffff00),
+                    Vertex::new(5., 2., -19., 0xffffff00),
                 ),
                 Triangle::new(
-                    Vertice::new(2., 0.5, -19., 0xff00ffff),
-                    Vertice::new(4., 0.5, -15., 0xff00ffff),
-                    Vertice::new(2., 1.5, -19., 0xff00ffff),
+                    Vertex::new(2., 0.5, -19., 0xff00ffff),
+                    Vertex::new(4., 0.5, -15., 0xff00ffff),
+                    Vertex::new(2., 1.5, -19., 0xff00ffff),
                 ),
                 Triangle::new(
-                    Vertice::new(4., 0.5, -15., 0xff00ffff),
-                    Vertice::new(4., 1.5, -15., 0xff00ffff),
-                    Vertice::new(2., 1.5, -19., 0xff00ffff),
+                    Vertex::new(4., 0.5, -15., 0xff00ffff),
+                    Vertex::new(4., 1.5, -15., 0xff00ffff),
+                    Vertex::new(2., 1.5, -19., 0xff00ffff),
                 ),
                 Triangle::new(
-                    Vertice::new(3.7, 0.7, -12., 0xffff00ff),
-                    Vertice::new(4.3, 0.7, -12., 0xffff00ff),
-                    Vertice::new(3.7, 1.3, -12., 0xffff00ff),
+                    Vertex::new(3.7, 0.7, -12., 0xffff00ff),
+                    Vertex::new(4.3, 0.7, -12., 0xffff00ff),
+                    Vertex::new(3.7, 1.3, -12., 0xffff00ff),
                 ),
                 Triangle::new(
-                    Vertice::new(4.3, 0.7, -12., 0xffff00ff),
-                    Vertice::new(4.3, 1.3, -12., 0xffff00ff),
-                    Vertice::new(3.7, 1.3, -12., 0xffff00ff),
+                    Vertex::new(4.3, 0.7, -12., 0xffff00ff),
+                    Vertex::new(4.3, 1.3, -12., 0xffff00ff),
+                    Vertex::new(3.7, 1.3, -12., 0xffff00ff),
                 ),
             ],
             camera: Default::default(),

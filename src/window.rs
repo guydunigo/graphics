@@ -197,7 +197,7 @@ impl ApplicationHandler for App {
                 let inst = Instant::now().duration_since(inst).as_millis();
 
                 let display = format!(
-                    "fps : {} {}{}",
+                    "fps : {} | {}ms{}",
                     (1000. / inst as f64).round(),
                     inst,
                     self.cursor
