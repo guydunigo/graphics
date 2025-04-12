@@ -99,6 +99,7 @@ impl ApplicationHandler for App {
                     KeyCode::KeyS => self.world.camera.pos.z += 0.1,
                     KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
                     KeyCode::KeyD => self.world.camera.pos.x += 0.1,
+                    KeyCode::Digit7 => self.world.camera = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
                     _ => (),

@@ -155,9 +155,13 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 //     + tri_raster.p1.pos.z * a20;
                 // Because a01 + a12 + a20 = 1., we can avoid a division and not compute a01.
                 // The terms Z1-Z0 and Z2-Z0 can generally be precomputed, which simplifies the computation of Z to two additions and two multiplications. This optimization is worth mentioning because GPUs utilize it, and it's often discussed for essentially this reason.
-                let depth = tri_raster.p2.pos.z
-                    + (tri_raster.p0.pos.z - tri_raster.p2.pos.z) * a12
-                    + (tri_raster.p1.pos.z - tri_raster.p2.pos.z) * a20;
+
+                // Depth doesn't evolve linearly (its inverse does).
+                let p2_z_inv = 1. / tri_raster.p2.pos.z;
+                let depth = 1.
+                    / (p2_z_inv
+                        + (1. / tri_raster.p0.pos.z - p2_z_inv) * a12
+                        + (1. / tri_raster.p1.pos.z - p2_z_inv) * a20);
 
                 if depth > 0. {
                     let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
