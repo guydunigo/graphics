@@ -100,6 +100,9 @@ impl ApplicationHandler for App {
                     KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
                     KeyCode::KeyD => self.world.camera.pos.x += 0.1,
                     KeyCode::Digit7 => self.world.camera = Default::default(),
+                    KeyCode::Digit1 => self.world.triangles.sort_by_key(|t| -t.min_z() as u64),
+                    KeyCode::Digit2 => self.world.triangles.sort_by_key(|t| t.min_z() as u64),
+                    KeyCode::Digit3 => self.world.triangles = World::default().triangles,
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
                     _ => (),
@@ -191,9 +194,12 @@ impl ApplicationHandler for App {
 
                 let mut tw = TextWriter::default();
 
+                let inst = Instant::now().duration_since(inst).as_millis();
+
                 let display = format!(
-                    "fps : {}{}",
-                    (1000. / Instant::now().duration_since(inst).as_millis() as f64).round(),
+                    "fps : {} {}{}",
+                    (1000. / inst as f64).round(),
+                    inst,
                     self.cursor
                         .and_then(|cursor| buffer
                             .get(cursor.x as usize + cursor.y as usize * size.width as usize)

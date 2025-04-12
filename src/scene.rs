@@ -36,6 +36,10 @@ impl Triangle {
     fn new(p0: Vertice, p1: Vertice, p2: Vertice) -> Self {
         Triangle { p0, p1, p2 }
     }
+
+    pub fn min_z(&self) -> f64 {
+        f64::min(self.p0.pos.z, f64::min(self.p1.pos.z, self.p2.pos.z))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
