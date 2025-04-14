@@ -65,6 +65,5 @@ impl TextWriter {
             });
             start_y += PX as usize;
         });
-        // a
     }
 }

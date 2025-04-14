@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 fontdue = { version = "0.9.3", features = ["std"] }
+obj-rs = "0.7.4"
 softbuffer = "0.4.6"
 winit = "0.30.9"
 
