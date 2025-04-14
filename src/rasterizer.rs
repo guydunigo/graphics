@@ -122,6 +122,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     depth_buffer: &mut [f64],
     cam: &Camera,
     size: &PhysicalSize<u32>,
+    show_vertices: bool,
 ) {
     let tri_raster = world_to_raster_triangle(triangle, cam, size);
 
@@ -183,9 +184,11 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             }
         });
 
-    draw_vertice_basic(buffer, size, &tri_raster.p0);
-    draw_vertice_basic(buffer, size, &tri_raster.p1);
-    draw_vertice_basic(buffer, size, &tri_raster.p2);
+    if show_vertices {
+        draw_vertice_basic(buffer, size, &tri_raster.p0);
+        draw_vertice_basic(buffer, size, &tri_raster.p1);
+        draw_vertice_basic(buffer, size, &tri_raster.p2);
+    }
 }
 
 pub fn rasterize<B: DerefMut<Target = [u32]>>(
@@ -193,10 +196,10 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
     buffer: &mut B,
     depth_buffer: &mut [f64],
     size: &PhysicalSize<u32>,
+    show_vertices: bool,
 ) {
     // TODO: paralléliser
-    world
-        .triangles
-        .iter()
-        .for_each(|f| rasterize_triangle(f, buffer, depth_buffer, &world.camera, size));
+    world.triangles.iter().for_each(|f| {
+        rasterize_triangle(f, buffer, depth_buffer, &world.camera, size, show_vertices)
+    });
 }

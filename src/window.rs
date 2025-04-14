@@ -26,6 +26,7 @@ pub struct App {
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
     depth_buffer: Vec<f64>,
+    show_vertices: bool,
 }
 
 impl App {
@@ -103,6 +104,7 @@ impl ApplicationHandler for App {
                     KeyCode::Digit1 => self.world.triangles.sort_by_key(|t| -t.min_z() as u64),
                     KeyCode::Digit2 => self.world.triangles.sort_by_key(|t| t.min_z() as u64),
                     KeyCode::Digit3 => self.world.triangles = World::default().triangles,
+                    KeyCode::KeyV => self.show_vertices = !self.show_vertices,
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
                     _ => (),
@@ -190,7 +192,13 @@ impl ApplicationHandler for App {
                 self.depth_buffer
                     .resize(size.width as usize * size.height as usize, f64::INFINITY);
                 self.depth_buffer.fill(f64::INFINITY);
-                rasterize(&self.world, &mut buffer, &mut self.depth_buffer[..], &size);
+                rasterize(
+                    &self.world,
+                    &mut buffer,
+                    &mut self.depth_buffer[..],
+                    &size,
+                    self.show_vertices,
+                );
 
                 let mut tw = TextWriter::default();
 
