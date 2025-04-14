@@ -151,9 +151,10 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 let a12 = e12 / tri_area;
                 let a20 = e20 / tri_area;
 
-                // let depth = tri_raster.p2.pos.z * (e01 / tri_area)
-                //     + tri_raster.p0.pos.z * a12
-                //     + tri_raster.p1.pos.z * a20;
+                // let depth_2 = 1.
+                //     / (1. / tri_raster.p2.pos.z * (e01 / tri_area)
+                //         + 1. / tri_raster.p0.pos.z * a12
+                //         + 1. / tri_raster.p1.pos.z * a20);
                 // Because a01 + a12 + a20 = 1., we can avoid a division and not compute a01.
                 // The terms Z1-Z0 and Z2-Z0 can generally be precomputed, which simplifies the computation of Z to two additions and two multiplications. This optimization is worth mentioning because GPUs utilize it, and it's often discussed for essentially this reason.
 
@@ -164,20 +165,25 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                         + (1. / tri_raster.p0.pos.z - p2_z_inv) * a12
                         + (1. / tri_raster.p1.pos.z - p2_z_inv) * a20);
 
+                // Depth correction of other properties :
+                // Divide each value by the point Z coord and finally multiply by depth.
+
                 if depth > 0. {
                     let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
                     if depth < depth_buffer[index] {
-                        let occlusion = (1. - depth / 20.).clamp(0., 1.);
-
-                        let col_2 = Vec4u::from_color_u32(tri_raster.p2.color);
+                        let col_2 =
+                            Vec4u::from_color_u32(tri_raster.p2.color) / tri_raster.p2.pos.z;
                         let col = (col_2
-                            + (Vec4u::from_color_u32(tri_raster.p0.color) - col_2) * a12
-                            + (Vec4u::from_color_u32(tri_raster.p1.color) - col_2) * a20)
-                            * occlusion;
+                            + (Vec4u::from_color_u32(tri_raster.p0.color) / tri_raster.p0.pos.z
+                                - col_2)
+                                * a12
+                            + (Vec4u::from_color_u32(tri_raster.p1.color) / tri_raster.p1.pos.z
+                                - col_2)
+                                * a20)
+                            * depth;
 
                         buffer[index] = col.as_color_u32();
-
                         depth_buffer[index] = depth;
                     }
                 }

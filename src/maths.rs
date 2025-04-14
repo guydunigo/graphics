@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul, Neg, Sub};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Vec2f {
@@ -136,6 +136,19 @@ impl Mul<f64> for Vec4u {
             y: self.y * other,
             z: self.z * other,
             w: self.w * other,
+        }
+    }
+}
+
+impl Div<f64> for Vec4u {
+    type Output = Self;
+
+    fn div(self, other: f64) -> Self {
+        Self {
+            x: self.x / other,
+            y: self.y / other,
+            z: self.z / other,
+            w: self.w / other,
         }
     }
 }
