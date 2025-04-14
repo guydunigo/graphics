@@ -1,6 +1,6 @@
-use std::{collections::HashMap, ops::DerefMut};
+use std::ops::DerefMut;
 
-use fontdue::{Font, FontSettings, Metrics};
+use fontdue::{Font, FontSettings};
 use winit::dpi::PhysicalSize;
 
 const PX: f32 = 12.;
@@ -9,7 +9,6 @@ const BASE_Y: usize = 3;
 
 pub struct TextWriter {
     font: Font,
-    cache: HashMap<char, (Metrics, Vec<u8>)>,
 }
 
 impl Default for TextWriter {
@@ -17,18 +16,11 @@ impl Default for TextWriter {
         let font = include_bytes!("../resources/DejaVuSansMono.ttf") as &[u8];
         Self {
             font: Font::from_bytes(font, FontSettings::default()).unwrap(),
-            cache: Default::default(),
         }
     }
 }
 
 impl TextWriter {
-    fn rasterize_char(&mut self, c: char) -> &(Metrics, Vec<u8>) {
-        self.cache
-            .entry(c)
-            .or_insert_with(|| self.font.rasterize(c, PX))
-    }
-
     pub fn rasterize<B: DerefMut<Target = [u32]>>(
         &mut self,
         buffer: &mut B,
@@ -39,7 +31,7 @@ impl TextWriter {
         text.lines().for_each(|l| {
             let mut start_x = BASE_X;
             l.chars().for_each(|c| {
-                let (metrics, image) = self.rasterize_char(c);
+                let (metrics, image) = self.font.rasterize(c, PX);
 
                 if metrics.width > 0 {
                     image
