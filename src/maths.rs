@@ -14,30 +14,44 @@ pub struct Vec3f {
 }
 
 impl Vec3f {
-    pub fn new(x: f64, y: f64, z: f64) -> Self {
+    pub const fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
     }
 
-    /*
     pub fn norm(&self) -> f64 {
         f64::sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
     }
 
-    pub fn normalize(&mut self) {
+    pub fn normalize(&self) -> Self {
         let norm = self.norm();
         if norm != 1. {
-            self.x /= norm;
-            self.y /= norm;
-            self.z /= norm;
+            Self {
+                x: self.x / norm,
+                y: self.y / norm,
+                z: self.z / norm,
+            }
+        } else {
+            *self
         }
     }
-    */
 
     pub fn rotate(self, new_base: Rotation) -> Self {
         Self {
             x: self.x * new_base.u.x + self.y * new_base.v.x + self.z * new_base.w.x,
             y: self.x * new_base.u.y + self.y * new_base.v.y + self.z * new_base.w.y,
             z: self.x * new_base.u.z + self.y * new_base.v.z + self.z * new_base.w.z,
+        }
+    }
+
+    pub fn dot(&self, other: &Self) -> f64 {
+        self.x * other.x + self.y * other.y + self.z * other.z
+    }
+
+    pub fn cross(&self, other: &Self) -> Vec3f {
+        Vec3f {
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
         }
     }
 }

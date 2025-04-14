@@ -7,6 +7,9 @@ use crate::{
     scene::{Camera, Triangle, Vertex, World},
 };
 
+const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
+const MINIMAL_AMBIANT_LIGHT: f64 = 0.1;
+
 fn world_to_raster(p_world: &Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
     let p_cam = (*p_world - cam.pos).rotate(cam.rot);
     let p_screen = if p_cam.z < -0.001 {
@@ -132,7 +135,18 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let p12 = tri_raster.p2.pos - tri_raster.p1.pos;
     let p20 = tri_raster.p0.pos - tri_raster.p2.pos;
 
+    // TODO: not efficient ?
     let tri_area = edge_function(p01, Vec3f::default(), -p20);
+
+    // Dot product gives negative if two vectors are opposed, so we compare light vector to
+    // face normal vector to see if they are opposed (face is lit).
+    let sun_norm = SUN_DIRECTION.normalize();
+    let triangle_normal = (triangle.p1.pos - triangle.p0.pos)
+        .cross(&(triangle.p0.pos - triangle.p2.pos))
+        .normalize();
+    let light = sun_norm
+        .dot(&triangle_normal)
+        .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
 
     // TODO: Paralléliser
     (bb.x..=(bb.x + bb.width))
@@ -181,7 +195,8 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                             + (Vec4u::from_color_u32(tri_raster.p1.color) / tri_raster.p1.pos.z
                                 - col_2)
                                 * a20)
-                            * depth;
+                            * depth
+                            * light;
 
                         buffer[index] = col.as_color_u32();
                         depth_buffer[index] = depth;
