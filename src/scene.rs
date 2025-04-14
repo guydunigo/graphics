@@ -53,7 +53,7 @@ pub struct Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            pos: Vec3f::new(1., 1., 0.),
+            pos: Vec3f::new(1., 1., 13.),
             z_near: 0.5,
             canvas_side: 0.1,
             rot: Default::default(),
