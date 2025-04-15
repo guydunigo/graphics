@@ -1,4 +1,4 @@
-use std::{f64::consts::PI, num::NonZeroU32, rc::Rc, time::Instant};
+use std::{f32::consts::PI, num::NonZeroU32, rc::Rc, time::Instant};
 
 use softbuffer::{Context, Surface};
 use winit::{
@@ -25,7 +25,7 @@ pub struct App {
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
-    depth_buffer: Vec<f64>,
+    depth_buffer: Vec<f32>,
     show_vertices: bool,
 }
 
@@ -101,9 +101,12 @@ impl ApplicationHandler for App {
                     KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
                     KeyCode::KeyD => self.world.camera.pos.x += 0.1,
                     KeyCode::Digit7 => self.world.camera = Default::default(),
+                    /*
+                     * TODO : keys sort triangles
                     KeyCode::Digit1 => self.world.triangles.sort_by_key(|t| -t.min_z() as u64),
                     KeyCode::Digit2 => self.world.triangles.sort_by_key(|t| t.min_z() as u64),
                     KeyCode::Digit3 => self.world.triangles = World::default().triangles,
+                    */
                     KeyCode::KeyV => self.show_vertices = !self.show_vertices,
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
@@ -150,9 +153,9 @@ impl ApplicationHandler for App {
                 self.cursor = Some(position);
                 if self.mouse_left_held {
                     let size = &self.graphics.as_ref().unwrap().window.inner_size();
-                    self.world.camera.rot = Rotation::from_angles(&Vec3f::new(
-                        (position.y / size.height as f64 / 2. - 0.25) * PI,
-                        (position.x / size.width as f64 / 2. - 0.25) * PI,
+                    self.world.camera.rot = Rotation::from_angles(Vec3f::new(
+                        (position.y as f32 / size.height as f32 / 2. - 0.25) * PI,
+                        (position.x as f32 / size.width as f32 / 2. - 0.25) * PI,
                         0.,
                     ));
                 }
@@ -190,8 +193,8 @@ impl ApplicationHandler for App {
 
                 let inst = Instant::now();
                 self.depth_buffer
-                    .resize(size.width as usize * size.height as usize, f64::INFINITY);
-                self.depth_buffer.fill(f64::INFINITY);
+                    .resize(size.width as usize * size.height as usize, f32::INFINITY);
+                self.depth_buffer.fill(f32::INFINITY);
                 rasterize(
                     &self.world,
                     &mut buffer,
@@ -206,7 +209,7 @@ impl ApplicationHandler for App {
 
                 let display = format!(
                     "fps : {} | {}ms{}",
-                    (1000. / inst as f64).round(),
+                    (1000. / inst as f32).round(),
                     inst,
                     self.cursor
                         .and_then(|cursor| buffer

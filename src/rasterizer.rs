@@ -4,14 +4,14 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     maths::{Vec2f, Vec3f, Vec4u},
-    scene::{Camera, Texture, Triangle, World},
+    scene::{Camera, Mesh, Texture, Triangle, World},
 };
 
 const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
-const MINIMAL_AMBIANT_LIGHT: f64 = 0.1;
+const MINIMAL_AMBIANT_LIGHT: f32 = 0.1;
 
-fn world_to_raster(p_world: &Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
-    let p_cam = (*p_world - cam.pos).rotate(cam.rot);
+fn world_to_raster(p_world: Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
+    let p_cam = (p_world - cam.pos).rotate(&cam.rot);
     let p_screen = if p_cam.z < -0.001 {
         Vec3f {
             x: p_cam.x * cam.z_near / -p_cam.z,
@@ -33,8 +33,8 @@ fn world_to_raster(p_world: &Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> V
     };
     // [0,1]
     Vec3f {
-        x: (p_ndc.x + 1.) / 2. * (size.width as f64),
-        y: (1. - p_ndc.y) / 2. * (size.height as f64),
+        x: (p_ndc.x + 1.) / 2. * (size.width as f32),
+        y: (1. - p_ndc.y) / 2. * (size.height as f32),
         z: p_screen.z,
     }
 }
@@ -45,9 +45,9 @@ pub fn world_to_raster_triangle(
     size: &PhysicalSize<u32>,
 ) -> Triangle {
     Triangle {
-        p0: world_to_raster(&triangle.p0, cam, size),
-        p1: world_to_raster(&triangle.p1, cam, size),
-        p2: world_to_raster(&triangle.p2, cam, size),
+        p0: world_to_raster(triangle.p0, cam, size),
+        p1: world_to_raster(triangle.p1, cam, size),
+        p2: world_to_raster(triangle.p2, cam, size),
         texture: triangle.texture,
     }
 }
@@ -61,10 +61,10 @@ pub struct Rect {
 }
 
 fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
-    let min_x = (f64::min(f64::min(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1);
-    let max_x = (f64::max(f64::max(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1);
-    let min_y = (f64::min(f64::min(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1);
-    let max_y = (f64::max(f64::max(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1);
+    let min_x = (f32::min(f32::min(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1);
+    let max_x = (f32::max(f32::max(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1);
+    let min_y = (f32::min(f32::min(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1);
+    let max_y = (f32::max(f32::max(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1);
 
     Rect {
         x: min_x,
@@ -76,13 +76,13 @@ fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
 
 // Calculates the area of the parallelogram from vectors ab and ap
 // Positive if p is "right" of ab
-fn edge_function(ab: Vec3f, tri_a: Vec3f, p: Vec3f) -> f64 {
+fn edge_function(ab: Vec3f, tri_a: Vec3f, p: Vec3f) -> f32 {
     let ap = p - tri_a;
     ap.x * ab.y - ap.y * ab.x
 }
 
-fn buffer_index(p: &Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
-    if p.x >= 0. && p.x < (size.width as f64) && p.y >= 0. && p.y < (size.height as f64) {
+fn buffer_index(p: Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
+    if p.x >= 0. && p.x < (size.width as f32) && p.y >= 0. && p.y < (size.height as f32) {
         Some(p.x as usize + p.y as usize * size.width as usize)
     } else {
         None
@@ -92,10 +92,10 @@ fn buffer_index(p: &Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
 fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
     buffer: &mut B,
     size: &PhysicalSize<u32>,
-    v: &Vec3f,
+    v: Vec3f,
     texture: &Texture,
 ) {
-    if v.x >= 1. && v.x < (size.width as f64) - 1. && v.y >= 1. && v.y < (size.height as f64) - 1. {
+    if v.x >= 1. && v.x < (size.width as f32) - 1. && v.y >= 1. && v.y < (size.height as f32) - 1. {
         if let Some(i) = buffer_index(v, size) {
             let color = match texture {
                 Texture::Color(col) => *col,
@@ -119,7 +119,7 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     triangle: &Triangle,
     buffer: &mut B,
-    depth_buffer: &mut [f64],
+    depth_buffer: &mut [f32],
     cam: &Camera,
     size: &PhysicalSize<u32>,
     show_vertices: bool,
@@ -139,18 +139,18 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     // face normal vector to see if they are opposed (face is lit).
     let sun_norm = SUN_DIRECTION.normalize();
     let triangle_normal = (triangle.p1 - triangle.p0)
-        .cross(&(triangle.p0 - triangle.p2))
+        .cross(triangle.p0 - triangle.p2)
         .normalize();
     let light = sun_norm
-        .dot(&triangle_normal)
+        .dot(triangle_normal)
         .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
 
     // TODO: Paralléliser
     (bb.x..=(bb.x + bb.width))
         .flat_map(|x| {
             (bb.y..=(bb.y + bb.height)).map(move |y| Vec3f {
-                x: x as f64,
-                y: y as f64,
+                x: x as f32,
+                y: y as f32,
                 z: 0.,
             })
         })
@@ -206,21 +206,25 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         });
 
     if show_vertices {
-        draw_vertice_basic(buffer, size, &tri_raster.p0, &tri_raster.texture);
-        draw_vertice_basic(buffer, size, &tri_raster.p1, &tri_raster.texture);
-        draw_vertice_basic(buffer, size, &tri_raster.p2, &tri_raster.texture);
+        draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.texture);
+        draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.texture);
+        draw_vertice_basic(buffer, size, tri_raster.p2, &tri_raster.texture);
     }
 }
 
 pub fn rasterize<B: DerefMut<Target = [u32]>>(
     world: &World,
     buffer: &mut B,
-    depth_buffer: &mut [f64],
+    depth_buffer: &mut [f32],
     size: &PhysicalSize<u32>,
     show_vertices: bool,
 ) {
     // TODO: paralléliser
-    world.triangles.iter().for_each(|f| {
-        rasterize_triangle(f, buffer, depth_buffer, &world.camera, size, show_vertices)
-    });
+    world
+        .meshes
+        .iter()
+        .flat_map(Mesh::to_world_triangles)
+        .for_each(|f| {
+            rasterize_triangle(&f, buffer, depth_buffer, &world.camera, size, show_vertices)
+        });
 }
