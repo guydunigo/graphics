@@ -19,7 +19,7 @@ fn world_to_raster(p_world: Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Ve
             z: -p_cam.z,
         }
     } else {
-        // 0 divide getting too near the camera and reversing problem behind...
+        // TODO: 0 divide getting too near the camera and reversing problem behind...
         Vec3f {
             x: p_cam.x * cam.z_near / 0.1,
             y: p_cam.y * cam.z_near / 0.1,
