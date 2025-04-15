@@ -145,6 +145,12 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         .dot(triangle_normal)
         .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
 
+    // TODO: Optimize color calculus
+    let texture = match tri_raster.texture {
+        Texture::Color(col) => Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32()),
+        _ => tri_raster.texture,
+    };
+
     // TODO: Paralléliser
     (bb.x..=(bb.x + bb.width))
         .flat_map(|x| {
@@ -184,22 +190,21 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                     let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
                     if depth < depth_buffer[index] {
-                        let mut col = match tri_raster.texture {
-                            Texture::Color(col) => Vec4u::from_color_u32(col),
+                        let col = match texture {
+                            Texture::Color(col) => col,
                             Texture::VertexColor(c0, c1, c2) => {
-                                // TODO: Better color calculus
+                                // TODO: Optimize color calculus
                                 let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
 
-                                (col_2
+                                ((col_2
                                     + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
                                     + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
-                                    * depth
+                                    * (depth * light))
+                                    .as_color_u32()
                             }
                         };
 
-                        col *= light;
-
-                        buffer[index] = col.as_color_u32();
+                        buffer[index] = col;
                         depth_buffer[index] = depth;
                     }
                 }
