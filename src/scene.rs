@@ -169,11 +169,11 @@ mod obj {
         .expect("Couldn't load .obj");
 
         println!(
-            "Loading object '{}' from path '{}' : {} triangles from {} points...",
+            "Loading object '{}' from path '{}' : {} polygons from {} points...",
             obj.name.unwrap_or("".to_string()),
             obj_path.as_ref().to_string_lossy(),
             obj.polygons.len(),
-            obj.points.len(),
+            obj.positions.len(),
         );
 
         let mtls = load_materials_diffuse_rgb(obj_path, &obj.material_libraries[..]);
