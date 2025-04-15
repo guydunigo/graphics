@@ -38,7 +38,7 @@ impl Default for Triangle {
 }
 
 impl Triangle {
-    pub fn new(p0: Vec3f, p1: Vec3f, p2: Vec3f, texture: Texture) -> Self {
+    pub const fn new(p0: Vec3f, p1: Vec3f, p2: Vec3f, texture: Texture) -> Self {
         Triangle {
             p0,
             p1,
@@ -79,81 +79,8 @@ pub struct World {
 
 impl Default for World {
     fn default() -> Self {
-        let mut triangles = vec![
-            Triangle::default(),
-            Triangle::new(
-                Vec3f::new(3., 0., -19.),
-                Vec3f::new(4., 0., -19.),
-                Vec3f::new(4., 1., -10.),
-                Texture::Color(0xffff0000),
-            ),
-            Triangle::new(
-                Vec3f::new(4., 0., -19.),
-                Vec3f::new(5., 0., -19.),
-                Vec3f::new(4., 1., -10.),
-                Texture::Color(0xffff0000),
-            ),
-            Triangle::new(
-                Vec3f::new(3., 2., -19.),
-                Vec3f::new(4., 1., -10.),
-                Vec3f::new(4., 2., -19.),
-                Texture::Color(0xff0000ff),
-            ),
-            Triangle::new(
-                Vec3f::new(4., 1., -10.),
-                Vec3f::new(5., 2., -19.),
-                Vec3f::new(4., 2., -19.),
-                Texture::Color(0xff0000ff),
-            ),
-            Triangle::new(
-                Vec3f::new(3., 0., -19.),
-                Vec3f::new(4., 1., -10.),
-                Vec3f::new(3., 1., -19.),
-                Texture::Color(0xff00ff00),
-            ),
-            Triangle::new(
-                Vec3f::new(3., 2., -19.),
-                Vec3f::new(3., 1., -19.),
-                Vec3f::new(4., 1., -10.),
-                Texture::Color(0xff00ff00),
-            ),
-            Triangle::new(
-                Vec3f::new(5., 1., -19.),
-                Vec3f::new(4., 1., -10.),
-                Vec3f::new(5., 0., -19.),
-                Texture::Color(0xffffff00),
-            ),
-            Triangle::new(
-                Vec3f::new(4., 1., -10.),
-                Vec3f::new(5., 1., -19.),
-                Vec3f::new(5., 2., -19.),
-                Texture::Color(0xffffff00),
-            ),
-            Triangle::new(
-                Vec3f::new(2., 0.5, -19.),
-                Vec3f::new(4., 0.5, -15.),
-                Vec3f::new(2., 1.5, -19.),
-                Texture::Color(0xff00ffff),
-            ),
-            Triangle::new(
-                Vec3f::new(4., 0.5, -15.),
-                Vec3f::new(4., 1.5, -15.),
-                Vec3f::new(2., 1.5, -19.),
-                Texture::Color(0xff00ffff),
-            ),
-            Triangle::new(
-                Vec3f::new(3.7, 0.7, -12.),
-                Vec3f::new(4.3, 0.7, -12.),
-                Vec3f::new(3.7, 1.3, -12.),
-                Texture::Color(0xffff00ff),
-            ),
-            Triangle::new(
-                Vec3f::new(4.3, 0.7, -12.),
-                Vec3f::new(4.3, 1.3, -12.),
-                Vec3f::new(3.7, 1.3, -12.),
-                Texture::Color(0xffff00ff),
-            ),
-        ];
+        let mut triangles = base_pyramid();
+        triangles.push(Triangle::default());
 
         obj::import_triangles_and_diffuse(&mut triangles, obj::SUZANNE_OBJ_PATH);
 
@@ -293,4 +220,81 @@ mod obj {
             _ => panic!("Model should be triangulated first to be loaded properly"),
         }
     }
+}
+
+fn base_pyramid() -> Vec<Triangle> {
+    vec![
+        Triangle::new(
+            Vec3f::new(3., 0., -19.),
+            Vec3f::new(4., 0., -19.),
+            Vec3f::new(4., 1., -10.),
+            Texture::Color(0xffff0000),
+        ),
+        Triangle::new(
+            Vec3f::new(4., 0., -19.),
+            Vec3f::new(5., 0., -19.),
+            Vec3f::new(4., 1., -10.),
+            Texture::Color(0xffff0000),
+        ),
+        Triangle::new(
+            Vec3f::new(3., 2., -19.),
+            Vec3f::new(4., 1., -10.),
+            Vec3f::new(4., 2., -19.),
+            Texture::Color(0xff0000ff),
+        ),
+        Triangle::new(
+            Vec3f::new(4., 1., -10.),
+            Vec3f::new(5., 2., -19.),
+            Vec3f::new(4., 2., -19.),
+            Texture::Color(0xff0000ff),
+        ),
+        Triangle::new(
+            Vec3f::new(3., 0., -19.),
+            Vec3f::new(4., 1., -10.),
+            Vec3f::new(3., 1., -19.),
+            Texture::Color(0xff00ff00),
+        ),
+        Triangle::new(
+            Vec3f::new(3., 2., -19.),
+            Vec3f::new(3., 1., -19.),
+            Vec3f::new(4., 1., -10.),
+            Texture::Color(0xff00ff00),
+        ),
+        Triangle::new(
+            Vec3f::new(5., 1., -19.),
+            Vec3f::new(4., 1., -10.),
+            Vec3f::new(5., 0., -19.),
+            Texture::Color(0xffffff00),
+        ),
+        Triangle::new(
+            Vec3f::new(4., 1., -10.),
+            Vec3f::new(5., 1., -19.),
+            Vec3f::new(5., 2., -19.),
+            Texture::Color(0xffffff00),
+        ),
+        Triangle::new(
+            Vec3f::new(2., 0.5, -19.),
+            Vec3f::new(4., 0.5, -15.),
+            Vec3f::new(2., 1.5, -19.),
+            Texture::Color(0xff00ffff),
+        ),
+        Triangle::new(
+            Vec3f::new(4., 0.5, -15.),
+            Vec3f::new(4., 1.5, -15.),
+            Vec3f::new(2., 1.5, -19.),
+            Texture::Color(0xff00ffff),
+        ),
+        Triangle::new(
+            Vec3f::new(3.7, 0.7, -12.),
+            Vec3f::new(4.3, 0.7, -12.),
+            Vec3f::new(3.7, 1.3, -12.),
+            Texture::Color(0xffff00ff),
+        ),
+        Triangle::new(
+            Vec3f::new(4.3, 0.7, -12.),
+            Vec3f::new(4.3, 1.3, -12.),
+            Vec3f::new(3.7, 1.3, -12.),
+            Texture::Color(0xffff00ff),
+        ),
+    ]
 }
