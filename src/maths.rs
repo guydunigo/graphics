@@ -1,10 +1,4 @@
-use std::ops::{Add, Div, Mul, Neg, Sub};
-
-#[derive(Debug, Clone, Copy)]
-pub struct Vec2f {
-    pub x: f32,
-    pub y: f32,
-}
+use std::ops::{Add, Div, Mul, MulAssign, Neg, Sub};
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Vec3f {
@@ -32,14 +26,6 @@ impl Vec3f {
         self
     }
 
-    pub fn rotate(self, new_base: &Rotation) -> Self {
-        Self {
-            x: self.x * new_base.u.x + self.y * new_base.v.x + self.z * new_base.w.x,
-            y: self.x * new_base.u.y + self.y * new_base.v.y + self.z * new_base.w.y,
-            z: self.x * new_base.u.z + self.y * new_base.v.z + self.z * new_base.w.z,
-        }
-    }
-
     pub fn dot(self, other: Self) -> f32 {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
@@ -52,8 +38,20 @@ impl Vec3f {
         }
     }
 
-    pub fn trans_rot_scale(self, pos: Vec3f, rot: &Rotation, scale: f32) -> Self {
-        (self + pos).rotate(rot) * scale
+    pub fn rotate(self, new_base: &Rotation) -> Self {
+        Self {
+            x: self.x * new_base.u.x + self.y * new_base.v.x + self.z * new_base.w.x,
+            y: self.x * new_base.u.y + self.y * new_base.v.y + self.z * new_base.w.y,
+            z: self.x * new_base.u.z + self.y * new_base.v.z + self.z * new_base.w.z,
+        }
+    }
+
+    pub fn trans_rot_scale(self, move_vect: Vec3f, new_base: &Rotation, scale: f32) -> Self {
+        (self + move_vect).rotate(new_base) * scale
+    }
+
+    pub fn seen_from(self, pos: Vec3f, new_base: &Rotation) -> Self {
+        (self - pos).rotate(new_base)
     }
 }
 
@@ -169,6 +167,14 @@ impl Div<f32> for Vec4u {
         self.z /= other;
         self.w /= other;
         self
+    }
+}
+impl MulAssign<f32> for Vec4u {
+    fn mul_assign(&mut self, rhs: f32) {
+        self.x *= rhs;
+        self.y *= rhs;
+        self.z *= rhs;
+        self.w *= rhs;
     }
 }
 

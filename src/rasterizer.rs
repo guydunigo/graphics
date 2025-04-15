@@ -3,7 +3,7 @@ use std::ops::DerefMut;
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    maths::{Vec2f, Vec3f, Vec4u},
+    maths::{Vec3f, Vec4u},
     scene::{Camera, Mesh, Texture, Triangle, World},
 };
 
@@ -11,31 +11,31 @@ const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.1;
 
 fn world_to_raster(p_world: Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
-    let p_cam = (p_world - cam.pos).rotate(&cam.rot);
-    let p_screen = if p_cam.z < -0.001 {
-        Vec3f {
-            x: p_cam.x * cam.z_near / -p_cam.z,
-            y: p_cam.y * cam.z_near / -p_cam.z,
-            z: -p_cam.z,
-        }
+    // Camera space
+    let mut p = p_world.seen_from(cam.pos, &cam.rot);
+
+    // Screen space : perspective correct
+    if p.z < -0.001 {
+        p.x *= cam.z_near / -p.z;
+        p.y *= cam.z_near / -p.z;
     } else {
         // TODO: 0 divide getting too near the camera and reversing problem behind...
-        Vec3f {
-            x: p_cam.x * cam.z_near / 0.1,
-            y: p_cam.y * cam.z_near / 0.1,
-            z: -p_cam.z,
-        }
+        p.x *= cam.z_near / 0.1;
+        p.y *= cam.z_near / 0.1;
     };
+    p.z = -p.z;
+
+    // Near-Clipping-Plane
     // [-1,1]
-    let p_ndc = Vec2f {
-        x: p_screen.x / cam.canvas_side,
-        y: p_screen.y / cam.canvas_side,
-    };
+    p.x /= cam.canvas_side;
+    p.y /= cam.canvas_side;
+
+    // Raster space
     // [0,1]
     Vec3f {
-        x: (p_ndc.x + 1.) / 2. * (size.width as f32),
-        y: (1. - p_ndc.y) / 2. * (size.height as f32),
-        z: p_screen.z,
+        x: (p.x + 1.) / 2. * (size.width as f32),
+        y: (1. - p.y) / 2. * (size.height as f32),
+        z: p.z,
     }
 }
 
@@ -132,9 +132,9 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let p12 = tri_raster.p2 - tri_raster.p1;
     let p20 = tri_raster.p0 - tri_raster.p2;
 
-    // TODO: not efficient ?
-    let tri_area = edge_function(p01, Vec3f::default(), -p20);
+    let tri_area = edge_function(p01, tri_raster.p0, tri_raster.p2);
 
+    // TODO: calculate before ?
     // Dot product gives negative if two vectors are opposed, so we compare light vector to
     // face normal vector to see if they are opposed (face is lit).
     let sun_norm = SUN_DIRECTION.normalize();
@@ -158,6 +158,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             let e01 = edge_function(p01, tri_raster.p0, pixel);
             let e12 = edge_function(p12, tri_raster.p1, pixel);
             let e20 = edge_function(p20, tri_raster.p2, pixel);
+
             if e01 >= 0. && e12 >= 0. && e20 >= 0. {
                 let a12 = e12 / tri_area;
                 let a20 = e20 / tri_area;
@@ -183,7 +184,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                     let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
                     if depth < depth_buffer[index] {
-                        let col = match tri_raster.texture {
+                        let mut col = match tri_raster.texture {
                             Texture::Color(col) => Vec4u::from_color_u32(col),
                             Texture::VertexColor(c0, c1, c2) => {
                                 // TODO: Better color calculus
@@ -196,7 +197,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                             }
                         };
 
-                        let col = col * light;
+                        col *= light;
 
                         buffer[index] = col.as_color_u32();
                         depth_buffer[index] = depth;
