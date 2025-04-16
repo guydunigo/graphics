@@ -8,7 +8,7 @@ use crate::{
 };
 
 const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
-const MINIMAL_AMBIANT_LIGHT: f32 = 0.1;
+const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
 fn world_to_raster(p_world: Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
     // Camera space

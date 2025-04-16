@@ -1,5 +1,5 @@
 /// # Describing the world...
-use crate::maths::{Rotation, Vec3f};
+use crate::maths::{PI, Rotation, Vec3f};
 
 const DEFAULT_COLOR: u32 = 0xff999999;
 
@@ -53,11 +53,11 @@ impl Triangle {
     }
     */
 
-    pub fn trans_rot_scale(&self, pos: Vec3f, rot: &Rotation, scale: f32) -> Triangle {
+    pub fn scale_rot_move(&self, scale: f32, rot: &Rotation, move_vect: Vec3f) -> Triangle {
         Triangle {
-            p0: self.p0.trans_rot_scale(pos, rot, scale),
-            p1: self.p1.trans_rot_scale(pos, rot, scale),
-            p2: self.p2.trans_rot_scale(pos, rot, scale),
+            p0: self.p0.scale_rot_move(scale, rot, move_vect),
+            p1: self.p1.scale_rot_move(scale, rot, move_vect),
+            p2: self.p2.scale_rot_move(scale, rot, move_vect),
             texture: self.texture,
         }
     }
@@ -102,7 +102,7 @@ impl Mesh {
     pub fn to_world_triangles(&self) -> impl Iterator<Item = Triangle> {
         self.triangles
             .iter()
-            .map(|t| t.trans_rot_scale(self.pos, &self.rot, self.scale))
+            .map(|t| t.scale_rot_move(self.scale, &self.rot, self.pos))
     }
 }
 
@@ -358,6 +358,8 @@ fn base_pyramid() -> Mesh {
             y: 1.,
             z: -19.,
         },
+        rot: Rotation::from_angles(0., 0., -PI / 3.),
+        scale: 0.7,
         ..Default::default()
     }
 }

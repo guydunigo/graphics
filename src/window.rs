@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, num::NonZeroU32, rc::Rc, time::Instant};
+use std::{num::NonZeroU32, rc::Rc, time::Instant};
 
 use softbuffer::{Context, Surface};
 use winit::{
@@ -12,7 +12,10 @@ use winit::{
 };
 
 use crate::{font::TextWriter, scene::World};
-use crate::{maths::Rotation, rasterizer::rasterize};
+use crate::{
+    maths::{PI, Rotation},
+    rasterizer::rasterize,
+};
 
 struct Graphics {
     window: Rc<Window>,

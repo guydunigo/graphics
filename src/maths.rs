@@ -1,5 +1,7 @@
 use std::ops::{Add, Div, Mul, MulAssign, Neg, Sub};
 
+pub use std::f32::consts::PI;
+
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Vec3f {
     pub x: f32,
@@ -46,8 +48,11 @@ impl Vec3f {
         }
     }
 
-    pub fn trans_rot_scale(self, move_vect: Vec3f, new_base: &Rotation, scale: f32) -> Self {
-        (self + move_vect).rotate(new_base) * scale
+    /// 1. Scale
+    /// 2. Rotate around (0.0.0) axis
+    /// 3. Move along given vector
+    pub fn scale_rot_move(self, scale: f32, new_base: &Rotation, move_vect: Vec3f) -> Self {
+        (self * scale).rotate(new_base) + move_vect
     }
 
     pub fn seen_from(self, pos: Vec3f, new_base: &Rotation) -> Self {
