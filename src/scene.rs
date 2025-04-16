@@ -177,8 +177,7 @@ mod obj {
         // TODO: différents groupes, materiaux on vetrices, ...
         let mut triangles = Vec::with_capacity(obj.polygons.len());
         for (poly_index, poly) in obj.polygons.iter().enumerate() {
-            let texture =
-                find_mtl_texture(&obj.meshes, &mtls, poly_index).unwrap_or(Default::default());
+            let texture = find_mtl_texture(&obj.meshes, &mtls, poly_index).unwrap_or_default();
             triangles.push(polygon_to_triangle(&obj.positions[..], texture, poly));
         }
 
@@ -358,6 +357,5 @@ fn base_pyramid() -> Mesh {
         },
         rot: Rotation::from_angles(0., 0., -PI / 3.),
         scale: 0.7,
-        ..Default::default()
     }
 }

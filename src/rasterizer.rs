@@ -10,15 +10,17 @@ use crate::{
 const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone)]
 pub struct Stats {
     pub nb_triangles_tot: usize,
+    pub nb_triangles_sight: usize,
     pub nb_triangles_facing: usize,
     pub nb_triangles_drawn: usize,
     pub nb_pixels_tested: usize,
     pub nb_pixels_in: usize,
     pub nb_pixels_front: usize,
     pub nb_pixels_written: usize,
+    // pub misc: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -97,6 +99,7 @@ pub struct Rect {
     pub y: u32,
     pub width: u32,
     pub height: u32,
+    pub max_z: f32,
 }
 
 fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
@@ -104,12 +107,14 @@ fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
     let max_x = (f32::max(f32::max(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1);
     let min_y = (f32::min(f32::min(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1);
     let max_y = (f32::max(f32::max(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1);
+    let max_z = f32::max(f32::max(t.p0.z, t.p1.z), t.p2.z);
 
     Rect {
         x: min_x,
         y: min_y,
         width: max_x - min_x,
         height: max_y - min_y,
+        max_z,
     }
 }
 
@@ -163,6 +168,15 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     settings: &Settings,
     stats: &mut Stats,
 ) {
+    let tri_raster = world_to_raster_triangle(triangle, cam, size);
+
+    let bb = bounding_box_triangle(&tri_raster, size);
+    if bb.width == 0 || bb.height == 0 || bb.max_z <= cam.z_near {
+        return;
+    }
+
+    stats.nb_triangles_sight += 1;
+
     ////////////////////////////////
     // Sunlight
     // Dot product gives negative if two vectors are opposed, so we compare light vector to
@@ -183,8 +197,6 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     // Back face culling
     // If triangle normal and camera sight are in same direction (dot product > 0), it's invisible.
 
-    let tri_raster = world_to_raster_triangle(triangle, cam, size);
-
     let p01 = tri_raster.p1 - tri_raster.p0;
     let p20 = tri_raster.p0 - tri_raster.p2;
 
@@ -199,8 +211,6 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
 
     ////////////////////////////////
     let mut was_drawn = false;
-
-    let bb = bounding_box_triangle(&tri_raster, size);
 
     let p12 = tri_raster.p2 - tri_raster.p1;
 
@@ -252,33 +262,37 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 // Divide each value by the point Z coord and finally multiply by depth.
 
                 // TODO: ndc : cam.z_near
-                if depth > 0. {
-                    stats.nb_pixels_front += 1;
-
-                    let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
-
-                    if depth < depth_buffer[index] {
-                        was_drawn = true;
-                        stats.nb_pixels_written += 1;
-
-                        let col = match texture {
-                            Texture::Color(col) => col,
-                            Texture::VertexColor(c0, c1, c2) => {
-                                // TODO: Optimize color calculus
-                                let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
-
-                                ((col_2
-                                    + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
-                                    + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
-                                    * (depth * light))
-                                    .as_color_u32()
-                            }
-                        };
-
-                        buffer[index] = col;
-                        depth_buffer[index] = depth;
-                    }
+                if depth <= cam.z_near {
+                    return;
                 }
+
+                stats.nb_pixels_front += 1;
+
+                let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
+
+                if depth >= depth_buffer[index] {
+                    return;
+                }
+
+                was_drawn = true;
+                stats.nb_pixels_written += 1;
+
+                let col = match texture {
+                    Texture::Color(col) => col,
+                    Texture::VertexColor(c0, c1, c2) => {
+                        // TODO: Optimize color calculus
+                        let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
+
+                        ((col_2
+                            + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
+                            + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
+                            * (depth * light))
+                            .as_color_u32()
+                    }
+                };
+
+                buffer[index] = col;
+                depth_buffer[index] = depth;
             }
         });
 
