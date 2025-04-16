@@ -28,7 +28,9 @@ struct Graphics {
 
 #[derive(Default)]
 pub struct App {
+    last_rendering_duration: u128,
     graphics: Option<Graphics>,
+    text_writer: TextWriter,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
@@ -190,6 +192,10 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
+                let frame_start_time = Instant::now();
+
+                let mut stats = Stats::default();
+
                 // Redraw the application.
                 //
                 // It's preferable for applications that do not render continuously to render in
@@ -218,14 +224,18 @@ impl ApplicationHandler for App {
                     .expect("Failed to get the softbuffer buffer");
 
                 // Fill a buffer with a solid color
+                let t = Instant::now();
                 buffer.fill(0xff181818);
-
-                let inst = Instant::now();
-                let mut stats = Stats::default();
+                let buffer_fill = Instant::now().duration_since(t).as_millis();
 
                 self.depth_buffer
                     .resize(size.width as usize * size.height as usize, f32::INFINITY);
+                let t = Instant::now();
                 self.depth_buffer.fill(f32::INFINITY);
+                let depth_buffer_fill = Instant::now().duration_since(t).as_millis();
+
+                let rendering_time = Instant::now();
+
                 rasterize(
                     &self.world,
                     &mut buffer,
@@ -235,14 +245,13 @@ impl ApplicationHandler for App {
                     &mut stats,
                 );
 
-                let mut tw = TextWriter::default();
-
-                let inst = Instant::now().duration_since(inst).as_millis();
-
                 let display = format!(
-                    "fps : {} | {}ms{}\n{:?}\n{:#?}",
-                    (1000. / inst as f32).round(),
-                    inst,
+                    "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{:?}\n{:#?}",
+                    (1000. / self.last_rendering_duration as f32).round(),
+                    buffer_fill,
+                    depth_buffer_fill,
+                    Instant::now().duration_since(rendering_time).as_millis(),
+                    self.last_rendering_duration,
                     self.cursor
                         .and_then(|cursor| buffer
                             .get(cursor.x as usize + cursor.y as usize * size.width as usize)
@@ -256,7 +265,7 @@ impl ApplicationHandler for App {
                     self.settings,
                     stats
                 );
-                tw.rasterize(&mut buffer, size, &display[..]);
+                self.text_writer.rasterize(&mut buffer, size, &display[..]);
 
                 buffer
                     .present()
@@ -268,6 +277,9 @@ impl ApplicationHandler for App {
                 // applications which do not always need to. Applications that redraw continuously
                 // can render here instead.
                 gfx.window.request_redraw();
+
+                self.last_rendering_duration =
+                    Instant::now().duration_since(frame_start_time).as_millis();
             }
             _ => (),
         }
