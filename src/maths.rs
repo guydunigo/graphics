@@ -197,13 +197,13 @@ impl Default for Rotation {
 
 impl Rotation {
     /// Rotation around x axis, y axis, z axis.
-    pub fn from_angles(angles: Vec3f) -> Self {
-        let x_cos = angles.x.cos();
-        let x_sin = angles.x.sin();
-        let y_cos = angles.y.cos();
-        let y_sin = angles.y.sin();
-        let z_cos = angles.z.cos();
-        let z_sin = angles.z.sin();
+    pub fn from_angles(x: f32, y: f32, z: f32) -> Self {
+        let x_cos = x.cos();
+        let x_sin = x.sin();
+        let y_cos = y.cos();
+        let y_sin = y.sin();
+        let z_cos = z.cos();
+        let z_sin = z.sin();
 
         Self {
             u: Vec3f::new(y_cos * z_cos, z_sin, -y_sin),

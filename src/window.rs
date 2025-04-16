@@ -11,7 +11,7 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::{font::TextWriter, maths::Vec3f, scene::World};
+use crate::{font::TextWriter, scene::World};
 use crate::{maths::Rotation, rasterizer::rasterize};
 
 struct Graphics {
@@ -153,11 +153,11 @@ impl ApplicationHandler for App {
                 self.cursor = Some(position);
                 if self.mouse_left_held {
                     let size = &self.graphics.as_ref().unwrap().window.inner_size();
-                    self.world.camera.rot = Rotation::from_angles(Vec3f::new(
+                    self.world.camera.rot = Rotation::from_angles(
                         (position.y as f32 / size.height as f32 / 2. - 0.25) * PI,
                         (position.x as f32 / size.width as f32 / 2. - 0.25) * PI,
                         0.,
-                    ));
+                    );
                 }
             }
             WindowEvent::RedrawRequested => {
