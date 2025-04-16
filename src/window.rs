@@ -130,8 +130,8 @@ impl ApplicationHandler for App {
                     KeyCode::Backquote => {
                         self.settings.show_vertices = !self.settings.show_vertices
                     }
-                    KeyCode::Digit1 => self.settings.sort_triangles = TriangleSorting::BackToFront,
-                    KeyCode::Digit2 => self.settings.sort_triangles = TriangleSorting::FrontToBack,
+                    KeyCode::Digit1 => self.settings.sort_triangles = TriangleSorting::FrontToBack,
+                    KeyCode::Digit2 => self.settings.sort_triangles = TriangleSorting::BackToFront,
                     KeyCode::Digit3 => self.settings.sort_triangles = TriangleSorting::None,
                     KeyCode::Digit4 => {
                         self.settings.back_face_culling = !self.settings.back_face_culling

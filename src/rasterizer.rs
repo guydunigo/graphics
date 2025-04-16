@@ -21,7 +21,7 @@ pub struct Stats {
     pub nb_pixels_written: usize,
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Settings {
     /// Over-print all vertices
     pub show_vertices: bool,
@@ -29,6 +29,16 @@ pub struct Settings {
     pub sort_triangles: TriangleSorting,
     /// Eliminate back-facing faces early
     pub back_face_culling: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            show_vertices: false,
+            sort_triangles: TriangleSorting::None,
+            back_face_culling: true,
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -105,8 +115,7 @@ fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
 
 // Calculates the area of the parallelogram from vectors ab and ap
 // Positive if p is "right" of ab
-fn edge_function(ab: Vec3f, tri_a: Vec3f, p: Vec3f) -> f32 {
-    let ap = p - tri_a;
+fn edge_function(ab: Vec3f, ap: Vec3f) -> f32 {
     ap.x * ab.y - ap.y * ab.x
 }
 
@@ -154,15 +163,15 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     settings: &Settings,
     stats: &mut Stats,
 ) {
-    // TODO: calculate before ?
-    let triangle_normal = (triangle.p1 - triangle.p0)
-        .cross(triangle.p0 - triangle.p2)
-        .normalize();
-
     ////////////////////////////////
     // Sunlight
     // Dot product gives negative if two vectors are opposed, so we compare light vector to
     // face normal vector to see if they are opposed (face is lit).
+
+    // TODO: calculate before ?
+    let triangle_normal = (triangle.p1 - triangle.p0)
+        .cross(triangle.p0 - triangle.p2)
+        .normalize();
 
     // TODO: Normalize light before ?
     let sun_norm = SUN_DIRECTION.normalize();
@@ -172,10 +181,15 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
 
     ////////////////////////////////
     // Back face culling
-    // If triangle normal and camera sight are in same direction (scalar >0), it's invisible.
+    // If triangle normal and camera sight are in same direction (dot product > 0), it's invisible.
 
-    // TODO: cam.rot.w already normalized ?
-    if cam.rot.w.normalize().dot(triangle_normal) > 0. {
+    let tri_raster = world_to_raster_triangle(triangle, cam, size);
+
+    let p01 = tri_raster.p1 - tri_raster.p0;
+    let p20 = tri_raster.p0 - tri_raster.p2;
+
+    let raster_normale = p01.cross(p20);
+    if cam.rot.w.dot(raster_normale) < 0. {
         if settings.back_face_culling {
             return;
         }
@@ -186,14 +200,11 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     ////////////////////////////////
     let mut was_drawn = false;
 
-    let tri_raster = world_to_raster_triangle(triangle, cam, size);
     let bb = bounding_box_triangle(&tri_raster, size);
 
-    let p01 = tri_raster.p1 - tri_raster.p0;
     let p12 = tri_raster.p2 - tri_raster.p1;
-    let p20 = tri_raster.p0 - tri_raster.p2;
 
-    let tri_area = edge_function(p01, tri_raster.p0, tri_raster.p2);
+    let tri_area = edge_function(p20, p01);
 
     // TODO: Optimize color calculus
     let texture = match tri_raster.texture {
@@ -213,9 +224,9 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         .for_each(|pixel| {
             stats.nb_pixels_tested += 1;
 
-            let e01 = edge_function(p01, tri_raster.p0, pixel);
-            let e12 = edge_function(p12, tri_raster.p1, pixel);
-            let e20 = edge_function(p20, tri_raster.p2, pixel);
+            let e01 = edge_function(p01, pixel - tri_raster.p0);
+            let e12 = edge_function(p12, pixel - tri_raster.p1);
+            let e20 = edge_function(p20, pixel - tri_raster.p2);
 
             if e01 >= 0. && e12 >= 0. && e20 >= 0. {
                 stats.nb_pixels_in += 1;
