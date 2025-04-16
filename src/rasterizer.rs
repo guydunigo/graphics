@@ -10,6 +10,17 @@ use crate::{
 const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Stats {
+    pub nb_triangles_tot: usize,
+    pub nb_triangles_facing: usize,
+    pub nb_triangles_drawn: usize,
+    pub nb_pixels_tested: usize,
+    pub nb_pixels_in: usize,
+    pub nb_pixels_front: usize,
+    pub nb_pixels_written: usize,
+}
+
 fn world_to_raster(p_world: Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
     // Camera space
     let mut p = p_world.seen_from(cam.pos, &cam.rot);
@@ -123,6 +134,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     cam: &Camera,
     size: &PhysicalSize<u32>,
     show_vertices: bool,
+    stats: &mut Stats,
 ) {
     let tri_raster = world_to_raster_triangle(triangle, cam, size);
 
@@ -145,6 +157,12 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         .dot(triangle_normal)
         .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
 
+    // TODO: already normalized ?
+    let view_vector = cam.rot.w.normalize();
+
+    stats.nb_triangles_facing += 1;
+    let mut was_drawn = false;
+
     // TODO: Optimize color calculus
     let texture = match tri_raster.texture {
         Texture::Color(col) => Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32()),
@@ -161,11 +179,15 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             })
         })
         .for_each(|pixel| {
+            stats.nb_pixels_tested += 1;
+
             let e01 = edge_function(p01, tri_raster.p0, pixel);
             let e12 = edge_function(p12, tri_raster.p1, pixel);
             let e20 = edge_function(p20, tri_raster.p2, pixel);
 
             if e01 >= 0. && e12 >= 0. && e20 >= 0. {
+                stats.nb_pixels_in += 1;
+
                 let a12 = e12 / tri_area;
                 let a20 = e20 / tri_area;
 
@@ -186,10 +208,16 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 // Depth correction of other properties :
                 // Divide each value by the point Z coord and finally multiply by depth.
 
+                // TODO: ndc : cam.z_near
                 if depth > 0. {
+                    stats.nb_pixels_front += 1;
+
                     let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
                     if depth < depth_buffer[index] {
+                        was_drawn = true;
+                        stats.nb_pixels_written += 1;
+
                         let col = match texture {
                             Texture::Color(col) => col,
                             Texture::VertexColor(c0, c1, c2) => {
@@ -211,6 +239,10 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             }
         });
 
+    if was_drawn {
+        stats.nb_triangles_drawn += 1;
+    }
+
     if show_vertices {
         draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.texture);
         draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.texture);
@@ -224,6 +256,7 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
     depth_buffer: &mut [f32],
     size: &PhysicalSize<u32>,
     show_vertices: bool,
+    stats: &mut Stats,
 ) {
     // TODO: paralléliser
     world
@@ -231,6 +264,15 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
         .iter()
         .flat_map(Mesh::to_world_triangles)
         .for_each(|f| {
-            rasterize_triangle(&f, buffer, depth_buffer, &world.camera, size, show_vertices)
+            stats.nb_triangles_tot += 1;
+            rasterize_triangle(
+                &f,
+                buffer,
+                depth_buffer,
+                &world.camera,
+                size,
+                show_vertices,
+                stats,
+            );
         });
 }

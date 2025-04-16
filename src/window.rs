@@ -11,7 +11,7 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::{font::TextWriter, scene::World};
+use crate::{font::TextWriter, rasterizer::Stats, scene::World};
 use crate::{
     maths::{PI, Rotation},
     rasterizer::rasterize,
@@ -215,6 +215,8 @@ impl ApplicationHandler for App {
                 buffer.fill(0xff181818);
 
                 let inst = Instant::now();
+                let mut stats = Stats::default();
+
                 self.depth_buffer
                     .resize(size.width as usize * size.height as usize, f32::INFINITY);
                 self.depth_buffer.fill(f32::INFINITY);
@@ -224,6 +226,7 @@ impl ApplicationHandler for App {
                     &mut self.depth_buffer[..],
                     &size,
                     self.show_vertices,
+                    &mut stats,
                 );
 
                 let mut tw = TextWriter::default();
@@ -231,7 +234,7 @@ impl ApplicationHandler for App {
                 let inst = Instant::now().duration_since(inst).as_millis();
 
                 let display = format!(
-                    "fps : {} | {}ms{}",
+                    "fps : {} | {}ms{}\n{:#?}",
                     (1000. / inst as f32).round(),
                     inst,
                     self.cursor
@@ -243,7 +246,8 @@ impl ApplicationHandler for App {
                                 cursor.y.floor(),
                                 c
                             )))
-                        .unwrap_or(String::from("\nNo cursor position"))
+                        .unwrap_or(String::from("\nNo cursor position")),
+                    stats
                 );
                 tw.rasterize(&mut buffer, size, &display[..]);
 
