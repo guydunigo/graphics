@@ -11,7 +11,11 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::{font::TextWriter, rasterizer::Stats, scene::World};
+use crate::{
+    font::TextWriter,
+    rasterizer::{Settings, Stats, TriangleSorting},
+    scene::World,
+};
 use crate::{
     maths::{PI, Rotation},
     rasterizer::rasterize,
@@ -29,7 +33,7 @@ pub struct App {
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
     depth_buffer: Vec<f32>,
-    show_vertices: bool,
+    settings: Settings,
 }
 
 impl App {
@@ -103,7 +107,6 @@ impl ApplicationHandler for App {
                     KeyCode::KeyS => self.world.camera.pos.z += 0.1,
                     KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
                     KeyCode::KeyD => self.world.camera.pos.x += 0.1,
-                    KeyCode::Digit0 => self.world = Default::default(),
                     KeyCode::ArrowLeft => self
                         .world
                         .meshes
@@ -124,13 +127,16 @@ impl ApplicationHandler for App {
                         .meshes
                         .iter_mut()
                         .for_each(|m| m.rot *= &Rotation::from_angles(0.1, 0., 0.)),
-                    /*
-                     * TODO : keys sort triangles
-                    KeyCode::Digit1 => self.world.triangles.sort_by_key(|t| -t.min_z() as u64),
-                    KeyCode::Digit2 => self.world.triangles.sort_by_key(|t| t.min_z() as u64),
-                    KeyCode::Digit3 => self.world.triangles = World::default().triangles,
-                    */
-                    KeyCode::KeyV => self.show_vertices = !self.show_vertices,
+                    KeyCode::Backquote => {
+                        self.settings.show_vertices = !self.settings.show_vertices
+                    }
+                    KeyCode::Digit1 => self.settings.sort_triangles = TriangleSorting::BackToFront,
+                    KeyCode::Digit2 => self.settings.sort_triangles = TriangleSorting::FrontToBack,
+                    KeyCode::Digit3 => self.settings.sort_triangles = TriangleSorting::None,
+                    KeyCode::Digit4 => {
+                        self.settings.back_face_culling = !self.settings.back_face_culling
+                    }
+                    KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
                     _ => (),
@@ -225,7 +231,7 @@ impl ApplicationHandler for App {
                     &mut buffer,
                     &mut self.depth_buffer[..],
                     &size,
-                    self.show_vertices,
+                    &self.settings,
                     &mut stats,
                 );
 
@@ -234,7 +240,7 @@ impl ApplicationHandler for App {
                 let inst = Instant::now().duration_since(inst).as_millis();
 
                 let display = format!(
-                    "fps : {} | {}ms{}\n{:#?}",
+                    "fps : {} | {}ms{}\n{:?}\n{:#?}",
                     (1000. / inst as f32).round(),
                     inst,
                     self.cursor
@@ -247,6 +253,7 @@ impl ApplicationHandler for App {
                                 c
                             )))
                         .unwrap_or(String::from("\nNo cursor position")),
+                    self.settings,
                     stats
                 );
                 tw.rasterize(&mut buffer, size, &display[..]);
