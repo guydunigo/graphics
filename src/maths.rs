@@ -40,23 +40,15 @@ impl Vec3f {
         }
     }
 
-    pub fn rotate(self, new_base: &Rotation) -> Self {
-        Self {
-            x: self.x * new_base.u.x + self.y * new_base.v.x + self.z * new_base.w.x,
-            y: self.x * new_base.u.y + self.y * new_base.v.y + self.z * new_base.w.y,
-            z: self.x * new_base.u.z + self.y * new_base.v.z + self.z * new_base.w.z,
-        }
-    }
-
     /// 1. Scale
     /// 2. Rotate around (0.0.0) axis
     /// 3. Move along given vector
     pub fn scale_rot_move(self, scale: f32, new_base: &Rotation, move_vect: Vec3f) -> Self {
-        (self * scale).rotate(new_base) + move_vect
+        (self * scale) * new_base + move_vect
     }
 
     pub fn seen_from(self, pos: Vec3f, new_base: &Rotation) -> Self {
-        (self - pos).rotate(new_base)
+        (self - pos) * new_base
     }
 }
 
@@ -90,6 +82,18 @@ impl Mul<f32> for Vec3f {
         self.y *= other;
         self.z *= other;
         self
+    }
+}
+
+impl Mul<&Rotation> for Vec3f {
+    type Output = Self;
+
+    fn mul(self, other: &Rotation) -> Self::Output {
+        Self {
+            x: self.x * other.u.x + self.y * other.v.x + self.z * other.w.x,
+            y: self.x * other.u.y + self.y * other.v.y + self.z * other.w.y,
+            z: self.x * other.u.z + self.y * other.v.z + self.z * other.w.z,
+        }
     }
 }
 
@@ -197,6 +201,24 @@ impl Default for Rotation {
             v: Vec3f::new(0., 1., 0.),
             w: Vec3f::new(0., 0., 1.),
         }
+    }
+}
+
+impl Mul<&Self> for Rotation {
+    type Output = Self;
+
+    fn mul(self, other: &Self) -> Self::Output {
+        Self {
+            u: self.u * other,
+            v: self.v * other,
+            w: self.w * other,
+        }
+    }
+}
+
+impl MulAssign<&Rotation> for Rotation {
+    fn mul_assign(&mut self, other: &Rotation) {
+        *self = *self * other;
     }
 }
 

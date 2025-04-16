@@ -103,7 +103,27 @@ impl ApplicationHandler for App {
                     KeyCode::KeyS => self.world.camera.pos.z += 0.1,
                     KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
                     KeyCode::KeyD => self.world.camera.pos.x += 0.1,
-                    KeyCode::Digit7 => self.world.camera = Default::default(),
+                    KeyCode::Digit0 => self.world = Default::default(),
+                    KeyCode::ArrowLeft => self
+                        .world
+                        .meshes
+                        .iter_mut()
+                        .for_each(|m| m.rot *= &Rotation::from_angles(0., -0.1, 0.)),
+                    KeyCode::ArrowRight => self
+                        .world
+                        .meshes
+                        .iter_mut()
+                        .for_each(|m| m.rot *= &Rotation::from_angles(0., 0.1, 0.)),
+                    KeyCode::ArrowUp => self
+                        .world
+                        .meshes
+                        .iter_mut()
+                        .for_each(|m| m.rot *= &Rotation::from_angles(-0.1, 0., 0.)),
+                    KeyCode::ArrowDown => self
+                        .world
+                        .meshes
+                        .iter_mut()
+                        .for_each(|m| m.rot *= &Rotation::from_angles(0.1, 0., 0.)),
                     /*
                      * TODO : keys sort triangles
                     KeyCode::Digit1 => self.world.triangles.sort_by_key(|t| -t.min_z() as u64),
