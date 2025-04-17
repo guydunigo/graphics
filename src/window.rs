@@ -4,7 +4,7 @@ use softbuffer::{Context, Surface};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
-    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
+    event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, KeyCode, PhysicalKey},
     platform::x11::ActiveEventLoopExtX11,
@@ -16,10 +16,7 @@ use crate::{
     rasterizer::{Settings, Stats, TriangleSorting},
     scene::World,
 };
-use crate::{
-    maths::{PI, Rotation},
-    rasterizer::rasterize,
-};
+use crate::{maths::Rotation, rasterizer::rasterize};
 
 struct Graphics {
     window: Rc<Window>,
@@ -145,6 +142,11 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::MouseInput {
+                button: MouseButton::Right,
+                state: ElementState::Pressed,
+                ..
+            } => self.world.camera.rot = Default::default(),
+            WindowEvent::MouseInput {
                 state,
                 button: MouseButton::Left,
                 ..
@@ -182,14 +184,6 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = Some(position);
-                if self.mouse_left_held {
-                    let size = &self.graphics.as_ref().unwrap().window.inner_size();
-                    self.world.camera.rot = Rotation::from_angles(
-                        (position.y as f32 / size.height as f32 / 2. - 0.25) * PI,
-                        (position.x as f32 / size.width as f32 / 2. - 0.25) * PI,
-                        0.,
-                    );
-                }
             }
             WindowEvent::RedrawRequested => {
                 let frame_start_time = Instant::now();
@@ -282,6 +276,19 @@ impl ApplicationHandler for App {
                     Instant::now().duration_since(frame_start_time).as_millis();
             }
             _ => (),
+        }
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
+    ) {
+        if let DeviceEvent::MouseMotion { delta: (x, y) } = event {
+            if self.mouse_left_held {
+                self.world.camera.rotate_from_mouse(x as f32, y as f32);
+            }
         }
     }
 }

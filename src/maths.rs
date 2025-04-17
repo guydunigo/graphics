@@ -189,9 +189,9 @@ impl MulAssign<f32> for Vec4u {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rotation {
-    pub u: Vec3f,
-    pub v: Vec3f,
-    pub w: Vec3f,
+    u: Vec3f,
+    v: Vec3f,
+    w: Vec3f,
 }
 
 impl Default for Rotation {

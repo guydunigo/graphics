@@ -95,26 +95,20 @@ pub fn world_to_raster_triangle(
 
 #[derive(Debug, Clone, Copy)]
 pub struct Rect {
-    pub x: u32,
-    pub y: u32,
-    pub width: u32,
-    pub height: u32,
+    pub min_x: u32,
+    pub min_y: u32,
+    pub max_x: u32,
+    pub max_y: u32,
     pub max_z: f32,
 }
 
 fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
-    let min_x = (f32::min(f32::min(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1);
-    let max_x = (f32::max(f32::max(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1);
-    let min_y = (f32::min(f32::min(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1);
-    let max_y = (f32::max(f32::max(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1);
-    let max_z = f32::max(f32::max(t.p0.z, t.p1.z), t.p2.z);
-
     Rect {
-        x: min_x,
-        y: min_y,
-        width: max_x - min_x,
-        height: max_y - min_y,
-        max_z,
+        min_x: (f32::min(f32::min(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1),
+        max_x: (f32::max(f32::max(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1),
+        min_y: (f32::min(f32::min(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1),
+        max_y: (f32::max(f32::max(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1),
+        max_z: f32::max(f32::max(t.p0.z, t.p1.z), t.p2.z),
     }
 }
 
@@ -171,7 +165,8 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let tri_raster = world_to_raster_triangle(triangle, cam, size);
 
     let bb = bounding_box_triangle(&tri_raster, size);
-    if bb.width == 0 || bb.height == 0 || bb.max_z <= cam.z_near {
+    // TODO: max_z >= MAX_DEPTH ?
+    if bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= cam.z_near {
         return;
     }
 
@@ -201,10 +196,12 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let p20 = tri_raster.p0 - tri_raster.p2;
 
     let raster_normale = p01.cross(p20);
-    if cam.rot.w.dot(raster_normale) < 0. {
+    // Calculate only of normal z
+    if raster_normale.z < 0. {
         if settings.back_face_culling {
             return;
         }
+        // TODO: remove setting to back_face cull
     } else {
         stats.nb_triangles_facing += 1;
     }
@@ -223,9 +220,9 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     };
 
     // TODO: Paralléliser
-    (bb.x..=(bb.x + bb.width))
+    (bb.min_x..=bb.max_x)
         .flat_map(|x| {
-            (bb.y..=(bb.y + bb.height)).map(move |y| Vec3f {
+            (bb.min_y..=bb.max_y).map(move |y| Vec3f {
                 x: x as f32,
                 y: y as f32,
                 z: 0.,
@@ -238,62 +235,64 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             let e12 = edge_function(p12, pixel - tri_raster.p1);
             let e20 = edge_function(p20, pixel - tri_raster.p2);
 
-            if e01 >= 0. && e12 >= 0. && e20 >= 0. {
-                stats.nb_pixels_in += 1;
-
-                let a12 = e12 / tri_area;
-                let a20 = e20 / tri_area;
-
-                // let depth_2 = 1.
-                //     / (1. / tri_raster.p2.pos.z * (e01 / tri_area)
-                //         + 1. / tri_raster.p0.pos.z * a12
-                //         + 1. / tri_raster.p1.pos.z * a20);
-                // Because a01 + a12 + a20 = 1., we can avoid a division and not compute a01.
-                // The terms Z1-Z0 and Z2-Z0 can generally be precomputed, which simplifies the computation of Z to two additions and two multiplications. This optimization is worth mentioning because GPUs utilize it, and it's often discussed for essentially this reason.
-
-                // Depth doesn't evolve linearly (its inverse does).
-                let p2_z_inv = 1. / tri_raster.p2.z;
-                let depth = 1.
-                    / (p2_z_inv
-                        + (1. / tri_raster.p0.z - p2_z_inv) * a12
-                        + (1. / tri_raster.p1.z - p2_z_inv) * a20);
-
-                // Depth correction of other properties :
-                // Divide each value by the point Z coord and finally multiply by depth.
-
-                // TODO: ndc : cam.z_near
-                if depth <= cam.z_near {
-                    return;
-                }
-
-                stats.nb_pixels_front += 1;
-
-                let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
-
-                if depth >= depth_buffer[index] {
-                    return;
-                }
-
-                was_drawn = true;
-                stats.nb_pixels_written += 1;
-
-                let col = match texture {
-                    Texture::Color(col) => col,
-                    Texture::VertexColor(c0, c1, c2) => {
-                        // TODO: Optimize color calculus
-                        let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
-
-                        ((col_2
-                            + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
-                            + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
-                            * (depth * light))
-                            .as_color_u32()
-                    }
-                };
-
-                buffer[index] = col;
-                depth_buffer[index] = depth;
+            // If negative for the 3 : we're outside the triangle.
+            if e01 < 0. || e12 < 0. || e20 < 0. {
+                return;
             }
+
+            stats.nb_pixels_in += 1;
+
+            let a12 = e12 / tri_area;
+            let a20 = e20 / tri_area;
+
+            // let depth_2 = 1.
+            //     / (1. / tri_raster.p2.pos.z * (e01 / tri_area)
+            //         + 1. / tri_raster.p0.pos.z * a12
+            //         + 1. / tri_raster.p1.pos.z * a20);
+            // Because a01 + a12 + a20 = 1., we can avoid a division and not compute a01.
+            // The terms Z1-Z0 and Z2-Z0 can generally be precomputed, which simplifies the computation of Z to two additions and two multiplications. This optimization is worth mentioning because GPUs utilize it, and it's often discussed for essentially this reason.
+
+            // Depth doesn't evolve linearly (its inverse does).
+            let p2_z_inv = 1. / tri_raster.p2.z;
+            let depth = 1.
+                / (p2_z_inv
+                    + (1. / tri_raster.p0.z - p2_z_inv) * a12
+                    + (1. / tri_raster.p1.z - p2_z_inv) * a20);
+
+            // Depth correction of other properties :
+            // Divide each value by the point Z coord and finally multiply by depth.
+
+            if depth <= cam.z_near {
+                return;
+            }
+
+            stats.nb_pixels_front += 1;
+
+            let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
+
+            if depth >= depth_buffer[index] {
+                return;
+            }
+
+            was_drawn = true;
+            stats.nb_pixels_written += 1;
+
+            let col = match texture {
+                Texture::Color(col) => col,
+                Texture::VertexColor(c0, c1, c2) => {
+                    // TODO: Optimize color calculus
+                    let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
+
+                    ((col_2
+                        + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
+                        + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
+                        * (depth * light))
+                        .as_color_u32()
+                }
+            };
+
+            buffer[index] = col;
+            depth_buffer[index] = depth;
         });
 
     if was_drawn {

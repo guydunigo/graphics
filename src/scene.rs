@@ -123,6 +123,14 @@ impl Default for Camera {
     }
 }
 
+impl Camera {
+    pub fn rotate_from_mouse(&mut self, delta_x: f32, delta_y: f32) {
+        self.rot = Rotation::from_angles(0., delta_x as f32 * 0.001, 0.)
+            * &self.rot
+            * &Rotation::from_angles(delta_y as f32 * 0.001, 0., 0.);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct World {
     pub meshes: Vec<Mesh>,
