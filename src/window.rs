@@ -100,12 +100,12 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 match key {
-                    KeyCode::Space => self.world.camera.pos.y += 0.1,
-                    KeyCode::ShiftLeft => self.world.camera.pos.y -= 0.1,
-                    KeyCode::KeyW => self.world.camera.pos.z -= 0.1,
-                    KeyCode::KeyS => self.world.camera.pos.z += 0.1,
-                    KeyCode::KeyA => self.world.camera.pos.x -= 0.1,
-                    KeyCode::KeyD => self.world.camera.pos.x += 0.1,
+                    KeyCode::Space => self.world.camera.move_sight(0., 1., 0.),
+                    KeyCode::ShiftLeft => self.world.camera.move_sight(0., -1., 0.),
+                    KeyCode::KeyW => self.world.camera.move_sight(0., 0., 1.),
+                    KeyCode::KeyS => self.world.camera.move_sight(0., 0., -1.),
+                    KeyCode::KeyA => self.world.camera.move_sight(-1., 0., 0.),
+                    KeyCode::KeyD => self.world.camera.move_sight(1., 0., 0.),
                     KeyCode::ArrowLeft => self
                         .world
                         .meshes
@@ -240,7 +240,7 @@ impl ApplicationHandler for App {
                 );
 
                 let display = format!(
-                    "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{:?}\n{:#?}",
+                    "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n({},{},{}) ({},{},{})({},{},{})({},{},{})\n{:?}\n{:#?}",
                     (1000. / self.last_rendering_duration as f32).round(),
                     buffer_fill,
                     depth_buffer_fill,
@@ -256,6 +256,18 @@ impl ApplicationHandler for App {
                                 c
                             )))
                         .unwrap_or(String::from("\nNo cursor position")),
+                    (self.world.camera.pos.x * 100.).round() / 100.,
+                    (self.world.camera.pos.y * 100.).round() / 100.,
+                    (self.world.camera.pos.z * 100.).round() / 100.,
+                    (self.world.camera.rot.u().x * 100.).round() / 100.,
+                    (self.world.camera.rot.u().y * 100.).round() / 100.,
+                    (self.world.camera.rot.u().z * 100.).round() / 100.,
+                    (self.world.camera.rot.v().x * 100.).round() / 100.,
+                    (self.world.camera.rot.v().y * 100.).round() / 100.,
+                    (self.world.camera.rot.v().z * 100.).round() / 100.,
+                    (self.world.camera.rot.w().x * 100.).round() / 100.,
+                    (self.world.camera.rot.w().y * 100.).round() / 100.,
+                    (self.world.camera.rot.w().z * 100.).round() / 100.,
                     self.settings,
                     stats
                 );

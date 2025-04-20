@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, MulAssign, Neg, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub use std::f32::consts::PI;
 
@@ -63,6 +63,14 @@ impl Add for Vec3f {
     }
 }
 
+impl AddAssign for Vec3f {
+    fn add_assign(&mut self, other: Self) {
+        self.x += other.x;
+        self.y += other.y;
+        self.z += other.z;
+    }
+}
+
 impl Sub for Vec3f {
     type Output = Self;
 
@@ -71,6 +79,14 @@ impl Sub for Vec3f {
         self.y -= other.y;
         self.z -= other.z;
         self
+    }
+}
+
+impl SubAssign for Vec3f {
+    fn sub_assign(&mut self, other: Self) {
+        self.x -= other.x;
+        self.y -= other.y;
+        self.z -= other.z;
     }
 }
 
@@ -237,5 +253,17 @@ impl Rotation {
             v: Vec3f::new(-z_sin, x_cos * z_cos, x_sin),
             w: Vec3f::new(y_sin, -x_sin, x_cos * y_cos),
         }
+    }
+
+    pub fn u(&self) -> Vec3f {
+        self.u
+    }
+
+    pub fn v(&self) -> Vec3f {
+        self.v
+    }
+
+    pub fn w(&self) -> Vec3f {
+        self.w
     }
 }

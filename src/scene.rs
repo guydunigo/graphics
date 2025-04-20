@@ -1,3 +1,5 @@
+use rand::RngCore;
+
 /// # Describing the world...
 use crate::maths::{PI, Rotation, Vec3f};
 
@@ -109,6 +111,7 @@ pub struct Camera {
     pub pos: Vec3f,
     pub z_near: f32,
     pub canvas_side: f32,
+    /// Looks at -rot.w
     pub rot: Rotation,
 }
 
@@ -124,10 +127,24 @@ impl Default for Camera {
 }
 
 impl Camera {
+    const MOVE_STEP: f32 = 0.1;
+    const ROT_STEP: f32 = 0.001;
+
     pub fn rotate_from_mouse(&mut self, delta_x: f32, delta_y: f32) {
-        self.rot = Rotation::from_angles(0., delta_x as f32 * 0.001, 0.)
+        self.rot = Rotation::from_angles(0., delta_x * Self::ROT_STEP, 0.)
             * &self.rot
-            * &Rotation::from_angles(delta_y as f32 * 0.001, 0., 0.);
+            * &Rotation::from_angles(delta_y * Self::ROT_STEP, 0., 0.);
+    }
+
+    /// Move along view direction
+    /// `delta_x` : left->right
+    /// `delta_y` : bottom->up
+    /// `delta_z` : back->forward
+    ///
+    /// Z goes backwards so we reverse it.
+    pub fn move_sight(&mut self, delta_x: f32, delta_y: f32, delta_z: f32) {
+        self.pos += (self.rot.u() * delta_x + self.rot.v() * delta_y - self.rot.w() * delta_z)
+            * Self::MOVE_STEP;
     }
 }
 
@@ -144,6 +161,10 @@ impl Default for World {
                 Mesh::from(Triangle::default()).with_translation_to(Vec3f::new(0., 0., -10.)),
                 base_pyramid(),
                 obj::import_triangles_and_diffuse(obj::SUZANNE_OBJ_PATH),
+                floor(),
+                back_wall(),
+                left_wall(),
+                right_wall(),
             ],
             camera: Default::default(),
         }
@@ -365,5 +386,67 @@ fn base_pyramid() -> Mesh {
         },
         rot: Rotation::from_angles(0., 0., -PI / 3.),
         scale: 0.7,
+    }
+}
+
+fn triangles_plane(color_mask: u32) -> Vec<Triangle> {
+    const RANGE: i32 = 10;
+    (-RANGE..RANGE)
+        .flat_map(|x| {
+            (-RANGE..RANGE)
+                .map(move |z| {
+                    (
+                        Vec3f::new(x as f32, 0., z as f32),
+                        rand::rng().next_u32() & color_mask,
+                    )
+                })
+                .map(|(v, c)| {
+                    Triangle::new(
+                        v,
+                        v + Vec3f::new(1., 0., 1.),
+                        v + Vec3f::new(1., 0., 0.),
+                        Texture::Color(c),
+                    )
+                })
+        })
+        .collect()
+}
+
+fn floor() -> Mesh {
+    Mesh {
+        triangles: triangles_plane(0xff00ffff),
+        pos: Vec3f::new(0., -10., 0.),
+        scale: 5.,
+        ..Default::default()
+    }
+}
+
+fn back_wall() -> Mesh {
+    Mesh {
+        triangles: triangles_plane(0xffffff00),
+        pos: Vec3f::new(0., 0., -30.),
+        scale: 1.,
+        rot: Rotation::from_angles(PI / 2., 0., 0.),
+        ..Default::default()
+    }
+}
+
+fn left_wall() -> Mesh {
+    Mesh {
+        triangles: triangles_plane(0xffff00ff),
+        pos: Vec3f::new(-10., 0., 0.),
+        scale: 1.,
+        rot: Rotation::from_angles(0., 0., -PI / 2.),
+        ..Default::default()
+    }
+}
+
+fn right_wall() -> Mesh {
+    Mesh {
+        triangles: triangles_plane(0xffff00ff),
+        pos: Vec3f::new(10., 0., 0.),
+        scale: 1.,
+        rot: Rotation::from_angles(0., 0., PI / 2.),
+        ..Default::default()
     }
 }
