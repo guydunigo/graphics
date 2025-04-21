@@ -46,10 +46,6 @@ impl Vec3f {
     pub fn scale_rot_move(self, scale: f32, new_base: &Rotation, move_vect: Vec3f) -> Self {
         (self * scale) * new_base + move_vect
     }
-
-    pub fn seen_from(self, pos: Vec3f, new_base: &Rotation) -> Self {
-        (self - pos) * new_base
-    }
 }
 
 impl Add for Vec3f {
@@ -248,10 +244,20 @@ impl Rotation {
         let z_cos = z.cos();
         let z_sin = z.sin();
 
+        // tourner selon y (gd)
+        // tourner selon x (hb)
+        // tourner selon z (incliner tete gd)
+
+        // TODO
+        // Self {
+        //     u: Vec3f::new(y_cos * z_cos, z_sin, -y_sin),
+        //     v: Vec3f::new(-z_sin, x_cos * z_cos, x_sin),
+        //     w: Vec3f::new(y_sin, -x_sin, x_cos * y_cos),
+        // }
         Self {
-            u: Vec3f::new(y_cos * z_cos, z_sin, -y_sin),
-            v: Vec3f::new(-z_sin, x_cos * z_cos, x_sin),
-            w: Vec3f::new(y_sin, -x_sin, x_cos * y_cos),
+            u: Vec3f::new(y_cos, 0., -y_sin),
+            v: Vec3f::new(0., 1., 0.),
+            w: Vec3f::new(y_sin, 0., y_cos),
         }
     }
 

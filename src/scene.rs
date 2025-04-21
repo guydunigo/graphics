@@ -111,7 +111,10 @@ pub struct Camera {
     pub pos: Vec3f,
     pub z_near: f32,
     pub canvas_side: f32,
-    /// Looks at -rot.w
+    /// Looks towards -rot.w
+    ///
+    /// Rotation is made of opposite angles : if I turn to the left,
+    /// the objects move to the right in my vision.
     pub rot: Rotation,
 }
 
@@ -121,7 +124,9 @@ impl Default for Camera {
             pos: Vec3f::new(1., 1., 13.),
             z_near: 0.5,
             canvas_side: 0.1,
-            rot: Default::default(),
+            // TODO
+            // rot: Default::default(),
+            rot: Rotation::from_angles(0., -PI / 2., 0.),
         }
     }
 }
@@ -134,6 +139,17 @@ impl Camera {
         self.rot = Rotation::from_angles(0., delta_x * Self::ROT_STEP, 0.)
             * &self.rot
             * &Rotation::from_angles(delta_y * Self::ROT_STEP, 0., 0.);
+        // TODO
+        if (self.rot.u().norm() * 10000.).round() as u32 != 10000 {
+            println!(
+                "Vecteur non unitaire u : {} {:?}",
+                self.rot.u().norm(),
+                self.rot.u()
+            );
+        }
+        if self.rot.u().y != 0. {
+            println!("La tête penche ! {:?}", self.rot.u());
+        }
     }
 
     /// Move along view direction
@@ -143,8 +159,15 @@ impl Camera {
     ///
     /// Z goes backwards so we reverse it.
     pub fn move_sight(&mut self, delta_x: f32, delta_y: f32, delta_z: f32) {
-        self.pos += (self.rot.u() * delta_x + self.rot.v() * delta_y - self.rot.w() * delta_z)
-            * Self::MOVE_STEP;
+        // TODO
+        let u = self.rot.u();
+        let v = self.rot.v();
+        let w = self.rot.w();
+        self.pos += (u * delta_x + v * delta_y - w * delta_z) * Self::MOVE_STEP;
+    }
+
+    pub fn world_to_sight(&self, point: Vec3f) -> Vec3f {
+        (point - self.pos) * &self.rot
     }
 }
 

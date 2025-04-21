@@ -53,7 +53,7 @@ pub enum TriangleSorting {
 
 fn world_to_raster(p_world: Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
     // Camera space
-    let mut p = p_world.seen_from(cam.pos, &cam.rot);
+    let mut p = cam.world_to_sight(p_world);
 
     // Screen space : perspective correct
     if p.z < -0.001 {
