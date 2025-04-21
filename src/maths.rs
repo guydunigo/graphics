@@ -244,20 +244,10 @@ impl Rotation {
         let z_cos = z.cos();
         let z_sin = z.sin();
 
-        // tourner selon y (gd)
-        // tourner selon x (hb)
-        // tourner selon z (incliner tete gd)
-
-        // TODO
-        // Self {
-        //     u: Vec3f::new(y_cos * z_cos, z_sin, -y_sin),
-        //     v: Vec3f::new(-z_sin, x_cos * z_cos, x_sin),
-        //     w: Vec3f::new(y_sin, -x_sin, x_cos * y_cos),
-        // }
         Self {
-            u: Vec3f::new(y_cos, 0., -y_sin),
-            v: Vec3f::new(0., 1., 0.),
-            w: Vec3f::new(y_sin, 0., y_cos),
+            u: Vec3f::new(y_cos * z_cos, z_sin, -y_sin),
+            v: Vec3f::new(-z_sin, x_cos * z_cos, x_sin),
+            w: Vec3f::new(y_sin, -x_sin, x_cos * y_cos),
         }
     }
 

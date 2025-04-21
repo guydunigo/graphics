@@ -145,7 +145,7 @@ impl ApplicationHandler for App {
                 button: MouseButton::Right,
                 state: ElementState::Pressed,
                 ..
-            } => self.world.camera.rot = Default::default(),
+            } => self.world.camera.reset_rot(),
             WindowEvent::MouseInput {
                 state,
                 button: MouseButton::Left,
@@ -259,15 +259,15 @@ impl ApplicationHandler for App {
                     (self.world.camera.pos.x * 100.).round() / 100.,
                     (self.world.camera.pos.y * 100.).round() / 100.,
                     (self.world.camera.pos.z * 100.).round() / 100.,
-                    (self.world.camera.rot.u().x * 100.).round() / 100.,
-                    (self.world.camera.rot.u().y * 100.).round() / 100.,
-                    (self.world.camera.rot.u().z * 100.).round() / 100.,
-                    (self.world.camera.rot.v().x * 100.).round() / 100.,
-                    (self.world.camera.rot.v().y * 100.).round() / 100.,
-                    (self.world.camera.rot.v().z * 100.).round() / 100.,
-                    (self.world.camera.rot.w().x * 100.).round() / 100.,
-                    (self.world.camera.rot.w().y * 100.).round() / 100.,
-                    (self.world.camera.rot.w().z * 100.).round() / 100.,
+                    (self.world.camera.rot().u().x * 100.).round() / 100.,
+                    (self.world.camera.rot().u().y * 100.).round() / 100.,
+                    (self.world.camera.rot().u().z * 100.).round() / 100.,
+                    (self.world.camera.rot().v().x * 100.).round() / 100.,
+                    (self.world.camera.rot().v().y * 100.).round() / 100.,
+                    (self.world.camera.rot().v().z * 100.).round() / 100.,
+                    (self.world.camera.rot().w().x * 100.).round() / 100.,
+                    (self.world.camera.rot().w().y * 100.).round() / 100.,
+                    (self.world.camera.rot().w().z * 100.).round() / 100.,
                     self.settings,
                     stats
                 );
