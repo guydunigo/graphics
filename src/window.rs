@@ -239,39 +239,34 @@ impl ApplicationHandler for App {
                     &mut stats,
                 );
 
-                let display = format!(
-                    "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n({},{},{}) ({},{},{})({},{},{})({},{},{})\n{:?}\n{:#?}",
-                    (1000. / self.last_rendering_duration as f32).round(),
-                    buffer_fill,
-                    depth_buffer_fill,
-                    Instant::now().duration_since(rendering_time).as_millis(),
-                    self.last_rendering_duration,
-                    self.cursor
-                        .and_then(|cursor| buffer
-                            .get(cursor.x as usize + cursor.y as usize * size.width as usize)
-                            .map(|c| format!(
-                                "\n({},{}) 0x{:x}",
-                                cursor.x.floor(),
-                                cursor.y.floor(),
-                                c
-                            )))
-                        .unwrap_or(String::from("\nNo cursor position")),
-                    (self.world.camera.pos.x * 100.).round() / 100.,
-                    (self.world.camera.pos.y * 100.).round() / 100.,
-                    (self.world.camera.pos.z * 100.).round() / 100.,
-                    (self.world.camera.rot().u().x * 100.).round() / 100.,
-                    (self.world.camera.rot().u().y * 100.).round() / 100.,
-                    (self.world.camera.rot().u().z * 100.).round() / 100.,
-                    (self.world.camera.rot().v().x * 100.).round() / 100.,
-                    (self.world.camera.rot().v().y * 100.).round() / 100.,
-                    (self.world.camera.rot().v().z * 100.).round() / 100.,
-                    (self.world.camera.rot().w().x * 100.).round() / 100.,
-                    (self.world.camera.rot().w().y * 100.).round() / 100.,
-                    (self.world.camera.rot().w().z * 100.).round() / 100.,
-                    self.settings,
-                    stats
-                );
-                self.text_writer.rasterize(&mut buffer, size, &display[..]);
+                {
+                    let cam_rot = self.world.camera.rot();
+                    let display = format!(
+                        "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{:#?}",
+                        (1000. / self.last_rendering_duration as f32).round(),
+                        buffer_fill,
+                        depth_buffer_fill,
+                        Instant::now().duration_since(rendering_time).as_millis(),
+                        self.last_rendering_duration,
+                        self.cursor
+                            .and_then(|cursor| buffer
+                                .get(cursor.x as usize + cursor.y as usize * size.width as usize)
+                                .map(|c| format!(
+                                    "\n({},{}) 0x{:x}",
+                                    cursor.x.floor(),
+                                    cursor.y.floor(),
+                                    c
+                                )))
+                            .unwrap_or(String::from("\nNo cursor position")),
+                        self.world.camera.pos,
+                        cam_rot.u(),
+                        cam_rot.v(),
+                        cam_rot.w(),
+                        self.settings,
+                        stats
+                    );
+                    self.text_writer.rasterize(&mut buffer, size, &display[..]);
+                }
 
                 buffer
                     .present()
