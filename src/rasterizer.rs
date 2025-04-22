@@ -51,7 +51,12 @@ pub enum TriangleSorting {
     FrontToBack,
 }
 
-fn world_to_raster(p_world: Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Vec3f {
+fn world_to_raster(
+    p_world: Vec3f,
+    cam: &Camera,
+    size: &PhysicalSize<u32>,
+    ratio_w_h: f32,
+) -> Vec3f {
     // Camera space
     let mut p = cam.world_to_sight(p_world);
 
@@ -71,24 +76,30 @@ fn world_to_raster(p_world: Vec3f, cam: &Camera, size: &PhysicalSize<u32>) -> Ve
     p.x /= cam.canvas_side;
     p.y /= cam.canvas_side;
 
+    if size.width > size.height {
+        p.x /= ratio_w_h;
+    } else {
+        p.y *= ratio_w_h;
+    }
+
     // Raster space
     // [0,1]
-    Vec3f {
-        x: (p.x + 1.) / 2. * (size.width as f32),
-        y: (1. - p.y) / 2. * (size.height as f32),
-        z: p.z,
-    }
+    p.x = (p.x + 1.) / 2. * (size.width as f32);
+    p.y = (1. - p.y) / 2. * (size.height as f32);
+
+    p
 }
 
 pub fn world_to_raster_triangle(
     triangle: &Triangle,
     cam: &Camera,
     size: &PhysicalSize<u32>,
+    ratio_w_h: f32,
 ) -> Triangle {
     Triangle {
-        p0: world_to_raster(triangle.p0, cam, size),
-        p1: world_to_raster(triangle.p1, cam, size),
-        p2: world_to_raster(triangle.p2, cam, size),
+        p0: world_to_raster(triangle.p0, cam, size, ratio_w_h),
+        p1: world_to_raster(triangle.p1, cam, size, ratio_w_h),
+        p2: world_to_raster(triangle.p2, cam, size, ratio_w_h),
         texture: triangle.texture,
     }
 }
@@ -159,10 +170,11 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     depth_buffer: &mut [f32],
     cam: &Camera,
     size: &PhysicalSize<u32>,
+    ratio_w_h: f32,
     settings: &Settings,
     stats: &mut Stats,
 ) {
-    let tri_raster = world_to_raster_triangle(triangle, cam, size);
+    let tri_raster = world_to_raster_triangle(triangle, cam, size, ratio_w_h);
 
     let bb = bounding_box_triangle(&tri_raster, size);
     // TODO: max_z >= MAX_DEPTH ?
@@ -318,6 +330,8 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
 
     let triangles = world.meshes.iter().flat_map(Mesh::to_world_triangles);
 
+    let ratio_w_h = size.width as f32 / size.height as f32;
+
     let f = |f| {
         stats.nb_triangles_tot += 1;
         rasterize_triangle(
@@ -326,6 +340,7 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
             depth_buffer,
             &world.camera,
             size,
+            ratio_w_h,
             settings,
             stats,
         );
