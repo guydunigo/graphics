@@ -49,9 +49,11 @@ impl Triangle {
         }
     }
 
+    /* TODO
     pub fn min_z(&self) -> f32 {
         f32::min(self.p0.z, f32::min(self.p1.z, self.p2.z))
     }
+    */
 
     pub fn scale_rot_move(&self, scale: f32, rot: &Rotation, move_vect: Vec3f) -> Triangle {
         Triangle {

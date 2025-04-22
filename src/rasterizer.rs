@@ -164,14 +164,14 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
 }
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
-    tri_raster: &Triangle,
+    tri_raster: &mut Triangle,
     buffer: &mut B,
     depth_buffer: &mut [f32],
-    cam: &Camera,
+    z_near: f32,
     size: &PhysicalSize<u32>,
     settings: &Settings,
     stats: &mut Stats,
-    bb: Rect,
+    bb: &Rect,
     light: f32,
     p01: Vec3f,
     p20: Vec3f,
@@ -182,11 +182,15 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
 
     let tri_area = edge_function(p20, p01);
 
-    // TODO: Optimize color calculus
-    let texture = match tri_raster.texture {
-        Texture::Color(col) => Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32()),
-        _ => tri_raster.texture,
-    };
+    if let Texture::VertexColor(c0, c1, c2) = tri_raster.texture {
+        if c0 == c1 && c1 == c2 {
+            tri_raster.texture = Texture::Color(c0);
+        }
+    }
+
+    if let Texture::Color(col) = tri_raster.texture {
+        tri_raster.texture = Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
+    }
 
     // TODO: Paralléliser
     (bb.min_x..=bb.max_x)
@@ -231,7 +235,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             // Depth correction of other properties :
             // Divide each value by the point Z coord and finally multiply by depth.
 
-            if depth <= cam.z_near {
+            if depth <= z_near {
                 return;
             }
 
@@ -246,7 +250,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             was_drawn = true;
             stats.nb_pixels_written += 1;
 
-            let col = match texture {
+            let col = match tri_raster.texture {
                 Texture::Color(col) => col,
                 Texture::VertexColor(c0, c1, c2) => {
                     // TODO: Optimize color calculus
@@ -338,16 +342,16 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
             raster_normale.z >= 0. || !settings.back_face_culling
         })
         .inspect(|_| nb_triangles_facing += 1)
-        .for_each(|(t_raster, bb, light, p01, p20)| {
+        .for_each(|(mut t_raster, bb, light, p01, p20)| {
             rasterize_triangle(
-                &t_raster,
+                &mut t_raster,
                 buffer,
                 depth_buffer,
-                &world.camera,
+                world.camera.z_near,
                 size,
                 settings,
                 stats,
-                bb,
+                &bb,
                 light,
                 p01,
                 p20,
