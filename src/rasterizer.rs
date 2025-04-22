@@ -7,7 +7,6 @@ use crate::{
     scene::{Camera, Mesh, Texture, Triangle, World},
 };
 
-const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
 #[derive(Default, Debug, Clone)]
@@ -165,60 +164,18 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
 }
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
-    triangle: &Triangle,
+    tri_raster: &Triangle,
     buffer: &mut B,
     depth_buffer: &mut [f32],
     cam: &Camera,
     size: &PhysicalSize<u32>,
-    ratio_w_h: f32,
     settings: &Settings,
     stats: &mut Stats,
+    bb: Rect,
+    light: f32,
+    p01: Vec3f,
+    p20: Vec3f,
 ) {
-    let tri_raster = world_to_raster_triangle(triangle, cam, size, ratio_w_h);
-
-    let bb = bounding_box_triangle(&tri_raster, size);
-    // TODO: max_z >= MAX_DEPTH ?
-    if bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= cam.z_near {
-        return;
-    }
-
-    stats.nb_triangles_sight += 1;
-
-    ////////////////////////////////
-    // Sunlight
-    // Dot product gives negative if two vectors are opposed, so we compare light vector to
-    // face normal vector to see if they are opposed (face is lit).
-
-    // TODO: calculate before ?
-    let triangle_normal = (triangle.p1 - triangle.p0)
-        .cross(triangle.p0 - triangle.p2)
-        .normalize();
-
-    // TODO: Normalize light before ?
-    let sun_norm = SUN_DIRECTION.normalize();
-    let light = sun_norm
-        .dot(triangle_normal)
-        .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
-
-    ////////////////////////////////
-    // Back face culling
-    // If triangle normal and camera sight are in same direction (dot product > 0), it's invisible.
-
-    let p01 = tri_raster.p1 - tri_raster.p0;
-    let p20 = tri_raster.p0 - tri_raster.p2;
-
-    let raster_normale = p01.cross(p20);
-    // Calculate only of normal z
-    if raster_normale.z < 0. {
-        if settings.back_face_culling {
-            return;
-        }
-        // TODO: remove setting to back_face cull
-    } else {
-        stats.nb_triangles_facing += 1;
-    }
-
-    ////////////////////////////////
     let mut was_drawn = false;
 
     let p12 = tri_raster.p2 - tri_raster.p1;
@@ -328,14 +285,142 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
 ) {
     // TODO: paralléliser
 
-    let triangles = world.meshes.iter().flat_map(Mesh::to_world_triangles);
+    let mut nb_triangles_sight = 0;
+    let mut nb_triangles_tot = 0;
+    let mut nb_triangles_facing = 0;
+    let mut nb_triangles_drawn = 0;
+    let mut nb_pixels_tested = 0;
+    let mut nb_pixels_in = 0;
+    let mut nb_pixels_front = 0;
+    let mut nb_pixels_written = 0;
 
     let ratio_w_h = size.width as f32 / size.height as f32;
+    world
+        .meshes
+        .iter()
+        .flat_map(Mesh::to_world_triangles)
+        .inspect(|_| nb_triangles_tot += 1)
+        .map(|t| {
+            // TODO: explode ?
+            let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
+            (t, t_raster, bounding_box_triangle(&t_raster, size))
+        })
+        .filter(|(_, _, bb)| {
+            // TODO: max_z >= MAX_DEPTH ?
+            !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
+        })
+        .inspect(|_| nb_triangles_sight += 1)
+        ////////////////////////////////
+        // Sunlight
+        // Dot product gives negative if two vectors are opposed, so we compare light
+        // vector to face normal vector to see if they are opposed (face is lit).
+        .map(|(t, t_raster, bb)| {
+            let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
+            let light = world
+                .sun_direction
+                .dot(triangle_normal)
+                .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
+            (t_raster, bb, light)
+        })
+        .map(|(t_raster, bb, light)| {
+            let p01 = t_raster.p1 - t_raster.p0;
+            let p20 = t_raster.p0 - t_raster.p2;
+            (t_raster, bb, light, p01, p20)
+        })
+        ////////////////////////////////
+        // Back face culling
+        // If triangle normal and camera sight are in same direction (dot product > 0),
+        // it's invisible.
+        .filter(|(_, _, _, p01, p20)| {
+            // Calculate only of normal z
+            let raster_normale = p01.cross(*p20);
+            // TODO: remove setting to back_face cull
+            raster_normale.z >= 0. || !settings.back_face_culling
+        })
+        .inspect(|_| nb_triangles_facing += 1)
+        .for_each(|(t_raster, bb, light, p01, p20)| {
+            rasterize_triangle(
+                &t_raster,
+                buffer,
+                depth_buffer,
+                &world.camera,
+                size,
+                settings,
+                stats,
+                bb,
+                light,
+                p01,
+                p20,
+            )
+        });
 
-    let f = |f| {
+    stats.nb_triangles_tot += nb_triangles_tot;
+    stats.nb_triangles_sight += nb_triangles_sight;
+    stats.nb_triangles_facing += nb_triangles_facing;
+    stats.nb_triangles_drawn += nb_triangles_drawn;
+    stats.nb_pixels_tested += nb_pixels_tested;
+    stats.nb_pixels_in += nb_pixels_in;
+    stats.nb_pixels_front += nb_pixels_front;
+    stats.nb_pixels_written += nb_pixels_written;
+
+    // TODO: based on camera (at least screen space)
+    // match settings.sort_triangles {
+    //     TriangleSorting::None => rasterize_trangles(
+    //         world,
+    //         buffer,
+    //         depth_buffer,
+    //         size,
+    //         ratio_w_h,
+    //         settings,
+    //         stats,
+    //         triangles,
+    //     ),
+    //     TriangleSorting::BackToFront => {
+    //         let mut array: Vec<Triangle> = triangles.collect();
+    //         array.sort_by_key(|t| -t.min_z() as u32);
+    //         rasterize_trangles(
+    //             world,
+    //             buffer,
+    //             depth_buffer,
+    //             size,
+    //             ratio_w_h,
+    //             settings,
+    //             stats,
+    //             array.drain(..),
+    //         )
+    //     }
+    //     TriangleSorting::FrontToBack => {
+    //         let mut array: Vec<Triangle> = triangles.collect();
+    //         array.sort_by_key(|t| t.min_z() as u32);
+    //         rasterize_trangles(
+    //             world,
+    //             buffer,
+    //             depth_buffer,
+    //             size,
+    //             ratio_w_h,
+    //             settings,
+    //             stats,
+    //             array.drain(..),
+    //         )
+    //     }
+    // }
+}
+
+/*
+pub fn rasterize_trangles<B: DerefMut<Target = [u32]>, I: Iterator<Item = Triangle>>(
+    world: &World,
+    buffer: &mut B,
+    depth_buffer: &mut [f32],
+    size: &PhysicalSize<u32>,
+    ratio_w_h: f32,
+    settings: &Settings,
+    stats: &mut Stats,
+    ite: I,
+) {
+    ite.for_each(|t| {
         stats.nb_triangles_tot += 1;
         rasterize_triangle(
-            &f,
+            &t,
             buffer,
             depth_buffer,
             &world.camera,
@@ -343,20 +428,7 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
             ratio_w_h,
             settings,
             stats,
-        );
-    };
-
-    match settings.sort_triangles {
-        TriangleSorting::None => triangles.for_each(f),
-        TriangleSorting::BackToFront => {
-            let mut array: Vec<Triangle> = triangles.collect();
-            array.sort_by_key(|t| -t.min_z() as u32);
-            array.drain(..).for_each(f);
-        }
-        TriangleSorting::FrontToBack => {
-            let mut array: Vec<Triangle> = triangles.collect();
-            array.sort_by_key(|t| t.min_z() as u32);
-            array.drain(..).for_each(f);
-        }
-    }
+        )
+    });
 }
+*/
