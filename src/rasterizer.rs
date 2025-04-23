@@ -1,5 +1,9 @@
-use std::ops::DerefMut;
+use std::{
+    ops::DerefMut,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
+use rayon::prelude::*;
 use winit::dpi::PhysicalSize;
 
 use crate::{
@@ -9,11 +13,11 @@ use crate::{
 
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct Stats {
-    pub nb_triangles_tot: usize,
-    pub nb_triangles_sight: usize,
-    pub nb_triangles_facing: usize,
+    pub nb_triangles_tot: AtomicUsize,
+    pub nb_triangles_sight: AtomicUsize,
+    pub nb_triangles_facing: AtomicUsize,
     pub nb_triangles_drawn: usize,
     pub nb_pixels_tested: usize,
     pub nb_pixels_in: usize,
@@ -164,7 +168,7 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
 }
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
-    tri_raster: &mut Triangle,
+    tri_raster: &Triangle,
     buffer: &mut B,
     depth_buffer: &mut [f32],
     z_near: f32,
@@ -277,23 +281,15 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
     settings: &Settings,
     stats: &mut Stats,
 ) {
-    // TODO: paralléliser
-
-    let mut nb_triangles_sight = 0;
-    let mut nb_triangles_tot = 0;
-    let mut nb_triangles_facing = 0;
-    let mut nb_triangles_drawn = 0;
-    let mut nb_pixels_tested = 0;
-    let mut nb_pixels_in = 0;
-    let mut nb_pixels_front = 0;
-    let mut nb_pixels_written = 0;
-
     let ratio_w_h = size.width as f32 / size.height as f32;
+
     world
         .meshes
-        .iter()
+        .par_iter()
         .flat_map(Mesh::to_world_triangles)
-        .inspect(|_| nb_triangles_tot += 1)
+        .inspect(|_| {
+            stats.nb_triangles_tot.fetch_add(1, Ordering::Relaxed);
+        })
         .map(|t| {
             // TODO: explode ?
             let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
@@ -303,7 +299,9 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
             // TODO: max_z >= MAX_DEPTH ?
             !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
         })
-        .inspect(|_| nb_triangles_sight += 1)
+        .inspect(|_| {
+            stats.nb_triangles_sight.fetch_add(1, Ordering::Relaxed);
+        })
         .map(|(t, t_raster, bb)| {
             let p01 = t_raster.p1 - t_raster.p0;
             let p20 = t_raster.p0 - t_raster.p2;
@@ -319,7 +317,9 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
             // TODO: remove setting to back_face cull
             raster_normale.z >= 0. || !settings.back_face_culling
         })
-        .inspect(|_| nb_triangles_facing += 1)
+        .inspect(|_| {
+            stats.nb_triangles_facing.fetch_add(1, Ordering::Relaxed);
+        })
         ////////////////////////////////
         // Sunlight
         // Dot product gives negative if two vectors are opposed, so we compare light
@@ -348,9 +348,12 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
 
             (t_raster, bb, light, p01, p20)
         })
-        .for_each(|(mut t_raster, bb, light, p01, p20)| {
+        .collect_vec_list()
+        .into_iter()
+        .flatten()
+        .for_each(|(t_raster, bb, light, p01, p20)| {
             rasterize_triangle(
-                &mut t_raster,
+                &t_raster,
                 buffer,
                 depth_buffer,
                 world.camera.z_near,
@@ -363,15 +366,6 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
                 p20,
             )
         });
-
-    stats.nb_triangles_tot += nb_triangles_tot;
-    stats.nb_triangles_sight += nb_triangles_sight;
-    stats.nb_triangles_facing += nb_triangles_facing;
-    stats.nb_triangles_drawn += nb_triangles_drawn;
-    stats.nb_pixels_tested += nb_pixels_tested;
-    stats.nb_pixels_in += nb_pixels_in;
-    stats.nb_pixels_front += nb_pixels_front;
-    stats.nb_pixels_written += nb_pixels_written;
 
     // TODO: based on camera (at least screen space)
     // match settings.sort_triangles {
