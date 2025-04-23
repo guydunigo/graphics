@@ -39,7 +39,7 @@ pub struct App {
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
-    buffers_depth_lock: Option<(Arc<[AtomicU32]>, Arc<[AtomicBool]>)>,
+    buffers_colors_depth_lock: Option<(Arc<[AtomicU32]>, Arc<[AtomicU32]>, Arc<[AtomicBool]>)>,
     settings: Settings,
 }
 
@@ -227,12 +227,30 @@ impl ApplicationHandler for App {
 
                 // Fill a buffer with a solid color
                 let t = Instant::now();
+                // TODO: no need anymore
                 buffer.fill(0xff181818);
                 let buffer_fill = Instant::now().duration_since(t).as_millis();
 
-                let (depth_buffer, lock_buffer) =
-                    self.buffers_depth_lock.take().unwrap_or_else(|| {});
+                let t = Instant::now();
+
                 let tot_size = (size.width * size.height) as usize;
+                let (colors_buffer, depth_buffer, lock_buffer) =
+                    self.buffers_colors_depth_lock.take().map_or_else(
+                        || {
+                            (
+                                Vec::with_capacity(tot_size),
+                                Vec::with_capacity(tot_size),
+                                Vec::with_capacity(tot_size),
+                            )
+                        },
+                        |(colors_buffer, depth_buffer, lock_buffer)| {
+                            (
+                                colors_buffer.into(),
+                                depth_buffer.into(),
+                                lock_buffer.into(),
+                            )
+                        },
+                    );
                 let mut local_depth_buffer = Vec::with_capacity(tot_size);
                 local_depth_buffer.resize_with(tot_size, || {
                     AtomicU32::new(u32::from_le_bytes(f32::INFINITY.to_le_bytes()))
@@ -243,8 +261,6 @@ impl ApplicationHandler for App {
                 local_lock_buffer.resize_with(tot_size, || AtomicBool::new(false));
                 let local_lock_buffer = Arc::new(local_lock_buffer.into_boxed_slice());
 
-                let t = Instant::now();
-                self.depth_buffer.fill(f32::INFINITY);
                 let depth_buffer_fill = Instant::now().duration_since(t).as_millis();
 
                 let rendering_time = Instant::now();
