@@ -1,6 +1,6 @@
 use std::{
-    ops::DerefMut,
-    sync::atomic::{AtomicUsize, Ordering},
+    hint,
+    sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
 };
 
 use rayon::prelude::*;
@@ -13,16 +13,24 @@ use crate::{
 
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
+pub const fn depth_to_atomic_u32(depth: f32) -> u32 {
+    u32::from_le_bytes(depth.to_le_bytes())
+}
+
+pub const fn depth_from_atomic_u32(depth: u32) -> f32 {
+    f32::from_le_bytes(depth.to_le_bytes())
+}
+
 #[derive(Default, Debug)]
 pub struct Stats {
     pub nb_triangles_tot: AtomicUsize,
     pub nb_triangles_sight: AtomicUsize,
     pub nb_triangles_facing: AtomicUsize,
-    pub nb_triangles_drawn: usize,
-    pub nb_pixels_tested: usize,
-    pub nb_pixels_in: usize,
-    pub nb_pixels_front: usize,
-    pub nb_pixels_written: usize,
+    pub nb_triangles_drawn: AtomicUsize,
+    pub nb_pixels_tested: AtomicUsize,
+    pub nb_pixels_in: AtomicUsize,
+    pub nb_pixels_front: AtomicUsize,
+    pub nb_pixels_written: AtomicUsize,
     // pub misc: String,
 }
 
@@ -140,12 +148,7 @@ fn buffer_index(p: Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
     }
 }
 
-fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
-    buffer: &mut B,
-    size: &PhysicalSize<u32>,
-    v: Vec3f,
-    texture: &Texture,
-) {
+fn draw_vertice_basic(buffer: &[AtomicU32], size: &PhysicalSize<u32>, v: Vec3f, texture: &Texture) {
     if v.x >= 1. && v.x < (size.width as f32) - 1. && v.y >= 1. && v.y < (size.height as f32) - 1. {
         if let Some(i) = buffer_index(v, size) {
             let color = match texture {
@@ -158,23 +161,24 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
                     .as_color_u32(),
             };
 
-            buffer[i] = color;
-            buffer[i - 1] = color;
-            buffer[i + 1] = color;
-            buffer[i - (size.width as usize)] = color;
-            buffer[i + (size.width as usize)] = color;
+            buffer[i].store(color, Ordering::Relaxed);
+            buffer[i - 1].store(color, Ordering::Relaxed);
+            buffer[i + 1].store(color, Ordering::Relaxed);
+            buffer[i - (size.width as usize)].store(color, Ordering::Relaxed);
+            buffer[i + (size.width as usize)].store(color, Ordering::Relaxed);
         }
     }
 }
 
-fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
+fn rasterize_triangle(
     tri_raster: &Triangle,
-    buffer: &mut B,
-    depth_buffer: &mut [f32],
+    buffer: &[AtomicU32],
+    depth_buffer: &[AtomicU32],
+    lock_buffer: &[AtomicBool],
     z_near: f32,
     size: &PhysicalSize<u32>,
     settings: &Settings,
-    stats: &mut Stats,
+    stats: &Stats,
     bb: &Rect,
     light: f32,
     p01: Vec3f,
@@ -196,7 +200,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             })
         })
         .for_each(|pixel| {
-            stats.nb_pixels_tested += 1;
+            stats.nb_pixels_tested.fetch_add(1, Ordering::Relaxed);
 
             let e01 = edge_function(p01, pixel - tri_raster.p0);
             let e12 = edge_function(p12, pixel - tri_raster.p1);
@@ -207,7 +211,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 return;
             }
 
-            stats.nb_pixels_in += 1;
+            stats.nb_pixels_in.fetch_add(1, Ordering::Relaxed);
 
             let a12 = e12 / tri_area;
             let a20 = e20 / tri_area;
@@ -233,37 +237,46 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 return;
             }
 
-            stats.nb_pixels_front += 1;
+            stats.nb_pixels_front.fetch_add(1, Ordering::Relaxed);
 
             let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
-            if depth >= depth_buffer[index] {
-                return;
+            while lock_buffer[index]
+                .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire)
+                .unwrap_or_else(|x| x)
+            {
+                hint::spin_loop();
             }
 
-            was_drawn = true;
-            stats.nb_pixels_written += 1;
+            // TODO: which ordering ?
+            if depth < depth_from_atomic_u32(depth_buffer[index].load(Ordering::Relaxed)) {
+                was_drawn = true;
+                stats.nb_pixels_written.fetch_add(1, Ordering::Relaxed);
 
-            let col = match tri_raster.texture {
-                Texture::Color(col) => col,
-                Texture::VertexColor(c0, c1, c2) => {
-                    // TODO: Optimize color calculus
-                    let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
+                let col = match tri_raster.texture {
+                    Texture::Color(col) => col,
+                    Texture::VertexColor(c0, c1, c2) => {
+                        // TODO: Optimize color calculus
+                        let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
 
-                    ((col_2
-                        + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
-                        + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
-                        * (depth * light))
-                        .as_color_u32()
-                }
-            };
+                        ((col_2
+                            + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
+                            + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
+                            * (depth * light))
+                            .as_color_u32()
+                    }
+                };
 
-            buffer[index] = col;
-            depth_buffer[index] = depth;
+                // TODO: which ordering ?
+                buffer[index].store(col, Ordering::Relaxed);
+                depth_buffer[index].store(depth_to_atomic_u32(depth), Ordering::Relaxed);
+            }
+
+            lock_buffer[index].store(false, Ordering::Release);
         });
 
     if was_drawn {
-        stats.nb_triangles_drawn += 1;
+        stats.nb_triangles_drawn.fetch_add(1, Ordering::Relaxed);
     }
 
     if settings.show_vertices {
@@ -273,13 +286,14 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     }
 }
 
-pub fn rasterize<B: DerefMut<Target = [u32]>>(
+pub fn rasterize(
     world: &World,
-    buffer: &mut B,
-    depth_buffer: &mut [f32],
+    buffer: &[AtomicU32],
+    depth_buffer: &[AtomicU32],
+    lock_buffer: &[AtomicBool],
     size: &PhysicalSize<u32>,
     settings: &Settings,
-    stats: &mut Stats,
+    stats: &Stats,
 ) {
     let ratio_w_h = size.width as f32 / size.height as f32;
 
@@ -348,14 +362,12 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
 
             (t_raster, bb, light, p01, p20)
         })
-        .collect_vec_list()
-        .into_iter()
-        .flatten()
         .for_each(|(t_raster, bb, light, p01, p20)| {
             rasterize_triangle(
                 &t_raster,
                 buffer,
                 depth_buffer,
+                lock_buffer,
                 world.camera.z_near,
                 size,
                 settings,
@@ -422,7 +434,7 @@ pub fn rasterize_trangles<B: DerefMut<Target = [u32]>, I: Iterator<Item = Triang
     ite: I,
 ) {
     ite.for_each(|t| {
-        stats.nb_triangles_tot += 1;
+        stats.nb_triangles_tot.fetch_add(1, Ordering:Relaxed);
         rasterize_triangle(
             &t,
             buffer,

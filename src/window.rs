@@ -3,11 +3,12 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU32},
+        atomic::{AtomicBool, AtomicU32, Ordering},
     },
     time::Instant,
 };
 
+use rayon::prelude::*;
 use softbuffer::{Context, Surface};
 use winit::{
     application::ApplicationHandler,
@@ -21,7 +22,7 @@ use winit::{
 
 use crate::{
     font::TextWriter,
-    rasterizer::{Settings, Stats, TriangleSorting},
+    rasterizer::{Settings, Stats, TriangleSorting, depth_to_atomic_u32},
     scene::World,
 };
 use crate::{maths::Rotation, rasterizer::rasterize};
@@ -29,17 +30,100 @@ use crate::{maths::Rotation, rasterizer::rasterize};
 struct Graphics {
     window: Rc<Window>,
     surface: Surface<Rc<Window>, Rc<Window>>,
+    color_buffer: Arc<[AtomicU32]>,
+    depth_buffer: Arc<[AtomicU32]>,
+    lock_buffer: Arc<[AtomicBool]>,
+}
+
+impl Graphics {
+    const DEFAULT_COLOR: u32 = 0xff181818;
+    const DEFAULT_DEPTH: u32 = depth_to_atomic_u32(f32::INFINITY);
+    const DEFAULT_LOCK: bool = false;
+
+    pub fn new(event_loop: &ActiveEventLoop) -> Self {
+        let window = Rc::new(
+            event_loop
+                .create_window(Window::default_attributes())
+                .unwrap(),
+        );
+
+        let context = Context::new(window.clone()).expect("Failed to create a softbuffer context");
+        let surface =
+            Surface::new(&context, window.clone()).expect("Failed to create a softbuffer surface");
+
+        let size = window.inner_size();
+        let tot_size = (size.width * size.height) as usize;
+
+        Graphics {
+            window,
+            surface,
+            color_buffer: Self::init_buffer(tot_size, Self::default_color),
+            depth_buffer: Self::init_buffer(tot_size, Self::default_depth),
+            lock_buffer: Self::init_buffer(tot_size, Self::default_lock),
+        }
+    }
+
+    fn init_buffer<T, F: Fn() -> T>(tot_size: usize, f: F) -> Arc<[T]> {
+        let mut v = Vec::with_capacity(tot_size);
+        v.resize_with(tot_size, f);
+        v.into_boxed_slice().into()
+    }
+
+    fn default_color() -> AtomicU32 {
+        AtomicU32::new(Self::DEFAULT_COLOR)
+    }
+
+    fn default_depth() -> AtomicU32 {
+        AtomicU32::new(Self::DEFAULT_DEPTH)
+    }
+
+    fn default_lock() -> AtomicBool {
+        AtomicBool::new(Self::DEFAULT_LOCK)
+    }
+
+    fn resize(&mut self) {
+        let size = self.window.inner_size();
+        let tot_size = (size.width * size.height) as usize;
+
+        if self.color_buffer.len() >= tot_size {
+            self.color_buffer
+                .par_iter()
+                .take(tot_size)
+                // TODO: Relaxed ?
+                .for_each(|v| v.store(Self::DEFAULT_COLOR, Ordering::SeqCst))
+        } else {
+            self.color_buffer = Self::init_buffer(tot_size, Self::default_color);
+        }
+
+        if self.depth_buffer.len() >= tot_size {
+            self.depth_buffer
+                .par_iter()
+                .take(tot_size)
+                .for_each(|v| v.store(Self::DEFAULT_DEPTH, Ordering::Relaxed))
+        } else {
+            self.depth_buffer = Self::init_buffer(tot_size, Self::default_depth);
+        }
+
+        if self.lock_buffer.len() >= tot_size {
+            self.lock_buffer
+                .par_iter()
+                .take(tot_size)
+                .for_each(|v| v.store(Self::DEFAULT_LOCK, Ordering::Relaxed))
+        } else {
+            self.lock_buffer = Self::init_buffer(tot_size, Self::default_lock);
+        }
+    }
 }
 
 #[derive(Default)]
 pub struct App {
     last_rendering_duration: u128,
+    last_copy_buffer: u128,
     graphics: Option<Graphics>,
     text_writer: TextWriter,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
-    buffers_colors_depth_lock: Option<(Arc<[AtomicU32]>, Arc<[AtomicU32]>, Arc<[AtomicBool]>)>,
     settings: Settings,
 }
 
@@ -57,17 +141,7 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = Rc::new(
-            event_loop
-                .create_window(Window::default_attributes())
-                .unwrap(),
-        );
-
-        let context = Context::new(window.clone()).expect("Failed to create a softbuffer context");
-        let surface =
-            Surface::new(&context, window.clone()).expect("Failed to create a softbuffer surface");
-
-        self.graphics = Some(Graphics { window, surface });
+        self.graphics = Some(Graphics::new(event_loop));
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -196,7 +270,7 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 let frame_start_time = Instant::now();
 
-                let mut stats = Stats::default();
+                let stats = Stats::default();
 
                 // Redraw the application.
                 //
@@ -208,89 +282,41 @@ impl ApplicationHandler for App {
 
                 // Draw.
                 let size = gfx.window.inner_size();
-                {
-                    let (Some(width), Some(height)) =
-                        (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-                    else {
-                        return;
-                    };
 
-                    gfx.surface
-                        .resize(width, height)
-                        .expect("Failed to resize the softbuffer surface");
-                }
-
-                let mut buffer = gfx
-                    .surface
-                    .buffer_mut()
-                    .expect("Failed to get the softbuffer buffer");
-
-                // Fill a buffer with a solid color
-                let t = Instant::now();
-                // TODO: no need anymore
-                buffer.fill(0xff181818);
-                let buffer_fill = Instant::now().duration_since(t).as_millis();
-
-                let t = Instant::now();
-
-                let tot_size = (size.width * size.height) as usize;
-                let (colors_buffer, depth_buffer, lock_buffer) =
-                    self.buffers_colors_depth_lock.take().map_or_else(
-                        || {
-                            (
-                                Vec::with_capacity(tot_size),
-                                Vec::with_capacity(tot_size),
-                                Vec::with_capacity(tot_size),
-                            )
-                        },
-                        |(colors_buffer, depth_buffer, lock_buffer)| {
-                            (
-                                colors_buffer.into(),
-                                depth_buffer.into(),
-                                lock_buffer.into(),
-                            )
-                        },
-                    );
-                let mut local_depth_buffer = Vec::with_capacity(tot_size);
-                local_depth_buffer.resize_with(tot_size, || {
-                    AtomicU32::new(u32::from_le_bytes(f32::INFINITY.to_le_bytes()))
-                });
-                let local_depth_buffer = Arc::new(local_depth_buffer.into_boxed_slice());
-
-                let mut local_lock_buffer = Vec::with_capacity(tot_size);
-                local_lock_buffer.resize_with(tot_size, || AtomicBool::new(false));
-                let local_lock_buffer = Arc::new(local_lock_buffer.into_boxed_slice());
-
-                let depth_buffer_fill = Instant::now().duration_since(t).as_millis();
+                let buffers_fill = Instant::now();
+                gfx.resize();
+                let buffers_fill = Instant::now().duration_since(buffers_fill).as_millis();
 
                 let rendering_time = Instant::now();
-
                 rasterize(
                     &self.world,
-                    &mut buffer,
-                    &mut self.depth_buffer[..],
+                    &gfx.color_buffer,
+                    &gfx.depth_buffer,
+                    &gfx.lock_buffer,
                     &size,
                     &self.settings,
-                    &mut stats,
+                    &stats,
                 );
+                let rendering_time = Instant::now().duration_since(rendering_time).as_millis();
 
                 {
                     let cam_rot = self.world.camera.rot();
                     let display = format!(
                         "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{:#?}",
                         (1000. / self.last_rendering_duration as f32).round(),
-                        buffer_fill,
-                        depth_buffer_fill,
-                        Instant::now().duration_since(rendering_time).as_millis(),
+                        buffers_fill,
+                        rendering_time,
+                        self.last_copy_buffer,
                         self.last_rendering_duration,
                         self.cursor
-                            .and_then(|cursor| buffer
+                            .and_then(|cursor| gfx
+                                .color_buffer
                                 .get(cursor.x as usize + cursor.y as usize * size.width as usize)
                                 .map(|c| format!(
                                     "\n({},{}) 0x{:x}",
                                     cursor.x.floor(),
                                     cursor.y.floor(),
-                                    c
+                                    c.load(Ordering::Relaxed)
                                 )))
                             .unwrap_or(String::from("\nNo cursor position")),
                         self.world.camera.pos,
@@ -300,8 +326,33 @@ impl ApplicationHandler for App {
                         self.settings,
                         stats
                     );
-                    self.text_writer.rasterize(&mut buffer, size, &display[..]);
+                    self.text_writer
+                        .rasterize_par(&gfx.color_buffer, size, &display[..]);
                 }
+
+                let copy_buffer = Instant::now();
+                let buffer = {
+                    let (Some(width), Some(height)) =
+                        (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
+                    else {
+                        return;
+                    };
+
+                    gfx.surface
+                        .resize(width, height)
+                        .expect("Failed to resize the softbuffer surface");
+
+                    let mut buffer = gfx
+                        .surface
+                        .buffer_mut()
+                        .expect("Failed to get the softbuffer buffer");
+
+                    (0..(size.width * size.height) as usize)
+                        .for_each(|i| buffer[i] = gfx.color_buffer[i].load(Ordering::Relaxed));
+
+                    buffer
+                };
+                self.last_copy_buffer = Instant::now().duration_since(copy_buffer).as_millis();
 
                 buffer
                     .present()
