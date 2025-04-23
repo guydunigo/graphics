@@ -1,4 +1,9 @@
-use std::{num::NonZeroU32, rc::Rc, time::Instant};
+use std::{
+    num::NonZeroU32,
+    rc::Rc,
+    sync::{Arc, atomic::AtomicU32},
+    time::Instant,
+};
 
 use softbuffer::{Context, Surface};
 use winit::{
@@ -31,7 +36,7 @@ pub struct App {
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
-    depth_buffer: Vec<f32>,
+    depth_buffer: Arc<[f32]>,
     settings: Settings,
 }
 
@@ -222,8 +227,19 @@ impl ApplicationHandler for App {
                 buffer.fill(0xff181818);
                 let buffer_fill = Instant::now().duration_since(t).as_millis();
 
-                self.depth_buffer
-                    .resize(size.width as usize * size.height as usize, f32::INFINITY);
+                let tot_size = (size.width * size.height) as usize;
+                let mut local_depth_buffer = Vec::with_capacity(tot_size);
+                local_depth_buffer.resize_with(tot_size, || {
+                    AtomicU32::new(u32::from_le_bytes(f32::INFINITY.to_le_bytes()))
+                });
+                let local_depth_buffer = Arc::new(local_depth_buffer.into_boxed_slice());
+
+                let mut local_lock_buffer = Vec::with_capacity(tot_size);
+                local_lock_buffer.resize_with(tot_size, || {
+                    AtomicU32::new(u32::from_le_bytes(f32::INFINITY.to_le_bytes()))
+                });
+                let local_lock_buffer = Arc::new(local_lock_buffer.into_boxed_slice());
+
                 let t = Instant::now();
                 self.depth_buffer.fill(f32::INFINITY);
                 let depth_buffer_fill = Instant::now().duration_since(t).as_millis();
