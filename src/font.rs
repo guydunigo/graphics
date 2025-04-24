@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use fontdue::{Font, FontSettings};
 use rayon::prelude::*;
@@ -57,7 +57,7 @@ impl TextWriter {
     }
     */
 
-    pub fn rasterize_par(&mut self, buffer: &[AtomicU32], size: PhysicalSize<u32>, text: &str) {
+    pub fn rasterize_par(&mut self, buffer: &[AtomicU64], size: PhysicalSize<u32>, text: &str) {
         text.lines().enumerate().par_bridge().for_each(|(i, l)| {
             let mut start_x = BASE_X;
             let start_y = BASE_Y + i * PX as usize;
@@ -81,7 +81,7 @@ impl TextWriter {
                                 && j < size.height as isize
                             {
                                 buffer[i as usize + j as usize * size.width as usize].fetch_or(
-                                    0xff000000 | ((0x00ffffff * (*p as u32)) / 255),
+                                    0xff000000 | ((0x00ffffff * (*p as u64)) / 255),
                                     Ordering::Relaxed,
                                 );
                             }

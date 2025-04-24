@@ -110,7 +110,7 @@ impl Mesh {
         self.triangles = ts
             .drain(..)
             .map(|mut t| {
-                t.mesh = Arc::downgrade(&me);
+                t.mesh = Arc::downgrade(me);
                 Arc::new(t)
             })
             .collect();

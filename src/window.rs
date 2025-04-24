@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicU32, Ordering},
+        atomic::{AtomicU64, Ordering},
     },
     time::Instant,
 };
@@ -20,9 +20,11 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
+#[cfg(feature = "stats")]
+use crate::rasterizer::Stats;
 use crate::{
     font::TextWriter,
-    rasterizer::{Settings, Stats, TriangleSorting, depth_to_atomic_u32},
+    rasterizer::{Settings, TriangleSorting, u64_to_color},
     scene::World,
 };
 use crate::{maths::Rotation, rasterizer::rasterize};
@@ -30,15 +32,14 @@ use crate::{maths::Rotation, rasterizer::rasterize};
 struct Graphics {
     window: Rc<Window>,
     surface: Surface<Rc<Window>, Rc<Window>>,
-    color_buffer: Arc<[AtomicU32]>,
-    depth_buffer: Arc<[AtomicU32]>,
-    lock_buffer: Arc<[AtomicBool]>,
+    depth_color_buffer: Arc<[AtomicU64]>,
 }
 
 impl Graphics {
     const DEFAULT_COLOR: u32 = 0xff181818;
-    const DEFAULT_DEPTH: u32 = depth_to_atomic_u32(f32::INFINITY);
-    const DEFAULT_LOCK: bool = false;
+    const DEFAULT_DEPTH: u32 = u32::MAX;
+    const DEFAULT_DEPTH_COLOR: u64 =
+        ((Self::DEFAULT_DEPTH as u64) << 32) | (Self::DEFAULT_COLOR as u64);
 
     pub fn new(event_loop: &ActiveEventLoop) -> Self {
         let window = Rc::new(
@@ -57,9 +58,9 @@ impl Graphics {
         Graphics {
             window,
             surface,
-            color_buffer: Self::init_buffer(tot_size, Self::default_color),
-            depth_buffer: Self::init_buffer(tot_size, Self::default_depth),
-            lock_buffer: Self::init_buffer(tot_size, Self::default_lock),
+            depth_color_buffer: Self::init_buffer(tot_size, || {
+                AtomicU64::new(Self::DEFAULT_DEPTH_COLOR)
+            }),
         }
     }
 
@@ -69,48 +70,19 @@ impl Graphics {
         v.into()
     }
 
-    fn default_color() -> AtomicU32 {
-        AtomicU32::new(Self::DEFAULT_COLOR)
-    }
-
-    fn default_depth() -> AtomicU32 {
-        AtomicU32::new(Self::DEFAULT_DEPTH)
-    }
-
-    fn default_lock() -> AtomicBool {
-        AtomicBool::new(Self::DEFAULT_LOCK)
-    }
-
     fn resize(&mut self) {
         let size = self.window.inner_size();
         let tot_size = (size.width * size.height) as usize;
 
-        if self.color_buffer.len() >= tot_size {
-            self.color_buffer
+        if self.depth_color_buffer.len() >= tot_size {
+            self.depth_color_buffer
                 .par_iter()
                 .take(tot_size)
                 // TODO: Relaxed ?
-                .for_each(|v| v.store(Self::DEFAULT_COLOR, Ordering::SeqCst))
+                .for_each(|v| v.store(Self::DEFAULT_DEPTH_COLOR, Ordering::SeqCst))
         } else {
-            self.color_buffer = Self::init_buffer(tot_size, Self::default_color);
-        }
-
-        if self.depth_buffer.len() >= tot_size {
-            self.depth_buffer
-                .par_iter()
-                .take(tot_size)
-                .for_each(|v| v.store(Self::DEFAULT_DEPTH, Ordering::Relaxed))
-        } else {
-            self.depth_buffer = Self::init_buffer(tot_size, Self::default_depth);
-        }
-
-        if self.lock_buffer.len() >= tot_size {
-            self.lock_buffer
-                .par_iter()
-                .take(tot_size)
-                .for_each(|v| v.store(Self::DEFAULT_LOCK, Ordering::Relaxed))
-        } else {
-            self.lock_buffer = Self::init_buffer(tot_size, Self::default_lock);
+            self.depth_color_buffer =
+                Self::init_buffer(tot_size, || AtomicU64::new(Self::DEFAULT_DEPTH_COLOR));
         }
     }
 }
@@ -209,7 +181,6 @@ impl ApplicationHandler for App {
                     KeyCode::Digit4 => {
                         self.settings.back_face_culling = !self.settings.back_face_culling
                     }
-                    KeyCode::Digit5 => self.settings.lock_buffers = !self.settings.lock_buffers,
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
@@ -263,6 +234,7 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 let frame_start_time = Instant::now();
 
+                #[cfg(feature = "stats")]
                 let stats = Stats::default();
 
                 // Redraw the application.
@@ -283,17 +255,20 @@ impl ApplicationHandler for App {
                 let rendering_time = Instant::now();
                 rasterize(
                     &self.world,
-                    &gfx.color_buffer,
-                    &gfx.depth_buffer,
-                    &gfx.lock_buffer,
+                    &gfx.depth_color_buffer,
                     &size,
                     &self.settings,
+                    #[cfg(feature = "stats")]
                     &stats,
                 );
                 let rendering_time = Instant::now().duration_since(rendering_time).as_millis();
 
                 {
                     let cam_rot = self.world.camera.rot();
+                    #[cfg(feature = "stats")]
+                    let stats = format!("{:#?}", stats);
+                    #[cfg(not(feature = "stats"))]
+                    let stats = "Stats disabled";
                     let display = format!(
                         "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{:#?}",
                         (1000. / self.last_rendering_duration as f32).round(),
@@ -303,13 +278,13 @@ impl ApplicationHandler for App {
                         self.last_rendering_duration,
                         self.cursor
                             .and_then(|cursor| gfx
-                                .color_buffer
+                                .depth_color_buffer
                                 .get(cursor.x as usize + cursor.y as usize * size.width as usize)
                                 .map(|c| format!(
                                     "\n({},{}) 0x{:x}",
                                     cursor.x.floor(),
                                     cursor.y.floor(),
-                                    c.load(Ordering::Relaxed)
+                                    u64_to_color(c.load(Ordering::Relaxed))
                                 )))
                             .unwrap_or(String::from("\nNo cursor position")),
                         self.world.camera.pos,
@@ -317,10 +292,10 @@ impl ApplicationHandler for App {
                         cam_rot.v(),
                         cam_rot.w(),
                         self.settings,
-                        stats
+                        stats,
                     );
                     self.text_writer
-                        .rasterize_par(&gfx.color_buffer, size, &display[..]);
+                        .rasterize_par(&gfx.depth_color_buffer, size, &display[..]);
                 }
 
                 let copy_buffer = Instant::now();
@@ -340,8 +315,9 @@ impl ApplicationHandler for App {
                         .buffer_mut()
                         .expect("Failed to get the softbuffer buffer");
 
-                    (0..(size.width * size.height) as usize)
-                        .for_each(|i| buffer[i] = gfx.color_buffer[i].load(Ordering::Relaxed));
+                    (0..(size.width * size.height) as usize).for_each(|i| {
+                        buffer[i] = u64_to_color(gfx.depth_color_buffer[i].load(Ordering::Relaxed));
+                    });
 
                     buffer
                 };
