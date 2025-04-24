@@ -1,5 +1,4 @@
 use rand::RngCore;
-use rayon::prelude::*;
 
 /// # Describing the world...
 use crate::maths::{PI, Rotation, Vec3f};
@@ -100,12 +99,6 @@ impl Mesh {
             pos: new_pos,
             ..self
         }
-    }
-
-    pub fn to_world_triangles(&self) -> impl ParallelIterator<Item = Triangle> {
-        self.triangles
-            .par_iter()
-            .map(|t| t.scale_rot_move(self.scale, &self.rot, self.pos))
     }
 }
 

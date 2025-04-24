@@ -66,7 +66,7 @@ impl Graphics {
     fn init_buffer<T, F: Fn() -> T>(tot_size: usize, f: F) -> Arc<[T]> {
         let mut v = Vec::with_capacity(tot_size);
         v.resize_with(tot_size, f);
-        v.into_boxed_slice().into()
+        v.into()
     }
 
     fn default_color() -> AtomicU32 {
