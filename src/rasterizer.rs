@@ -42,6 +42,7 @@ pub struct Settings {
     pub sort_triangles: TriangleSorting,
     /// Eliminate back-facing faces early
     pub back_face_culling: bool,
+    pub lock_buffers: bool,
 }
 
 impl Default for Settings {
@@ -50,6 +51,7 @@ impl Default for Settings {
             show_vertices: false,
             sort_triangles: TriangleSorting::None,
             back_face_culling: true,
+            lock_buffers: true,
         }
     }
 }
@@ -244,11 +246,13 @@ fn rasterize_triangle(
 
                 let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
-                while lock_buffer[index]
-                    .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire)
-                    .unwrap_or_else(|x| x)
-                {
-                    hint::spin_loop();
+                if settings.lock_buffers {
+                    while lock_buffer[index]
+                        .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Acquire)
+                        .unwrap_or_else(|x| x)
+                    {
+                        hint::spin_loop();
+                    }
                 }
 
                 // TODO: which ordering ?
@@ -275,7 +279,9 @@ fn rasterize_triangle(
                     depth_buffer[index].store(depth_to_atomic_u32(depth), Ordering::Relaxed);
                 }
 
-                lock_buffer[index].store(false, Ordering::Release);
+                if settings.lock_buffers {
+                    lock_buffer[index].store(false, Ordering::Release);
+                }
             })
         });
 

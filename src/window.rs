@@ -217,6 +217,7 @@ impl ApplicationHandler for App {
                     KeyCode::Digit4 => {
                         self.settings.back_face_culling = !self.settings.back_face_culling
                     }
+                    KeyCode::Digit5 => self.settings.lock_buffers = !self.settings.lock_buffers,
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
