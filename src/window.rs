@@ -24,7 +24,7 @@ use winit::{
 use crate::rasterizer::Stats;
 use crate::{
     font::TextWriter,
-    rasterizer::{Settings, TriangleSorting, u64_to_color},
+    rasterizer::{Settings, u64_to_color},
     scene::World,
 };
 use crate::{maths::Rotation, rasterizer::rasterize};
@@ -175,12 +175,7 @@ impl ApplicationHandler for App {
                     KeyCode::Backquote => {
                         self.settings.show_vertices = !self.settings.show_vertices
                     }
-                    KeyCode::Digit1 => self.settings.sort_triangles = TriangleSorting::FrontToBack,
-                    KeyCode::Digit2 => self.settings.sort_triangles = TriangleSorting::BackToFront,
-                    KeyCode::Digit3 => self.settings.sort_triangles = TriangleSorting::None,
-                    KeyCode::Digit4 => {
-                        self.settings.back_face_culling = !self.settings.back_face_culling
-                    }
+                    // KeyCode::Digit4 => self.settings.back_face_culling = !self.settings.back_face_culling,
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
@@ -270,7 +265,7 @@ impl ApplicationHandler for App {
                     #[cfg(not(feature = "stats"))]
                     let stats = "Stats disabled";
                     let display = format!(
-                        "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{:#?}",
+                        "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{}",
                         (1000. / self.last_rendering_duration as f32).round(),
                         buffers_fill,
                         rendering_time,

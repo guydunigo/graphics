@@ -11,7 +11,7 @@ use crate::{
 };
 
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
-const DEPTH_PRECISION: f32 = 1024.;
+const DEPTH_PRECISION: f32 = 2048.;
 
 pub const fn depth_to_u64(depth: f32) -> u64 {
     ((depth * DEPTH_PRECISION) as u64) << 32
@@ -39,22 +39,17 @@ pub struct Stats {
 pub struct Settings {
     /// Over-print all vertices
     pub show_vertices: bool,
-    /// Sort triangles by point with mininum Z value
-    pub sort_triangles: TriangleSorting,
-    /// Eliminate back-facing faces early
-    pub back_face_culling: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             show_vertices: false,
-            sort_triangles: TriangleSorting::None,
-            back_face_culling: true,
         }
     }
 }
 
+/*
 #[derive(Default, Debug, Clone, Copy)]
 pub enum TriangleSorting {
     #[default]
@@ -62,6 +57,7 @@ pub enum TriangleSorting {
     BackToFront,
     FrontToBack,
 }
+*/
 
 fn world_to_raster(
     p_world: Vec3f,
@@ -204,10 +200,7 @@ fn rasterize_triangle(
                 z: 0.,
             })
         })
-        .par_bridge()
-        // // TODO: ugly
-        // .collect::<Vec<Vec3f>>()
-        // .par_chunks(512)
+        // .par_bridge()
         .for_each(|pixel| {
             #[cfg(feature = "stats")]
             stats.nb_pixels_tested.fetch_add(1, Ordering::Relaxed);
@@ -338,8 +331,7 @@ pub fn rasterize(
         .filter(|(_, _, _, p01, p20)| {
             // Calculate only of normal z
             let raster_normale = p01.cross(*p20);
-            // TODO: remove setting to back_face cull
-            raster_normale.z >= 0. || !settings.back_face_culling
+            raster_normale.z >= 0.
         })
         .inspect(|_| {
             #[cfg(feature = "stats")]
