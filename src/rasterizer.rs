@@ -10,6 +10,7 @@ use crate::{
 const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
+#[cfg(feature = "stats")]
 #[derive(Default, Debug, Clone)]
 pub struct Stats {
     pub nb_triangles_tot: usize,
@@ -29,8 +30,6 @@ pub struct Settings {
     pub show_vertices: bool,
     /// Sort triangles by point with mininum Z value
     pub sort_triangles: TriangleSorting,
-    /// Eliminate back-facing faces early
-    pub back_face_culling: bool,
 }
 
 impl Default for Settings {
@@ -38,7 +37,6 @@ impl Default for Settings {
         Self {
             show_vertices: false,
             sort_triangles: TriangleSorting::None,
-            back_face_culling: true,
         }
     }
 }
@@ -172,7 +170,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     size: &PhysicalSize<u32>,
     ratio_w_h: f32,
     settings: &Settings,
-    stats: &mut Stats,
+    #[cfg(feature = "stats")] stats: &mut Stats,
 ) {
     let tri_raster = world_to_raster_triangle(triangle, cam, size, ratio_w_h);
 
@@ -182,7 +180,10 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         return;
     }
 
-    stats.nb_triangles_sight += 1;
+    #[cfg(feature = "stats")]
+    {
+        stats.nb_triangles_sight += 1;
+    }
 
     ////////////////////////////////
     // Sunlight
@@ -210,15 +211,16 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let raster_normale = p01.cross(p20);
     // Calculate only of normal z
     if raster_normale.z < 0. {
-        if settings.back_face_culling {
-            return;
-        }
-        // TODO: remove setting to back_face cull
-    } else {
+        return;
+    }
+
+    #[cfg(feature = "stats")]
+    {
         stats.nb_triangles_facing += 1;
     }
 
     ////////////////////////////////
+    #[cfg(feature = "stats")]
     let mut was_drawn = false;
 
     let p12 = tri_raster.p2 - tri_raster.p1;
@@ -231,7 +233,6 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         _ => tri_raster.texture,
     };
 
-    // TODO: Paralléliser
     (bb.min_x..=bb.max_x)
         .flat_map(|x| {
             (bb.min_y..=bb.max_y).map(move |y| Vec3f {
@@ -241,7 +242,10 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             })
         })
         .for_each(|pixel| {
-            stats.nb_pixels_tested += 1;
+            #[cfg(feature = "stats")]
+            {
+                stats.nb_pixels_tested += 1;
+            }
 
             let e01 = edge_function(p01, pixel - tri_raster.p0);
             let e12 = edge_function(p12, pixel - tri_raster.p1);
@@ -252,7 +256,10 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 return;
             }
 
-            stats.nb_pixels_in += 1;
+            #[cfg(feature = "stats")]
+            {
+                stats.nb_pixels_in += 1;
+            }
 
             let a12 = e12 / tri_area;
             let a20 = e20 / tri_area;
@@ -278,7 +285,10 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 return;
             }
 
-            stats.nb_pixels_front += 1;
+            #[cfg(feature = "stats")]
+            {
+                stats.nb_pixels_front += 1;
+            }
 
             let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
@@ -286,8 +296,11 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 return;
             }
 
-            was_drawn = true;
-            stats.nb_pixels_written += 1;
+            #[cfg(feature = "stats")]
+            {
+                was_drawn = true;
+                stats.nb_pixels_written += 1;
+            }
 
             let col = match texture {
                 Texture::Color(col) => col,
@@ -307,6 +320,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
             depth_buffer[index] = depth;
         });
 
+    #[cfg(feature = "stats")]
     if was_drawn {
         stats.nb_triangles_drawn += 1;
     }
@@ -324,16 +338,17 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
     depth_buffer: &mut [f32],
     size: &PhysicalSize<u32>,
     settings: &Settings,
-    stats: &mut Stats,
+    #[cfg(feature = "stats")] stats: &mut Stats,
 ) {
-    // TODO: paralléliser
-
     let triangles = world.meshes.iter().flat_map(Mesh::to_world_triangles);
 
     let ratio_w_h = size.width as f32 / size.height as f32;
 
     let f = |f| {
-        stats.nb_triangles_tot += 1;
+        #[cfg(feature = "stats")]
+        {
+            stats.nb_triangles_tot += 1;
+        }
         rasterize_triangle(
             &f,
             buffer,
@@ -342,6 +357,7 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
             size,
             ratio_w_h,
             settings,
+            #[cfg(feature = "stats")]
             stats,
         );
     };

@@ -11,9 +11,11 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
+#[cfg(feature = "stats")]
+use crate::rasterizer::Stats;
 use crate::{
     font::TextWriter,
-    rasterizer::{Settings, Stats, TriangleSorting},
+    rasterizer::{Settings, TriangleSorting},
     scene::World,
 };
 use crate::{maths::Rotation, rasterizer::rasterize};
@@ -132,9 +134,7 @@ impl ApplicationHandler for App {
                     KeyCode::Digit1 => self.settings.sort_triangles = TriangleSorting::FrontToBack,
                     KeyCode::Digit2 => self.settings.sort_triangles = TriangleSorting::BackToFront,
                     KeyCode::Digit3 => self.settings.sort_triangles = TriangleSorting::None,
-                    KeyCode::Digit4 => {
-                        self.settings.back_face_culling = !self.settings.back_face_culling
-                    }
+                    // KeyCode::Digit4 => self.settings.back_face_culling = !self.settings.back_face_culling,
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
@@ -188,6 +188,7 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 let frame_start_time = Instant::now();
 
+                #[cfg(feature = "stats")]
                 let mut stats = Stats::default();
 
                 // Redraw the application.
@@ -236,13 +237,18 @@ impl ApplicationHandler for App {
                     &mut self.depth_buffer[..],
                     &size,
                     &self.settings,
+                    #[cfg(feature = "stats")]
                     &mut stats,
                 );
 
                 {
                     let cam_rot = self.world.camera.rot();
+                    #[cfg(feature = "stats")]
+                    let stats = format!("{:#?}", stats);
+                    #[cfg(not(feature = "stats"))]
+                    let stats = "Stats disabled";
                     let display = format!(
-                        "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{:#?}",
+                        "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{}",
                         (1000. / self.last_rendering_duration as f32).round(),
                         buffer_fill,
                         depth_buffer_fill,
