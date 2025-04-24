@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock, Weak};
+
 use rand::RngCore;
 
 /// # Describing the world...
@@ -20,12 +22,13 @@ impl Default for Texture {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Triangle {
     pub p0: Vec3f,
     pub p1: Vec3f,
     pub p2: Vec3f,
     pub texture: Texture,
+    pub mesh: Weak<RwLock<Mesh>>,
 }
 
 impl Default for Triangle {
@@ -35,17 +38,19 @@ impl Default for Triangle {
             p1: Vec3f::new(0., 0., 0.),
             p2: Vec3f::new(0., 0., -4.),
             texture: Texture::VertexColor(0xffff0000, 0xff00ff00, 0xff0000ff),
+            mesh: Default::default(),
         }
     }
 }
 
 impl Triangle {
-    pub const fn new(p0: Vec3f, p1: Vec3f, p2: Vec3f, texture: Texture) -> Self {
+    pub fn new(p0: Vec3f, p1: Vec3f, p2: Vec3f, texture: Texture) -> Self {
         Triangle {
             p0,
             p1,
             p2,
             texture,
+            ..Default::default()
         }
     }
 
@@ -55,19 +60,30 @@ impl Triangle {
     }
     */
 
-    pub fn scale_rot_move(&self, scale: f32, rot: &Rotation, move_vect: Vec3f) -> Triangle {
-        Triangle {
+    fn scale_rot_move(&self, scale: f32, rot: &Rotation, move_vect: Vec3f) -> Self {
+        Self {
             p0: self.p0.scale_rot_move(scale, rot, move_vect),
             p1: self.p1.scale_rot_move(scale, rot, move_vect),
             p2: self.p2.scale_rot_move(scale, rot, move_vect),
             texture: self.texture,
+            ..Default::default()
         }
+    }
+
+    /// Returns the projection of the triangle given the meshes position and rotation and scale.
+    ///
+    /// If the mesh isn't present, returns `None`.
+    pub fn to_world(&self) -> Option<Self> {
+        self.mesh.upgrade().map(|m| {
+            let m = m.read().unwrap();
+            self.scale_rot_move(m.scale, &m.rot, m.pos)
+        })
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
-    pub triangles: Vec<Triangle>,
+    triangles: Vec<Arc<Triangle>>,
     pub pos: Vec3f,
     pub rot: Rotation,
     pub scale: f32,
@@ -84,21 +100,20 @@ impl Default for Mesh {
     }
 }
 
-impl From<Triangle> for Mesh {
-    fn from(value: Triangle) -> Self {
-        Mesh {
-            triangles: vec![value],
-            ..Default::default()
-        }
-    }
-}
-
 impl Mesh {
-    pub fn with_translation_to(self, new_pos: Vec3f) -> Self {
-        Self {
-            pos: new_pos,
-            ..self
-        }
+    pub fn new() -> Arc<RwLock<Self>> {
+        let mesh = Self::default();
+        Arc::new(RwLock::new(mesh))
+    }
+
+    pub fn set_triangles(&mut self, me: &Arc<RwLock<Mesh>>, mut ts: Vec<Triangle>) {
+        self.triangles = ts
+            .drain(..)
+            .map(|mut t| {
+                t.mesh = Arc::downgrade(&me);
+                Arc::new(t)
+            })
+            .collect();
     }
 }
 
@@ -175,23 +190,47 @@ impl Camera {
 
 #[derive(Debug, Clone)]
 pub struct World {
-    pub meshes: Vec<Mesh>,
+    meshes: Vec<Arc<RwLock<Mesh>>>,
+    triangles: Vec<Weak<Triangle>>,
     pub camera: Camera,
     pub sun_direction: Vec3f,
 }
 
+impl World {
+    pub fn meshes(&self) -> &[Arc<RwLock<Mesh>>] {
+        &self.meshes
+    }
+
+    pub fn triangles(&self) -> &Vec<Weak<Triangle>> {
+        &self.triangles
+    }
+}
+
 impl Default for World {
     fn default() -> Self {
+        let mut triangles = Vec::new();
+        let meshes = vec![
+            base_triangle(),
+            base_pyramid(),
+            obj::import_triangles_and_diffuse(obj::SUZANNE_OBJ_PATH),
+            floor(),
+            back_wall(),
+            left_wall(),
+            right_wall(),
+        ]
+        .drain(..)
+        .inspect(|m| {
+            m.read()
+                .unwrap()
+                .triangles
+                .iter()
+                .for_each(|t| triangles.push(Arc::downgrade(t)))
+        })
+        .collect();
+
         World {
-            meshes: vec![
-                Mesh::from(Triangle::default()).with_translation_to(Vec3f::new(0., 0., -10.)),
-                base_pyramid(),
-                obj::import_triangles_and_diffuse(obj::SUZANNE_OBJ_PATH),
-                floor(),
-                back_wall(),
-                left_wall(),
-                right_wall(),
-            ],
+            meshes,
+            triangles,
             camera: Default::default(),
             sun_direction: Vec3f::new(-1., -1., -1.).normalize(),
         }
@@ -201,7 +240,13 @@ impl Default for World {
 mod obj {
     pub const SUZANNE_OBJ_PATH: &str = "resources/Suzanne.obj";
 
-    use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
+    use std::{
+        collections::HashMap,
+        fs::File,
+        io::BufReader,
+        path::Path,
+        sync::{Arc, RwLock},
+    };
 
     use obj::raw::{
         material::MtlColor,
@@ -214,7 +259,7 @@ mod obj {
     use super::{Mesh, Texture, Triangle};
 
     // TODO: better error handling
-    pub fn import_triangles_and_diffuse<P: AsRef<Path>>(obj_path: P) -> Mesh {
+    pub fn import_triangles_and_diffuse<P: AsRef<Path>>(obj_path: P) -> Arc<RwLock<Mesh>> {
         let obj = parse_obj(BufReader::new(
             File::open(&obj_path).expect("Couldn't load path"),
         ))
@@ -237,10 +282,13 @@ mod obj {
             triangles.push(polygon_to_triangle(&obj.positions[..], texture, poly));
         }
 
-        Mesh {
-            triangles,
-            ..Default::default()
+        let res = Mesh::new();
+        {
+            let mut res_w = res.write().unwrap();
+            res_w.set_triangles(&res, triangles);
+            res_w.pos = Vec3f::new(0., 0., -10.);
         }
+        res
     }
 
     fn load_materials_diffuse_rgb<P: AsRef<Path>>(
@@ -330,90 +378,103 @@ mod obj {
     }
 }
 
-fn base_pyramid() -> Mesh {
-    Mesh {
-        triangles: vec![
-            Triangle::new(
-                Vec3f::new(-1., -1., 0.),
-                Vec3f::new(0., -1., 0.),
-                Vec3f::new(0., 0., 9.),
-                Texture::Color(0xffff0000),
-            ),
-            Triangle::new(
-                Vec3f::new(0., -1., 0.),
-                Vec3f::new(1., -1., 0.),
-                Vec3f::new(0., 0., 9.),
-                Texture::Color(0xffff0000),
-            ),
-            Triangle::new(
-                Vec3f::new(-1., 1., 0.),
-                Vec3f::new(0., 0., 9.),
-                Vec3f::new(0., 1., 0.),
-                Texture::Color(0xff0000ff),
-            ),
-            Triangle::new(
-                Vec3f::new(0., 0., 9.),
-                Vec3f::new(1., 1., 0.),
-                Vec3f::new(0., 1., 0.),
-                Texture::Color(0xff0000ff),
-            ),
-            Triangle::new(
-                Vec3f::new(-1., -1., 0.),
-                Vec3f::new(0., 0., 9.),
-                Vec3f::new(-1., 0., 0.),
-                Texture::Color(0xff00ff00),
-            ),
-            Triangle::new(
-                Vec3f::new(-1., 1., 0.),
-                Vec3f::new(-1., 0., 0.),
-                Vec3f::new(0., 0., 9.),
-                Texture::Color(0xff00ff00),
-            ),
-            Triangle::new(
-                Vec3f::new(1., 0., 0.),
-                Vec3f::new(0., 0., 9.),
-                Vec3f::new(1., -1., 0.),
-                Texture::Color(0xffffff00),
-            ),
-            Triangle::new(
-                Vec3f::new(0., 0., 9.),
-                Vec3f::new(1., 0., 0.),
-                Vec3f::new(1., 1., 0.),
-                Texture::Color(0xffffff00),
-            ),
-            Triangle::new(
-                Vec3f::new(-2., -0.5, 0.),
-                Vec3f::new(0., -0.5, 4.),
-                Vec3f::new(-2., 0.5, 0.),
-                Texture::Color(0xff00ffff),
-            ),
-            Triangle::new(
-                Vec3f::new(0., -0.5, 4.),
-                Vec3f::new(0., 0.5, 4.),
-                Vec3f::new(-2., 0.5, 0.),
-                Texture::Color(0xff00ffff),
-            ),
-            Triangle::new(
-                Vec3f::new(-0.3, -0.3, 7.),
-                Vec3f::new(0.3, -0.3, 7.),
-                Vec3f::new(-0.3, 0.3, 7.),
-                Texture::Color(0xffff00ff),
-            ),
-            Triangle::new(
-                Vec3f::new(0.3, -0.3, 7.),
-                Vec3f::new(0.3, 0.3, 7.),
-                Vec3f::new(-0.3, 0.3, 7.),
-                Texture::Color(0xffff00ff),
-            ),
-        ],
-        pos: Vec3f {
-            x: 4.,
-            y: 1.,
-            z: -19.,
-        },
-        rot: Rotation::from_angles(0., 0., -PI / 3.),
-        scale: 0.7,
+fn base_triangle() -> Arc<RwLock<Mesh>> {
+    let res = Mesh::new();
+    {
+        let mut res_w = res.write().unwrap();
+        res_w.set_triangles(&res, vec![Triangle::default()]);
+        res_w.pos = Vec3f::new(0., 0., -10.);
     }
+    res
+}
+
+fn base_pyramid() -> Arc<RwLock<Mesh>> {
+    let res = Mesh::new();
+    {
+        let mut res_w = res.write().unwrap();
+        res_w.pos = Vec3f::new(4., 1., -19.);
+        res_w.pos = Vec3f::new(4., 1., -19.);
+        res_w.rot = Rotation::from_angles(0., 0., -PI / 3.);
+        res_w.scale = 0.7;
+        res_w.set_triangles(
+            &res,
+            vec![
+                Triangle::new(
+                    Vec3f::new(-1., -1., 0.),
+                    Vec3f::new(0., -1., 0.),
+                    Vec3f::new(0., 0., 9.),
+                    Texture::Color(0xffff0000),
+                ),
+                Triangle::new(
+                    Vec3f::new(0., -1., 0.),
+                    Vec3f::new(1., -1., 0.),
+                    Vec3f::new(0., 0., 9.),
+                    Texture::Color(0xffff0000),
+                ),
+                Triangle::new(
+                    Vec3f::new(-1., 1., 0.),
+                    Vec3f::new(0., 0., 9.),
+                    Vec3f::new(0., 1., 0.),
+                    Texture::Color(0xff0000ff),
+                ),
+                Triangle::new(
+                    Vec3f::new(0., 0., 9.),
+                    Vec3f::new(1., 1., 0.),
+                    Vec3f::new(0., 1., 0.),
+                    Texture::Color(0xff0000ff),
+                ),
+                Triangle::new(
+                    Vec3f::new(-1., -1., 0.),
+                    Vec3f::new(0., 0., 9.),
+                    Vec3f::new(-1., 0., 0.),
+                    Texture::Color(0xff00ff00),
+                ),
+                Triangle::new(
+                    Vec3f::new(-1., 1., 0.),
+                    Vec3f::new(-1., 0., 0.),
+                    Vec3f::new(0., 0., 9.),
+                    Texture::Color(0xff00ff00),
+                ),
+                Triangle::new(
+                    Vec3f::new(1., 0., 0.),
+                    Vec3f::new(0., 0., 9.),
+                    Vec3f::new(1., -1., 0.),
+                    Texture::Color(0xffffff00),
+                ),
+                Triangle::new(
+                    Vec3f::new(0., 0., 9.),
+                    Vec3f::new(1., 0., 0.),
+                    Vec3f::new(1., 1., 0.),
+                    Texture::Color(0xffffff00),
+                ),
+                Triangle::new(
+                    Vec3f::new(-2., -0.5, 0.),
+                    Vec3f::new(0., -0.5, 4.),
+                    Vec3f::new(-2., 0.5, 0.),
+                    Texture::Color(0xff00ffff),
+                ),
+                Triangle::new(
+                    Vec3f::new(0., -0.5, 4.),
+                    Vec3f::new(0., 0.5, 4.),
+                    Vec3f::new(-2., 0.5, 0.),
+                    Texture::Color(0xff00ffff),
+                ),
+                Triangle::new(
+                    Vec3f::new(-0.3, -0.3, 7.),
+                    Vec3f::new(0.3, -0.3, 7.),
+                    Vec3f::new(-0.3, 0.3, 7.),
+                    Texture::Color(0xffff00ff),
+                ),
+                Triangle::new(
+                    Vec3f::new(0.3, -0.3, 7.),
+                    Vec3f::new(0.3, 0.3, 7.),
+                    Vec3f::new(-0.3, 0.3, 7.),
+                    Texture::Color(0xffff00ff),
+                ),
+            ],
+        );
+    }
+    res
 }
 
 fn triangles_plane(color_mask: u32) -> Vec<Triangle> {
@@ -439,38 +500,46 @@ fn triangles_plane(color_mask: u32) -> Vec<Triangle> {
         .collect()
 }
 
-fn floor() -> Mesh {
-    Mesh {
-        triangles: triangles_plane(0xff00ffff),
-        pos: Vec3f::new(0., -10., 0.),
-        scale: 5.,
-        ..Default::default()
+fn floor() -> Arc<RwLock<Mesh>> {
+    let res = Mesh::new();
+    {
+        let mut res_w = res.write().unwrap();
+        res_w.set_triangles(&res, triangles_plane(0xff00ffff));
+        res_w.pos = Vec3f::new(0., -10., 0.);
+        res_w.scale = 5.;
     }
+    res
 }
 
-fn back_wall() -> Mesh {
-    Mesh {
-        triangles: triangles_plane(0xffffff00),
-        pos: Vec3f::new(0., 0., -30.),
-        scale: 1.,
-        rot: Rotation::from_angles(PI / 2., 0., 0.),
+fn back_wall() -> Arc<RwLock<Mesh>> {
+    let res = Mesh::new();
+    {
+        let mut res_w = res.write().unwrap();
+        res_w.set_triangles(&res, triangles_plane(0xffffff00));
+        res_w.pos = Vec3f::new(0., 0., -30.);
+        res_w.rot = Rotation::from_angles(PI / 2., 0., 0.);
     }
+    res
 }
 
-fn left_wall() -> Mesh {
-    Mesh {
-        triangles: triangles_plane(0xffff00ff),
-        pos: Vec3f::new(-10., 0., 0.),
-        scale: 1.,
-        rot: Rotation::from_angles(0., 0., -PI / 2.),
+fn left_wall() -> Arc<RwLock<Mesh>> {
+    let res = Mesh::new();
+    {
+        let mut res_w = res.write().unwrap();
+        res_w.set_triangles(&res, triangles_plane(0xffff00ff));
+        res_w.pos = Vec3f::new(-10., 0., 0.);
+        res_w.rot = Rotation::from_angles(0., 0., -PI / 2.);
     }
+    res
 }
 
-fn right_wall() -> Mesh {
-    Mesh {
-        triangles: triangles_plane(0xffff00ff),
-        pos: Vec3f::new(10., 0., 0.),
-        scale: 1.,
-        rot: Rotation::from_angles(0., 0., PI / 2.),
+fn right_wall() -> Arc<RwLock<Mesh>> {
+    let res = Mesh::new();
+    {
+        let mut res_w = res.write().unwrap();
+        res_w.set_triangles(&res, triangles_plane(0xffffffff));
+        res_w.pos = Vec3f::new(10., 0., 0.);
+        res_w.rot = Rotation::from_angles(0., 0., PI / 2.);
     }
+    res
 }

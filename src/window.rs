@@ -188,26 +188,18 @@ impl ApplicationHandler for App {
                     KeyCode::KeyS => self.world.camera.move_sight(0., 0., -1.),
                     KeyCode::KeyA => self.world.camera.move_sight(-1., 0., 0.),
                     KeyCode::KeyD => self.world.camera.move_sight(1., 0., 0.),
-                    KeyCode::ArrowLeft => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0., -0.1, 0.)),
-                    KeyCode::ArrowRight => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0., 0.1, 0.)),
-                    KeyCode::ArrowUp => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(-0.1, 0., 0.)),
-                    KeyCode::ArrowDown => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0.1, 0., 0.)),
+                    KeyCode::ArrowLeft => self.world.meshes().iter().for_each(|m| {
+                        m.write().unwrap().rot *= &Rotation::from_angles(0., -0.1, 0.)
+                    }),
+                    KeyCode::ArrowRight => self.world.meshes().iter().for_each(|m| {
+                        m.write().unwrap().rot *= &Rotation::from_angles(0., 0.1, 0.)
+                    }),
+                    KeyCode::ArrowUp => self.world.meshes().iter().for_each(|m| {
+                        m.write().unwrap().rot *= &Rotation::from_angles(-0.1, 0., 0.)
+                    }),
+                    KeyCode::ArrowDown => self.world.meshes().iter().for_each(|m| {
+                        m.write().unwrap().rot *= &Rotation::from_angles(0.1, 0., 0.)
+                    }),
                     KeyCode::Backquote => {
                         self.settings.show_vertices = !self.settings.show_vertices
                     }
