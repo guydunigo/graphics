@@ -35,18 +35,10 @@ pub struct Stats {
     // pub misc: String,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Settings {
     /// Over-print all vertices
     pub show_vertices: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            show_vertices: false,
-        }
-    }
 }
 
 /*
@@ -200,7 +192,6 @@ fn rasterize_triangle(
                 z: 0.,
             })
         })
-        // .par_bridge()
         .for_each(|pixel| {
             #[cfg(feature = "stats")]
             stats.nb_pixels_tested.fetch_add(1, Ordering::Relaxed);

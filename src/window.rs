@@ -78,8 +78,7 @@ impl Graphics {
             self.depth_color_buffer
                 .par_iter()
                 .take(tot_size)
-                // TODO: Relaxed ?
-                .for_each(|v| v.store(Self::DEFAULT_DEPTH_COLOR, Ordering::SeqCst))
+                .for_each(|v| v.store(Self::DEFAULT_DEPTH_COLOR, Ordering::Relaxed))
         } else {
             self.depth_color_buffer =
                 Self::init_buffer(tot_size, || AtomicU64::new(Self::DEFAULT_DEPTH_COLOR));
