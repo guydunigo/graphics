@@ -8,7 +8,7 @@ use std::{
     time::Instant,
 };
 
-use rayon::prelude::*;
+use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use softbuffer::{Context, Surface};
 use winit::{
     application::ApplicationHandler,
@@ -86,7 +86,6 @@ impl Graphics {
     }
 }
 
-#[derive(Default)]
 pub struct App {
     last_rendering_duration: u128,
     last_copy_buffer: u128,
@@ -96,6 +95,23 @@ pub struct App {
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
     settings: Settings,
+    threads: ThreadPool,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            last_rendering_duration: Default::default(),
+            last_copy_buffer: Default::default(),
+            graphics: Default::default(),
+            text_writer: Default::default(),
+            world: Default::default(),
+            cursor: Default::default(),
+            mouse_left_held: Default::default(),
+            settings: Default::default(),
+            threads: ThreadPoolBuilder::new().build().unwrap(),
+        }
+    }
 }
 
 impl App {
@@ -247,17 +263,19 @@ impl ApplicationHandler for App {
                 let buffers_fill = Instant::now().duration_since(buffers_fill).as_millis();
 
                 let rendering_time = Instant::now();
-                rasterize(
-                    &self.world,
-                    &gfx.depth_color_buffer,
-                    &size,
-                    &self.settings,
-                    #[cfg(feature = "stats")]
-                    &stats,
-                );
+                self.threads.install(|| {
+                    rasterize(
+                        &self.world,
+                        &gfx.depth_color_buffer,
+                        &size,
+                        &self.settings,
+                        #[cfg(feature = "stats")]
+                        &stats,
+                    );
+                });
                 let rendering_time = Instant::now().duration_since(rendering_time).as_millis();
 
-                {
+                self.threads.install(|| {
                     let cam_rot = self.world.camera.rot();
                     #[cfg(feature = "stats")]
                     let stats = format!("{:#?}", stats);
@@ -290,7 +308,7 @@ impl ApplicationHandler for App {
                     );
                     self.text_writer
                         .rasterize_par(&gfx.depth_color_buffer, size, &display[..]);
-                }
+                });
 
                 let copy_buffer = Instant::now();
                 let buffer = {
