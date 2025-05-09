@@ -5,23 +5,6 @@ use rand::RngCore;
 /// # Describing the world...
 use crate::maths::{PI, Rotation, Vec3f};
 
-const DEFAULT_COLOR: u32 = 0xff999999;
-
-#[derive(Debug, Clone, Copy)]
-pub enum Texture {
-    /// A simple color for the whole triangle
-    Color(u32),
-    /// A color per vertex in the same order :
-    VertexColor(u32, u32, u32),
-    // Texture, // TODO
-}
-
-impl Default for Texture {
-    fn default() -> Self {
-        Self::Color(DEFAULT_COLOR)
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct Triangle {
     pub p0: Vec3f,
@@ -54,11 +37,9 @@ impl Triangle {
         }
     }
 
-    /* TODO
     pub fn min_z(&self) -> f32 {
         f32::min(self.p0.z, f32::min(self.p1.z, self.p2.z))
     }
-    */
 
     fn scale_rot_move(&self, scale: f32, rot: &Rotation, move_vect: Vec3f) -> Self {
         Self {

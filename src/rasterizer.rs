@@ -8,7 +8,7 @@ use crate::{
 };
 
 const SUN_DIRECTION: Vec3f = Vec3f::new(-1., -1., -1.);
-const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
+pub const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
 #[cfg(feature = "stats")]
 #[derive(Default, Debug, Clone)]

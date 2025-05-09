@@ -4,52 +4,9 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     maths::{Vec3f, Vec4u},
+    rasterizer::{MINIMAL_AMBIANT_LIGHT, Settings},
     scene::{Camera, Mesh, Texture, Triangle, World},
 };
-
-const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
-
-#[cfg(feature = "stats")]
-#[derive(Default, Debug, Clone)]
-pub struct Stats {
-    pub nb_triangles_tot: usize,
-    pub nb_triangles_sight: usize,
-    pub nb_triangles_facing: usize,
-    pub nb_triangles_drawn: usize,
-    pub nb_pixels_tested: usize,
-    pub nb_pixels_in: usize,
-    pub nb_pixels_front: usize,
-    pub nb_pixels_written: usize,
-    // pub misc: String,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Settings {
-    /// Over-print all vertices
-    pub show_vertices: bool,
-    /// Sort triangles by point with mininum Z value
-    pub sort_triangles: TriangleSorting,
-    /// Eliminate back-facing faces early
-    pub back_face_culling: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            show_vertices: false,
-            sort_triangles: TriangleSorting::None,
-            back_face_culling: true,
-        }
-    }
-}
-
-#[derive(Default, Debug, Clone, Copy)]
-pub enum TriangleSorting {
-    #[default]
-    None,
-    BackToFront,
-    FrontToBack,
-}
 
 fn world_to_raster(
     p_world: Vec3f,
@@ -292,8 +249,6 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
     settings: &Settings,
     #[cfg(feature = "stats")] stats: &mut Stats,
 ) {
-    // TODO: paralléliser
-
     #[cfg(feature = "stats")]
     let mut nb_triangles_sight = 0;
     #[cfg(feature = "stats")]
@@ -346,12 +301,7 @@ pub fn rasterize<B: DerefMut<Target = [u32]>>(
         // Back face culling
         // If triangle normal and camera sight are in same direction (dot product > 0),
         // it's invisible.
-        .filter(|(_, _, _, p01, p20)| {
-            // Calculate only of normal z
-            let raster_normale = p01.cross(*p20);
-            // TODO: remove setting to back_face cull
-            raster_normale.z >= 0. || !settings.back_face_culling
-        })
+        .filter(|(_, _, _, p01, p20)| p01.cross_z(*p20) >= 0.)
         .inspect(|_| {
             #[cfg(feature = "stats")]
             {
