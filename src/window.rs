@@ -13,12 +13,7 @@ use winit::{
 
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
-use crate::{
-    font::TextWriter,
-    rasterizer::{Settings, TriangleSorting},
-    scene::World,
-};
-use crate::{maths::Rotation, rasterizer::rasterize};
+use crate::{font::TextWriter, maths::Rotation, rasterizer::Rasterizer, scene::World};
 
 struct Graphics {
     window: Rc<Window>,
@@ -34,7 +29,7 @@ pub struct App {
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
     depth_buffer: Vec<f32>,
-    settings: Settings,
+    rasterizer: Rasterizer,
 }
 
 impl App {
@@ -129,12 +124,11 @@ impl ApplicationHandler for App {
                         .iter_mut()
                         .for_each(|m| m.rot *= &Rotation::from_angles(0.1, 0., 0.)),
                     KeyCode::Backquote => {
-                        self.settings.show_vertices = !self.settings.show_vertices
+                        self.rasterizer.show_vertices = !self.rasterizer.show_vertices
                     }
-                    KeyCode::Digit1 => self.settings.sort_triangles = TriangleSorting::FrontToBack,
-                    KeyCode::Digit2 => self.settings.sort_triangles = TriangleSorting::BackToFront,
-                    KeyCode::Digit3 => self.settings.sort_triangles = TriangleSorting::None,
-                    // KeyCode::Digit4 => self.settings.back_face_culling = !self.settings.back_face_culling,
+                    KeyCode::Digit1 => self.rasterizer.engine.next(),
+                    KeyCode::Digit2 => self.rasterizer.sort_triangles.next(),
+                    // KeyCode::Digit4 => self.rasterizer.back_face_culling = !self.rasterizer.back_face_culling,
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
@@ -231,12 +225,11 @@ impl ApplicationHandler for App {
 
                 let rendering_time = Instant::now();
 
-                rasterize(
+                self.rasterizer.rasterize(
                     &self.world,
                     &mut buffer,
                     &mut self.depth_buffer[..],
                     &size,
-                    &self.settings,
                     #[cfg(feature = "stats")]
                     &mut stats,
                 );
@@ -268,7 +261,7 @@ impl ApplicationHandler for App {
                         cam_rot.u(),
                         cam_rot.v(),
                         cam_rot.w(),
-                        self.settings,
+                        self.rasterizer,
                         stats
                     );
                     self.text_writer.rasterize(&mut buffer, size, &display[..]);
