@@ -181,6 +181,7 @@ impl Camera {
 pub struct World {
     pub meshes: Vec<Mesh>,
     pub camera: Camera,
+    pub sun_direction: Vec3f,
 }
 
 impl Default for World {
@@ -196,6 +197,7 @@ impl Default for World {
                 right_wall(),
             ],
             camera: Default::default(),
+            sun_direction: Vec3f::new(-1., -1., -1.).normalize(),
         }
     }
 }
