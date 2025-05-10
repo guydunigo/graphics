@@ -7,8 +7,10 @@ use iterator::EngineIterator;
 use winit::dpi::PhysicalSize;
 
 use crate::{
+    font::TextWriter,
     maths::{Vec3f, Vec4u},
     scene::{Camera, Texture, Triangle, World},
+    window::App,
 };
 
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
@@ -27,13 +29,14 @@ pub struct Stats {
     // pub misc: String,
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone)]
 pub struct Rasterizer {
     /// Over-print all vertices
     pub show_vertices: bool,
     pub engine: AnyEngine,
     /// Sort triangles by point with mininum Z value
     pub sort_triangles: TriangleSorting,
+    text_writer: TextWriter,
 }
 
 impl Rasterizer {
@@ -42,7 +45,7 @@ impl Rasterizer {
         world: &World,
         buffer: &mut B,
         depth_buffer: &mut [f32],
-        size: &PhysicalSize<u32>,
+        size: PhysicalSize<u32>,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         self.engine.rasterize(
@@ -57,14 +60,7 @@ impl Rasterizer {
 }
 
 trait Engine {
-    fn rasterize<B: DerefMut<Target = [u32]>>(
-        world: &World,
-        buffer: &mut B,
-        depth_buffer: &mut [f32],
-        size: &PhysicalSize<u32>,
-        rasterizer: &Rasterizer,
-        #[cfg(feature = "stats")] stats: &mut Stats,
-    );
+    fn rasterize<B: DerefMut<Target = [u32]>>(app: &App, buffer: &mut B, size: PhysicalSize<u32>);
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -112,12 +108,7 @@ impl<T: Engine> Deref for AnyEngine {
     }
 }
 
-fn world_to_raster(
-    p_world: Vec3f,
-    cam: &Camera,
-    size: &PhysicalSize<u32>,
-    ratio_w_h: f32,
-) -> Vec3f {
+fn world_to_raster(p_world: Vec3f, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3f {
     // Camera space
     let mut p = cam.world_to_sight(p_world);
 
@@ -154,7 +145,7 @@ fn world_to_raster(
 fn world_to_raster_triangle(
     triangle: &Triangle,
     cam: &Camera,
-    size: &PhysicalSize<u32>,
+    size: PhysicalSize<u32>,
     ratio_w_h: f32,
 ) -> Triangle {
     Triangle {
@@ -174,7 +165,7 @@ struct Rect {
     pub max_z: f32,
 }
 
-fn bounding_box_triangle(t: &Triangle, size: &PhysicalSize<u32>) -> Rect {
+fn bounding_box_triangle(t: &Triangle, size: PhysicalSize<u32>) -> Rect {
     Rect {
         min_x: (f32::min(f32::min(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1),
         max_x: (f32::max(f32::max(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1),
@@ -190,7 +181,7 @@ fn edge_function(ab: Vec3f, ap: Vec3f) -> f32 {
     ap.x * ab.y - ap.y * ab.x
 }
 
-fn buffer_index(p: Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
+fn buffer_index(p: Vec3f, size: PhysicalSize<u32>) -> Option<usize> {
     if p.x >= 0. && p.x < (size.width as f32) && p.y >= 0. && p.y < (size.height as f32) {
         Some(p.x as usize + p.y as usize * size.width as usize)
     } else {
@@ -200,7 +191,7 @@ fn buffer_index(p: Vec3f, size: &PhysicalSize<u32>) -> Option<usize> {
 
 fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
     buffer: &mut B,
-    size: &PhysicalSize<u32>,
+    size: PhysicalSize<u32>,
     v: Vec3f,
     texture: &Texture,
 ) {

@@ -78,22 +78,6 @@ impl App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::RedrawRequested => {
-                let frame_start_time = Instant::now();
-
-                #[cfg(feature = "stats")]
-                let stats = Stats::default();
-
-                // Redraw the application.
-                //
-                // It's preferable for applications that do not render continuously to render in
-                // this event rather than in AboutToWait, since rendering in here allows
-                // the program to gracefully handle redraws requested by the OS.
-
-                let gfx = self.graphics.as_mut().unwrap();
-
-                // Draw.
-                let size = gfx.window.inner_size();
-
                 let buffers_fill = Instant::now();
                 gfx.resize();
                 let buffers_fill = Instant::now().duration_since(buffers_fill).as_millis();
@@ -167,21 +151,8 @@ impl App {
 
                     buffer
                 };
+
                 self.last_copy_buffer = Instant::now().duration_since(copy_buffer).as_millis();
-
-                buffer
-                    .present()
-                    .expect("Failed to present the softbuffer buffer");
-
-                // Queue a RedrawRequested event.
-                //
-                // You only need to call this if you've determined that you need to redraw in
-                // applications which do not always need to. Applications that redraw continuously
-                // can render here instead.
-                gfx.window.request_redraw();
-
-                self.last_rendering_duration =
-                    Instant::now().duration_since(frame_start_time).as_millis();
             }
             _ => (),
         }

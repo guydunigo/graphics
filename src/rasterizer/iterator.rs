@@ -1,18 +1,17 @@
 /// From original, but splitting the rasterize_triangle function tu have cleaner
 /// iterator steps.
-use std::ops::DerefMut;
+use std::{ops::DerefMut, time::Instant};
 
 use winit::dpi::PhysicalSize;
 
 use crate::{
     maths::{Vec3f, Vec4u},
-    rasterizer::{MINIMAL_AMBIANT_LIGHT, Rasterizer},
-    scene::{Mesh, Texture, Triangle, World},
-};
-
-use super::{
-    Engine, Rect, bounding_box_triangle, draw_vertice_basic, edge_function,
-    world_to_raster_triangle,
+    rasterizer::{
+        MINIMAL_AMBIANT_LIGHT, Rasterizer, Rect, bounding_box_triangle, draw_vertice_basic,
+        edge_function, world_to_raster_triangle,
+    },
+    scene::{DEFAULT_BACKGROUND_COLOR, Mesh, Texture, Triangle, World},
+    window::App,
 };
 
 #[derive(Default, Debug, Clone)]
@@ -20,141 +19,210 @@ pub struct EngineIterator {
     depth_buffer: Vec<f32>,
 }
 
-impl Engine for EngineIterator {
-    fn rasterize<B: DerefMut<Target = [u32]>>(
-        world: &World,
+impl EngineIterator {
+    fn clean_buffers<B: DerefMut<Target = [u32]>>(
         buffer: &mut B,
-        depth_buffer: &mut [f32],
-        size: &PhysicalSize<u32>,
-        rasterizer: &Rasterizer,
-        #[cfg(feature = "stats")] stats: &mut Stats,
+        depth_buffer: &mut Vec<f32>,
+        size: PhysicalSize<u32>,
+    ) -> u128 {
+        let t = Instant::now();
+        buffer.fill(DEFAULT_BACKGROUND_COLOR);
+
+        depth_buffer.resize(size.width as usize * size.height as usize, f32::INFINITY);
+        depth_buffer.fill(f32::INFINITY);
+
+        Instant::now().duration_since(t).as_millis()
+    }
+
+    fn rasterize<B: DerefMut<Target = [u32]>>(
+        &mut self,
+        app: &App,
+        buffer: &mut B,
+        size: PhysicalSize<u32>,
     ) {
-        #[cfg(feature = "stats")]
-        let mut nb_triangles_sight = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_triangles_tot = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_triangles_facing = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_triangles_drawn = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_tested = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_in = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_front = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_written = 0;
+        let buffer_fill = Self::clean_buffers(buffer, &mut self.depth_buffer, size);
 
-        let ratio_w_h = size.width as f32 / size.height as f32;
+        let rendering_time = Instant::now();
 
-        world
-            .meshes
-            .iter()
-            .flat_map(Mesh::to_world_triangles)
-            .inspect(|_| {
-                #[cfg(feature = "stats")]
-                {
-                    nb_triangles_tot += 1;
-                }
-            })
-            .map(|t| {
-                // TODO: explode ?
-                let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
-                (t, t_raster, bounding_box_triangle(&t_raster, size))
-            })
-            .filter(|(_, _, bb)| {
-                // TODO: max_z >= MAX_DEPTH ?
-                !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
-            })
-            .inspect(|_| {
-                #[cfg(feature = "stats")]
-                {
-                    nb_triangles_sight += 1;
-                }
-            })
-            .map(|(t, t_raster, bb)| {
-                let p01 = t_raster.p1 - t_raster.p0;
-                let p20 = t_raster.p0 - t_raster.p2;
-                (t, t_raster, bb, p01, p20)
-            })
-            ////////////////////////////////
-            // Back face culling
-            // If triangle normal and camera sight are in same direction (dot product > 0),
-            // it's invisible.
-            .filter(|(_, _, _, p01, p20)| p01.cross_z(*p20) >= 0.)
-            .inspect(|_| {
-                #[cfg(feature = "stats")]
-                {
-                    nb_triangles_facing += 1;
-                }
-            })
-            ////////////////////////////////
-            // Sunlight
-            // Dot product gives negative if two vectors are opposed, so we compare light
-            // vector to face normal vector to see if they are opposed (face is lit).
-            //
-            // Also simplifying colours.
-            .map(|(t, mut t_raster, bb, p01, p20)| {
-                let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
-                let light = world
-                    .sun_direction
-                    .dot(triangle_normal)
-                    .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
+        rasterize_world(
+            &app.rasterizer,
+            &app.world,
+            buffer,
+            &mut self.depth_buffer[..],
+            size,
+            #[cfg(feature = "stats")]
+            stats,
+        );
 
-                // If a `Texture::VertexColor` has the same color for all vertices, then we can
-                // consider it like a `Texture::Color`.
-                if let Texture::VertexColor(c0, c1, c2) = t_raster.texture {
-                    if c0 == c1 && c1 == c2 {
-                        t_raster.texture = Texture::Color(c0);
-                    }
-                }
-
-                if let Texture::Color(col) = t_raster.texture {
-                    t_raster.texture =
-                        Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
-                }
-
-                (t_raster, bb, light, p01, p20)
-            })
-            .for_each(|(mut t_raster, bb, light, p01, p20)| {
-                rasterize_triangle(
-                    &mut t_raster,
-                    buffer,
-                    depth_buffer,
-                    world.camera.z_near,
-                    size,
-                    rasterizer,
-                    #[cfg(feature = "stats")]
-                    stats,
-                    &bb,
-                    light,
-                    p01,
-                    p20,
-                )
-            });
-
-        #[cfg(feature = "stats")]
         {
-            stats.nb_triangles_tot += nb_triangles_tot;
-            stats.nb_triangles_sight += nb_triangles_sight;
-            stats.nb_triangles_facing += nb_triangles_facing;
-            stats.nb_triangles_drawn += nb_triangles_drawn;
-            stats.nb_pixels_tested += nb_pixels_tested;
-            stats.nb_pixels_in += nb_pixels_in;
-            stats.nb_pixels_front += nb_pixels_front;
-            stats.nb_pixels_written += nb_pixels_written;
+            let cam_rot = app.world.camera.rot();
+            #[cfg(feature = "stats")]
+            let stats = format!("{:#?}", stats);
+            #[cfg(not(feature = "stats"))]
+            let stats = "Stats disabled";
+            let display = format!(
+                "fps : {} | {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{}",
+                (1000. / app.last_rendering_duration as f32).round(),
+                buffer_fill,
+                Instant::now().duration_since(rendering_time).as_millis(),
+                app.last_rendering_duration,
+                app.cursor
+                    .and_then(|cursor| buffer
+                        .get(cursor.x as usize + cursor.y as usize * size.width as usize)
+                        .map(|c| format!(
+                            "\n({},{}) 0x{:x}",
+                            cursor.x.floor(),
+                            cursor.y.floor(),
+                            c
+                        )))
+                    .unwrap_or(String::from("\nNo cursor position")),
+                app.world.camera.pos,
+                cam_rot.u(),
+                cam_rot.v(),
+                cam_rot.w(),
+                app.rasterizer,
+                stats
+            );
+            app.rasterizer
+                .text_writer
+                .rasterize(buffer, size, &display[..]);
         }
     }
 }
 
+fn rasterize_world<B: DerefMut<Target = [u32]>>(
+    rasterizer: &Rasterizer,
+    world: &World,
+    buffer: &mut B,
+    depth_buffer: &mut [f32],
+    size: PhysicalSize<u32>,
+    #[cfg(feature = "stats")] stats: &mut Stats,
+) {
+    #[cfg(feature = "stats")]
+    let mut nb_triangles_sight = 0;
+    #[cfg(feature = "stats")]
+    let mut nb_triangles_tot = 0;
+    #[cfg(feature = "stats")]
+    let mut nb_triangles_facing = 0;
+    #[cfg(feature = "stats")]
+    let mut nb_triangles_drawn = 0;
+    #[cfg(feature = "stats")]
+    let mut nb_pixels_tested = 0;
+    #[cfg(feature = "stats")]
+    let mut nb_pixels_in = 0;
+    #[cfg(feature = "stats")]
+    let mut nb_pixels_front = 0;
+    #[cfg(feature = "stats")]
+    let mut nb_pixels_written = 0;
+
+    let ratio_w_h = size.width as f32 / size.height as f32;
+
+    world
+        .meshes
+        .iter()
+        .flat_map(Mesh::to_world_triangles)
+        .inspect(|_| {
+            #[cfg(feature = "stats")]
+            {
+                nb_triangles_tot += 1;
+            }
+        })
+        .map(|t| {
+            // TODO: explode ?
+            let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
+            (t, t_raster, bounding_box_triangle(&t_raster, size))
+        })
+        .filter(|(_, _, bb)| {
+            // TODO: max_z >= MAX_DEPTH ?
+            !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
+        })
+        .inspect(|_| {
+            #[cfg(feature = "stats")]
+            {
+                nb_triangles_sight += 1;
+            }
+        })
+        .map(|(t, t_raster, bb)| {
+            let p01 = t_raster.p1 - t_raster.p0;
+            let p20 = t_raster.p0 - t_raster.p2;
+            (t, t_raster, bb, p01, p20)
+        })
+        ////////////////////////////////
+        // Back face culling
+        // If triangle normal and camera sight are in same direction (dot product > 0),
+        // it's invisible.
+        .filter(|(_, _, _, p01, p20)| p01.cross_z(*p20) >= 0.)
+        .inspect(|_| {
+            #[cfg(feature = "stats")]
+            {
+                nb_triangles_facing += 1;
+            }
+        })
+        ////////////////////////////////
+        // Sunlight
+        // Dot product gives negative if two vectors are opposed, so we compare light
+        // vector to face normal vector to see if they are opposed (face is lit).
+        //
+        // Also simplifying colours.
+        .map(|(t, mut t_raster, bb, p01, p20)| {
+            let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
+            let light = world
+                .sun_direction
+                .dot(triangle_normal)
+                .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
+
+            // If a `Texture::VertexColor` has the same color for all vertices, then we can
+            // consider it like a `Texture::Color`.
+            if let Texture::VertexColor(c0, c1, c2) = t_raster.texture {
+                if c0 == c1 && c1 == c2 {
+                    t_raster.texture = Texture::Color(c0);
+                }
+            }
+
+            if let Texture::Color(col) = t_raster.texture {
+                t_raster.texture =
+                    Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
+            }
+
+            (t_raster, bb, light, p01, p20)
+        })
+        .for_each(|(mut t_raster, bb, light, p01, p20)| {
+            rasterize_triangle(
+                rasterizer,
+                &mut t_raster,
+                buffer,
+                depth_buffer,
+                world.camera.z_near,
+                size,
+                #[cfg(feature = "stats")]
+                stats,
+                &bb,
+                light,
+                p01,
+                p20,
+            )
+        });
+
+    #[cfg(feature = "stats")]
+    {
+        stats.nb_triangles_tot += nb_triangles_tot;
+        stats.nb_triangles_sight += nb_triangles_sight;
+        stats.nb_triangles_facing += nb_triangles_facing;
+        stats.nb_triangles_drawn += nb_triangles_drawn;
+        stats.nb_pixels_tested += nb_pixels_tested;
+        stats.nb_pixels_in += nb_pixels_in;
+        stats.nb_pixels_front += nb_pixels_front;
+        stats.nb_pixels_written += nb_pixels_written;
+    }
+}
+
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
+    rasterizer: &Rasterizer,
     tri_raster: &mut Triangle,
     buffer: &mut B,
     depth_buffer: &mut [f32],
     z_near: f32,
-    size: &PhysicalSize<u32>,
-    rasterizer: &Rasterizer,
+    size: PhysicalSize<u32>,
     #[cfg(feature = "stats")] stats: &mut Stats,
     bb: &Rect,
     light: f32,

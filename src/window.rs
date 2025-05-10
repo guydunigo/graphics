@@ -15,7 +15,7 @@ use winit::{
 use crate::rasterizer::Stats;
 use crate::{font::TextWriter, maths::Rotation, rasterizer::Rasterizer, scene::World};
 
-struct WindowSurface {
+pub struct WindowSurface {
     window: Rc<Window>,
     surface: Surface<Rc<Window>, Rc<Window>>,
 }
@@ -34,17 +34,20 @@ impl WindowSurface {
 
         WindowSurface { window, surface }
     }
+
+    pub fn surface(&self) -> &Surface<Rc<Window>, Rc<Window>> {
+        &self.surface
+    }
 }
 
 #[derive(Default)]
 pub struct App {
-    last_rendering_duration: u128,
     window_surface: Option<WindowSurface>,
-    text_writer: TextWriter,
-    world: World,
-    cursor: Option<PhysicalPosition<f64>>,
+    pub world: World,
+    pub cursor: Option<PhysicalPosition<f64>>,
+    pub rasterizer: Rasterizer,
+    pub last_rendering_duration: u128,
     mouse_left_held: bool,
-    rasterizer: Rasterizer,
 }
 
 impl App {
@@ -213,6 +216,7 @@ impl ApplicationHandler for App {
 
                 // Draw.
                 let size = window_surface.window.inner_size();
+
                 {
                     let (Some(width), Some(height)) =
                         (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
@@ -221,70 +225,17 @@ impl ApplicationHandler for App {
                     };
 
                     window_surface
-                        .surface
+                        .surface()
                         .resize(width, height)
                         .expect("Failed to resize the softbuffer surface");
                 }
 
                 let mut buffer = window_surface
-                    .surface
+                    .surface()
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
 
-                // Fill a buffer with a solid color
-                let t = Instant::now();
-                buffer.fill(0xff181818);
-                let buffer_fill = Instant::now().duration_since(t).as_millis();
-
-                self.depth_buffer
-                    .resize(size.width as usize * size.height as usize, f32::INFINITY);
-                let t = Instant::now();
-                self.depth_buffer.fill(f32::INFINITY);
-                let depth_buffer_fill = Instant::now().duration_since(t).as_millis();
-
-                let rendering_time = Instant::now();
-
-                self.rasterizer.rasterize(
-                    &self.world,
-                    &mut buffer,
-                    &mut self.depth_buffer[..],
-                    &size,
-                    #[cfg(feature = "stats")]
-                    &mut stats,
-                );
-
-                {
-                    let cam_rot = self.world.camera.rot();
-                    #[cfg(feature = "stats")]
-                    let stats = format!("{:#?}", stats);
-                    #[cfg(not(feature = "stats"))]
-                    let stats = "Stats disabled";
-                    let display = format!(
-                        "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{}",
-                        (1000. / self.last_rendering_duration as f32).round(),
-                        buffer_fill,
-                        depth_buffer_fill,
-                        Instant::now().duration_since(rendering_time).as_millis(),
-                        self.last_rendering_duration,
-                        self.cursor
-                            .and_then(|cursor| buffer
-                                .get(cursor.x as usize + cursor.y as usize * size.width as usize)
-                                .map(|c| format!(
-                                    "\n({},{}) 0x{:x}",
-                                    cursor.x.floor(),
-                                    cursor.y.floor(),
-                                    c
-                                )))
-                            .unwrap_or(String::from("\nNo cursor position")),
-                        self.world.camera.pos,
-                        cam_rot.u(),
-                        cam_rot.v(),
-                        cam_rot.w(),
-                        self.rasterizer,
-                        stats
-                    );
-                    self.text_writer.rasterize(&mut buffer, size, &display[..]);
-                }
+                self.rasterizer.rasterize(&self.world, buffer);
 
                 buffer
                     .present()

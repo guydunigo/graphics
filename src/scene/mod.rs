@@ -10,6 +10,8 @@ mod mesh_library;
 
 use crate::maths::Vec3f;
 
+pub const DEFAULT_BACKGROUND_COLOR: u32 = 0xff181818;
+
 #[derive(Debug, Clone)]
 pub struct World {
     pub meshes: Vec<Mesh>,

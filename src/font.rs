@@ -8,6 +8,7 @@ const PX: f32 = 12.;
 const BASE_X: usize = 3;
 const BASE_Y: usize = 3;
 
+#[derive(Debug, Clone)]
 pub struct TextWriter {
     font: Font,
 }
