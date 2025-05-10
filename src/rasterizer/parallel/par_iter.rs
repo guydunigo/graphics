@@ -12,12 +12,15 @@ use winit::dpi::PhysicalSize;
 use crate::{
     font::TextWriter,
     maths::{Vec3f, Vec4u},
-    rasterizer::{Engine, MINIMAL_AMBIANT_LIGHT, settings::Settings},
-    scene::Texture,
+    rasterizer::{
+        Engine, MINIMAL_AMBIANT_LIGHT, Rect, bounding_box_triangle, buffer_index, edge_function,
+        settings::Settings, world_to_raster_triangle,
+    },
+    scene::{Texture, Triangle},
     window::AppObserver,
 };
 
-use super::scene::{Camera, Triangle, World};
+use super::scene::World;
 
 const DEPTH_PRECISION: f32 = 2048.;
 
@@ -153,88 +156,6 @@ pub struct Stats {
     // pub misc: String,
 }
 
-fn world_to_raster(p_world: Vec3f, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3f {
-    // Camera space
-    let mut p = cam.world_to_sight(p_world);
-
-    // Screen space : perspective correct
-    if p.z < -0.001 {
-        p.x *= cam.z_near / -p.z;
-        p.y *= cam.z_near / -p.z;
-    } else {
-        // TODO: 0 divide getting too near the camera and reversing problem behind...
-        p.x *= cam.z_near / 0.1;
-        p.y *= cam.z_near / 0.1;
-    };
-    p.z = -p.z;
-
-    // Near-Clipping-Plane
-    // [-1,1]
-    p.x /= cam.canvas_side;
-    p.y /= cam.canvas_side;
-
-    if size.width > size.height {
-        p.x /= ratio_w_h;
-    } else {
-        p.y *= ratio_w_h;
-    }
-
-    // Raster space
-    // [0,1]
-    p.x = (p.x + 1.) / 2. * (size.width as f32);
-    p.y = (1. - p.y) / 2. * (size.height as f32);
-
-    p
-}
-
-pub fn world_to_raster_triangle(
-    triangle: &Triangle,
-    cam: &Camera,
-    size: PhysicalSize<u32>,
-    ratio_w_h: f32,
-) -> Triangle {
-    Triangle {
-        p0: world_to_raster(triangle.p0, cam, size, ratio_w_h),
-        p1: world_to_raster(triangle.p1, cam, size, ratio_w_h),
-        p2: world_to_raster(triangle.p2, cam, size, ratio_w_h),
-        texture: triangle.texture,
-        mesh: triangle.mesh.clone(),
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Rect {
-    pub min_x: u32,
-    pub min_y: u32,
-    pub max_x: u32,
-    pub max_y: u32,
-    pub max_z: f32,
-}
-
-fn bounding_box_triangle(t: &Triangle, size: PhysicalSize<u32>) -> Rect {
-    Rect {
-        min_x: (f32::min(f32::min(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1),
-        max_x: (f32::max(f32::max(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1),
-        min_y: (f32::min(f32::min(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1),
-        max_y: (f32::max(f32::max(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1),
-        max_z: f32::max(f32::max(t.p0.z, t.p1.z), t.p2.z),
-    }
-}
-
-// Calculates the area of the parallelogram from vectors ab and ap
-// Positive if p is "right" of ab
-fn edge_function(ab: Vec3f, ap: Vec3f) -> f32 {
-    ap.x * ab.y - ap.y * ab.x
-}
-
-fn buffer_index(p: Vec3f, size: PhysicalSize<u32>) -> Option<usize> {
-    if p.x >= 0. && p.x < (size.width as f32) && p.y >= 0. && p.y < (size.height as f32) {
-        Some(p.x as usize + p.y as usize * size.width as usize)
-    } else {
-        None
-    }
-}
-
 fn draw_vertice_basic(
     depth_color_buffer: &[AtomicU64],
     size: PhysicalSize<u32>,
@@ -260,6 +181,101 @@ fn draw_vertice_basic(
             depth_color_buffer[i + (size.width as usize)].store(color, Ordering::Relaxed);
         }
     }
+}
+
+pub fn rasterize_world(
+    settings: &Settings,
+    world: &World,
+    depth_color_buffer: &[AtomicU64],
+    size: PhysicalSize<u32>,
+    #[cfg(feature = "stats")] stats: &Stats,
+) {
+    let ratio_w_h = size.width as f32 / size.height as f32;
+
+    world
+        .triangles()
+        .par_iter()
+        .filter_map(|t| t.upgrade())
+        .filter_map(|t| t.to_world())
+        .inspect(|_| {
+            #[cfg(feature = "stats")]
+            stats.nb_triangles_tot.fetch_add(1, Ordering::Relaxed);
+        })
+        .map(|t| {
+            // TODO: explode ?
+            let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
+            let bb = bounding_box_triangle(&t_raster, size);
+            (t, t_raster, bb)
+        })
+        .filter(|(_, _, bb)| {
+            // TODO: max_z >= MAX_DEPTH ?
+            !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
+        })
+        .inspect(|_| {
+            #[cfg(feature = "stats")]
+            stats.nb_triangles_sight.fetch_add(1, Ordering::Relaxed);
+        })
+        .map(|(t, t_raster, bb)| {
+            let p01 = t_raster.p1 - t_raster.p0;
+            let p20 = t_raster.p0 - t_raster.p2;
+            (t, t_raster, bb, p01, p20)
+        })
+        ////////////////////////////////
+        // Back face culling
+        // If triangle normal and camera sight are in same direction (dot product > 0),
+        // it's invisible.
+        .filter(|(_, _, _, p01, p20)| {
+            // Calculate only of normal z
+            let raster_normale = p01.cross(*p20);
+            raster_normale.z >= 0.
+        })
+        .inspect(|_| {
+            #[cfg(feature = "stats")]
+            stats.nb_triangles_facing.fetch_add(1, Ordering::Relaxed);
+        })
+        ////////////////////////////////
+        // Sunlight
+        // Dot product gives negative if two vectors are opposed, so we compare light
+        // vector to face normal vector to see if they are opposed (face is lit).
+        //
+        // Also simplifying colours.
+        .map(|(t, mut t_raster, bb, p01, p20)| {
+            let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
+            let light = world
+                .sun_direction
+                .dot(triangle_normal)
+                .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
+
+            // If a `Texture::VertexColor` has the same color for all vertices, then we can
+            // consider it like a `Texture::Color`.
+            if let Texture::VertexColor(c0, c1, c2) = t_raster.texture {
+                if c0 == c1 && c1 == c2 {
+                    t_raster.texture = Texture::Color(c0);
+                }
+            }
+
+            if let Texture::Color(col) = t_raster.texture {
+                t_raster.texture =
+                    Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
+            }
+
+            (t_raster, bb, light, p01, p20)
+        })
+        .for_each(|(t_raster, bb, light, p01, p20)| {
+            rasterize_triangle(
+                &t_raster,
+                depth_color_buffer,
+                world.camera.z_near,
+                size,
+                settings,
+                #[cfg(feature = "stats")]
+                stats,
+                &bb,
+                light,
+                p01,
+                p20,
+            )
+        });
 }
 
 fn rasterize_triangle(
@@ -373,99 +389,4 @@ fn rasterize_triangle(
         draw_vertice_basic(depth_color_buffer, size, tri_raster.p1, &tri_raster.texture);
         draw_vertice_basic(depth_color_buffer, size, tri_raster.p2, &tri_raster.texture);
     }
-}
-
-pub fn rasterize_world(
-    settings: &Settings,
-    world: &World,
-    depth_color_buffer: &[AtomicU64],
-    size: PhysicalSize<u32>,
-    #[cfg(feature = "stats")] stats: &Stats,
-) {
-    let ratio_w_h = size.width as f32 / size.height as f32;
-
-    world
-        .triangles()
-        .par_iter()
-        .filter_map(|t| t.upgrade())
-        .filter_map(|t| t.to_world())
-        .inspect(|_| {
-            #[cfg(feature = "stats")]
-            stats.nb_triangles_tot.fetch_add(1, Ordering::Relaxed);
-        })
-        .map(|t| {
-            // TODO: explode ?
-            let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
-            let bb = bounding_box_triangle(&t_raster, size);
-            (t, t_raster, bb)
-        })
-        .filter(|(_, _, bb)| {
-            // TODO: max_z >= MAX_DEPTH ?
-            !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
-        })
-        .inspect(|_| {
-            #[cfg(feature = "stats")]
-            stats.nb_triangles_sight.fetch_add(1, Ordering::Relaxed);
-        })
-        .map(|(t, t_raster, bb)| {
-            let p01 = t_raster.p1 - t_raster.p0;
-            let p20 = t_raster.p0 - t_raster.p2;
-            (t, t_raster, bb, p01, p20)
-        })
-        ////////////////////////////////
-        // Back face culling
-        // If triangle normal and camera sight are in same direction (dot product > 0),
-        // it's invisible.
-        .filter(|(_, _, _, p01, p20)| {
-            // Calculate only of normal z
-            let raster_normale = p01.cross(*p20);
-            raster_normale.z >= 0.
-        })
-        .inspect(|_| {
-            #[cfg(feature = "stats")]
-            stats.nb_triangles_facing.fetch_add(1, Ordering::Relaxed);
-        })
-        ////////////////////////////////
-        // Sunlight
-        // Dot product gives negative if two vectors are opposed, so we compare light
-        // vector to face normal vector to see if they are opposed (face is lit).
-        //
-        // Also simplifying colours.
-        .map(|(t, mut t_raster, bb, p01, p20)| {
-            let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
-            let light = world
-                .sun_direction
-                .dot(triangle_normal)
-                .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
-
-            // If a `Texture::VertexColor` has the same color for all vertices, then we can
-            // consider it like a `Texture::Color`.
-            if let Texture::VertexColor(c0, c1, c2) = t_raster.texture {
-                if c0 == c1 && c1 == c2 {
-                    t_raster.texture = Texture::Color(c0);
-                }
-            }
-
-            if let Texture::Color(col) = t_raster.texture {
-                t_raster.texture =
-                    Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
-            }
-
-            (t_raster, bb, light, p01, p20)
-        })
-        .for_each(|(t_raster, bb, light, p01, p20)| {
-            rasterize_triangle(
-                &t_raster,
-                depth_color_buffer,
-                world.camera.z_near,
-                size,
-                settings,
-                #[cfg(feature = "stats")]
-                stats,
-                &bb,
-                light,
-                p01,
-                p20,
-            )
-        });
 }

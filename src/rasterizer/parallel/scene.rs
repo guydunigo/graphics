@@ -5,69 +5,39 @@ use rand::RngCore;
 
 use crate::{
     maths::{PI, Rotation, Vec3f},
-    scene::Texture,
+    scene::{Camera, Texture, Triangle},
 };
 
-#[derive(Debug, Clone)]
-pub struct Triangle {
-    pub p0: Vec3f,
-    pub p1: Vec3f,
-    pub p2: Vec3f,
-    pub texture: Texture,
+#[derive(Default, Debug, Clone)]
+pub struct ParTriangle {
+    pub triangle: Triangle,
     pub mesh: Weak<RwLock<Mesh>>,
 }
 
-impl Default for Triangle {
-    fn default() -> Self {
-        Self {
-            p0: Vec3f::new(0., 1., -2.),
-            p1: Vec3f::new(0., 0., 0.),
-            p2: Vec3f::new(0., 0., -4.),
-            texture: Texture::VertexColor(0xffff0000, 0xff00ff00, 0xff0000ff),
-            mesh: Default::default(),
-        }
-    }
-}
-
-impl Triangle {
-    pub fn new(p0: Vec3f, p1: Vec3f, p2: Vec3f, texture: Texture) -> Self {
-        Triangle {
-            p0,
-            p1,
-            p2,
-            texture,
-            ..Default::default()
-        }
-    }
-
-    pub fn min_z(&self) -> f32 {
-        f32::min(self.p0.z, f32::min(self.p1.z, self.p2.z))
-    }
-
-    fn scale_rot_move(&self, scale: f32, rot: &Rotation, move_vect: Vec3f) -> Self {
-        Self {
-            p0: self.p0.scale_rot_move(scale, rot, move_vect),
-            p1: self.p1.scale_rot_move(scale, rot, move_vect),
-            p2: self.p2.scale_rot_move(scale, rot, move_vect),
-            texture: self.texture,
-            ..Default::default()
-        }
-    }
-
+impl ParTriangle {
     /// Returns the projection of the triangle given the meshes position and rotation and scale.
     ///
     /// If the mesh isn't present, returns `None`.
-    pub fn to_world(&self) -> Option<Self> {
+    pub fn to_world(&self) -> Option<Triangle> {
         self.mesh.upgrade().map(|m| {
             let m = m.read().unwrap();
-            self.scale_rot_move(m.scale, &m.rot, m.pos)
+            self.triangle.scale_rot_move(m.scale, &m.rot, m.pos)
         })
+    }
+}
+
+impl From<Triangle> for ParTriangle {
+    fn from(triangle: Triangle) -> Self {
+        ParTriangle {
+            triangle,
+            ..Default::default()
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Mesh {
-    triangles: Vec<Arc<Triangle>>,
+    triangles: Vec<Arc<ParTriangle>>,
     pub pos: Vec3f,
     pub rot: Rotation,
     pub scale: f32,
@@ -93,89 +63,19 @@ impl Mesh {
     pub fn set_triangles(&mut self, me: &Arc<RwLock<Mesh>>, mut ts: Vec<Triangle>) {
         self.triangles = ts
             .drain(..)
-            .map(|mut t| {
-                t.mesh = Arc::downgrade(me);
-                Arc::new(t)
+            .map(|t| {
+                let mut par_tri = ParTriangle::from(t);
+                par_tri.mesh = Arc::downgrade(me);
+                Arc::new(par_tri)
             })
             .collect();
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Camera {
-    pub pos: Vec3f,
-    pub z_near: f32,
-    pub canvas_side: f32,
-    /// Rotation matrix that will turn objects based on sight.
-    /// It is made of opposite angles : if I turn to the left,
-    /// the objects move to the right in my vision.
-    ///
-    /// This is the inverse of the actual rotation matrix of the camera "object" : `rot * sight_rot == identity`. See [`rot()`]
-    ///
-    /// We store this one because it is easier to manipulate and more used.
-    sight_rot: Rotation,
-}
-
-impl Default for Camera {
-    fn default() -> Self {
-        Self {
-            pos: Vec3f::new(1., 1., 12.),
-            z_near: 0.5,
-            canvas_side: 0.1,
-            sight_rot: Default::default(),
-        }
-    }
-}
-
-impl Camera {
-    const MOVE_STEP: f32 = 0.1;
-    const ROT_STEP: f32 = 0.001;
-
-    /// Rotation of the camera "object".
-    ///
-    /// The camera points towards `-rot().w` and the "up" is `rot().v`.
-    ///
-    /// It is calculated from [`sight_rot`] (inverse matrix), because it is only needed for
-    /// movement.
-    pub fn rot(&self) -> Rotation {
-        self.sight_rot().inv()
-    }
-
-    pub fn sight_rot(&self) -> &Rotation {
-        &self.sight_rot
-    }
-
-    pub fn reset_rot(&mut self) {
-        self.sight_rot = Default::default();
-    }
-
-    pub fn rotate_from_mouse(&mut self, delta_x: f32, delta_y: f32) {
-        // Objects rotate opposite direction from camera, so double negative.
-        self.sight_rot = Rotation::from_angles(0., delta_x * Self::ROT_STEP, 0.)
-            * &self.sight_rot
-            * &Rotation::from_angles(delta_y * Self::ROT_STEP, 0., 0.);
-    }
-
-    /// Move along view direction
-    /// `delta_x` : left->right
-    /// `delta_y` : bottom->up
-    /// `delta_z` : back->forward
-    ///
-    /// Z goes backwards so we reverse it.
-    pub fn move_sight(&mut self, delta_x: f32, delta_y: f32, delta_z: f32) {
-        let rot = self.rot();
-        self.pos += (rot.u() * delta_x + rot.v() * delta_y - rot.w() * delta_z) * Self::MOVE_STEP;
-    }
-
-    pub fn world_to_sight(&self, point: Vec3f) -> Vec3f {
-        (point - self.pos) * &self.sight_rot
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct World {
     meshes: Vec<Arc<RwLock<Mesh>>>,
-    triangles: Vec<Weak<Triangle>>,
+    triangles: Vec<Weak<ParTriangle>>,
     pub camera: Camera,
     pub sun_direction: Vec3f,
 }
@@ -185,7 +85,7 @@ impl World {
         &self.meshes
     }
 
-    pub fn triangles(&self) -> &Vec<Weak<Triangle>> {
+    pub fn triangles(&self) -> &Vec<Weak<ParTriangle>> {
         &self.triangles
     }
 }
@@ -232,15 +132,14 @@ mod obj {
         sync::{Arc, RwLock},
     };
 
-    use obj::raw::{
-        material::MtlColor,
-        object::{Group, Polygon},
-        parse_mtl, parse_obj,
+    use obj::raw::{material::MtlColor, parse_mtl, parse_obj};
+
+    use crate::{
+        maths::Vec3f,
+        scene::obj_file::{find_mtl_texture, polygon_to_triangle},
     };
 
-    use crate::maths::Vec3f;
-
-    use super::{Mesh, Texture, Triangle};
+    use super::{Mesh, Texture};
 
     // TODO: better error handling
     pub fn import_triangles_and_diffuse<P: AsRef<Path>>(obj_path: P) -> Arc<RwLock<Mesh>> {
@@ -263,7 +162,7 @@ mod obj {
         let mut triangles = Vec::with_capacity(obj.polygons.len());
         for (poly_index, poly) in obj.polygons.iter().enumerate() {
             let texture = find_mtl_texture(&obj.meshes, &mtls, poly_index).unwrap_or_default();
-            triangles.push(polygon_to_triangle(&obj.positions[..], texture, poly));
+            triangles.push(polygon_to_triangle(&obj.positions[..], texture, poly).into());
         }
 
         let res = Mesh::new();
@@ -319,46 +218,6 @@ mod obj {
         }
 
         mtls
-    }
-
-    fn find_mtl_texture(
-        meshes: &HashMap<String, Group>,
-        materials: &HashMap<String, Texture>,
-        polygon_index: usize,
-    ) -> Option<Texture> {
-        meshes
-            .iter()
-            .find_map(|(mtl_name, grp)| {
-                grp.polygons
-                    .iter()
-                    .find(|range| polygon_index >= range.start && polygon_index < range.end)
-                    .map(|_| mtl_name)
-            })
-            .and_then(|mtl_name| materials.get(mtl_name).copied())
-    }
-
-    fn polygon_to_triangle(
-        positions: &[(f32, f32, f32, f32)],
-        texture: Texture,
-        poly: &Polygon,
-    ) -> Triangle {
-        let map = |pos_index: usize| -> Vec3f {
-            let (x, y, z, _) = positions[pos_index];
-            Vec3f::new(x, y, z)
-        };
-
-        match poly {
-            Polygon::P(vec) if vec.len() == 3 => {
-                Triangle::new(map(vec[0]), map(vec[1]), map(vec[2]), texture)
-            }
-            Polygon::PT(vec) | Polygon::PN(vec) if vec.len() == 3 => {
-                Triangle::new(map(vec[0].0), map(vec[1].0), map(vec[2].0), texture)
-            }
-            Polygon::PTN(vec) if vec.len() == 3 => {
-                Triangle::new(map(vec[0].0), map(vec[1].0), map(vec[2].0), texture)
-            }
-            _ => panic!("Model should be triangulated first to be loaded properly"),
-        }
     }
 }
 

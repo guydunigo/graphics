@@ -88,7 +88,8 @@ fn load_materials_diffuse_rgb<P: AsRef<Path>>(
     mtls
 }
 
-fn find_mtl_texture(
+// TODO: remove two pubs
+pub fn find_mtl_texture(
     meshes: &HashMap<String, Group>,
     materials: &HashMap<String, Texture>,
     polygon_index: usize,
@@ -104,7 +105,7 @@ fn find_mtl_texture(
         .and_then(|mtl_name| materials.get(mtl_name).copied())
 }
 
-fn polygon_to_triangle(
+pub fn polygon_to_triangle(
     positions: &[(f32, f32, f32, f32)],
     texture: Texture,
     poly: &Polygon,

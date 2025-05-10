@@ -3,7 +3,7 @@ mod camera;
 pub use camera::Camera;
 mod mesh;
 pub use mesh::Mesh;
-mod obj_file;
+pub mod obj_file;
 mod triangle;
 pub use triangle::{Texture, Triangle};
 mod mesh_library;
