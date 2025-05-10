@@ -5,6 +5,7 @@ use crate::{font::TextWriter, scene::World, window::AppObserver};
 
 use super::{
     Engine,
+    parallel::ParIterEngine,
     settings::Settings,
     single_threaded::{IteratorEngine, OriginalEngine},
 };
@@ -13,6 +14,7 @@ use super::{
 pub enum AnyEngine {
     Original(OriginalEngine),
     Iterator(IteratorEngine),
+    ParIter(ParIterEngine),
 }
 
 impl Default for AnyEngine {
@@ -25,7 +27,8 @@ impl AnyEngine {
     pub fn set_next(&mut self) {
         match self {
             AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
-            AnyEngine::Iterator(_) => *self = AnyEngine::Original(Default::default()),
+            AnyEngine::Iterator(_) => *self = AnyEngine::ParIter(Default::default()),
+            AnyEngine::ParIter(_) => *self = AnyEngine::Original(Default::default()),
         }
     }
 }
@@ -44,6 +47,7 @@ impl Engine for AnyEngine {
         match self {
             AnyEngine::Original(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
             AnyEngine::Iterator(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
+            AnyEngine::ParIter(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
         }
     }
 }

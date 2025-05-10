@@ -17,6 +17,7 @@ impl Settings {
         match engine {
             AnyEngine::Original(_) => self.engine_type = EngineType::Original,
             AnyEngine::Iterator(_) => self.engine_type = EngineType::Iterator,
+            AnyEngine::ParIter(_) => self.engine_type = EngineType::ParIter,
         }
     }
 }
@@ -26,6 +27,7 @@ pub enum EngineType {
     Original,
     #[default]
     Iterator,
+    ParIter,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

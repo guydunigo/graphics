@@ -27,7 +27,10 @@ trait SingleThreadedEngine {
         #[cfg(feature = "stats")] stats: &mut Stats,
     );
 
-    fn clean_buffers<B: DerefMut<Target = [u32]>>(
+    /// - Resize `depth_buffer` and fill it with inifite depth
+    /// - Fill `buffer` with `DEFAULT_BACKGROUND_COLOR`
+    /// `buffer` should be already resized.
+    fn clean_resize_buffers<B: DerefMut<Target = [u32]>>(
         &mut self,
         buffer: &mut B,
         size: PhysicalSize<u32>,
@@ -53,7 +56,7 @@ impl<T: SingleThreadedEngine> Engine for T {
         size: PhysicalSize<u32>,
         app: AppObserver,
     ) {
-        let buffer_fill_time = self.clean_buffers(buffer, size);
+        let buffer_fill_time = self.clean_resize_buffers(buffer, size);
 
         let t = Instant::now();
         Self::rasterize_world(

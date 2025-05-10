@@ -41,6 +41,7 @@ impl TextWriter {
                     .chunks(metrics.width)
                     .enumerate()
                     .flat_map(|(y, l)| l.iter().enumerate().map(move |(x, p)| (x, y, p)))
+                    .filter(|(_, _, p)| **p != 0)
                     .for_each(|(x, y, p)| {
                         let i = metrics.xmin as isize + x as isize + start_x as isize;
                         let j = PX as isize - metrics.height as isize - metrics.ymin as isize
@@ -67,7 +68,7 @@ impl TextWriter {
     pub fn rasterize_par(&self, buffer: &[AtomicU64], size: PhysicalSize<u32>, text: &str) {
         text.lines().enumerate().par_bridge().for_each(|(i, l)| {
             self.rasterize_generic(size, i, l, |index, color| {
-                buffer[index].fetch_and(color as u64, Ordering::Relaxed);
+                buffer[index].fetch_or(color as u64, Ordering::Relaxed);
             });
         });
     }
