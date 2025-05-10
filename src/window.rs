@@ -35,19 +35,52 @@ impl WindowSurface {
         WindowSurface { window, surface }
     }
 
-    pub fn surface(&self) -> &Surface<Rc<Window>, Rc<Window>> {
-        &self.surface
+    pub fn surface(&mut self) -> &mut Surface<Rc<Window>, Rc<Window>> {
+        &mut self.surface
     }
 }
 
-#[derive(Default)]
+/// App data infos to be used and displayed, mostly for debugging
+pub struct AppObserver {
+    pub cursor: Option<PhysicalPosition<f64>>,
+    pub last_rendering_duration: u128,
+    pub last_frame_duration: u128,
+}
+
+impl AppObserver {
+    fn from(value: &App) -> Self {
+        AppObserver {
+            cursor: value.cursor,
+            last_rendering_duration: value.last_rendering_duration,
+            last_frame_duration: value.last_frame_duration,
+        }
+    }
+}
+
 pub struct App {
     window_surface: Option<WindowSurface>,
-    pub world: World,
-    pub cursor: Option<PhysicalPosition<f64>>,
-    pub rasterizer: Rasterizer,
-    pub last_rendering_duration: u128,
+    rasterizer: Rasterizer,
+    world: World,
+    cursor: Option<PhysicalPosition<f64>>,
+    last_rendering_duration: u128,
+    last_frame_start_time: Instant,
+    last_frame_duration: u128,
     mouse_left_held: bool,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            window_surface: Default::default(),
+            rasterizer: Default::default(),
+            world: Default::default(),
+            cursor: Default::default(),
+            last_rendering_duration: Default::default(),
+            last_frame_start_time: Instant::now(),
+            last_frame_duration: Default::default(),
+            mouse_left_held: Default::default(),
+        }
+    }
 }
 
 impl App {
@@ -145,10 +178,11 @@ impl ApplicationHandler for App {
                     //     m.write().unwrap().rot *= &Rotation::from_angles(0.1, 0., 0.)
                     // }),
                     KeyCode::Backquote => {
-                        self.rasterizer.show_vertices = !self.rasterizer.show_vertices
+                        self.rasterizer.settings.show_vertices =
+                            !self.rasterizer.settings.show_vertices
                     }
-                    KeyCode::Digit1 => self.rasterizer.engine.next(),
-                    KeyCode::Digit2 => self.rasterizer.sort_triangles.next(),
+                    KeyCode::Digit1 => self.rasterizer.next_engine(),
+                    KeyCode::Digit2 => self.rasterizer.settings.sort_triangles.next(),
                     // KeyCode::Digit4 => self.rasterizer.back_face_culling = !self.rasterizer.back_face_culling,
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
@@ -201,7 +235,13 @@ impl ApplicationHandler for App {
                 self.cursor = Some(position);
             }
             WindowEvent::RedrawRequested => {
-                let frame_start_time = Instant::now();
+                {
+                    let last_frame_start_time = Instant::now();
+                    self.last_frame_duration = last_frame_start_time
+                        .duration_since(self.last_frame_start_time)
+                        .as_millis();
+                    self.last_frame_start_time = last_frame_start_time;
+                }
 
                 #[cfg(feature = "stats")]
                 let mut stats = Stats::default();
@@ -212,30 +252,32 @@ impl ApplicationHandler for App {
                 // this event rather than in AboutToWait, since rendering in here allows
                 // the program to gracefully handle redraws requested by the OS.
 
+                let obs = AppObserver::from(self);
+
+                // TODO: no unwrap
                 let window_surface = self.window_surface.as_mut().unwrap();
 
                 // Draw.
                 let size = window_surface.window.inner_size();
 
-                {
-                    let (Some(width), Some(height)) =
-                        (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-                    else {
-                        return;
-                    };
+                let (Some(width), Some(height)) =
+                    (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
+                else {
+                    return;
+                };
 
-                    window_surface
-                        .surface()
-                        .resize(width, height)
-                        .expect("Failed to resize the softbuffer surface");
-                }
+                window_surface
+                    .surface()
+                    .resize(width, height)
+                    .expect("Failed to resize the softbuffer surface");
 
                 let mut buffer = window_surface
                     .surface()
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
 
-                Rasterizer::rasterize(self, &mut buffer, size);
+                self.rasterizer
+                    .rasterize(&self.world, &mut buffer, size, obs);
 
                 buffer
                     .present()
@@ -248,8 +290,9 @@ impl ApplicationHandler for App {
                 // can render here instead.
                 window_surface.window.request_redraw();
 
-                self.last_rendering_duration =
-                    Instant::now().duration_since(frame_start_time).as_millis();
+                self.last_rendering_duration = Instant::now()
+                    .duration_since(self.last_frame_start_time)
+                    .as_millis();
             }
             _ => (),
         }

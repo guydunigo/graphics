@@ -7,8 +7,8 @@ use winit::dpi::PhysicalSize;
 use crate::{
     maths::{Vec3f, Vec4u},
     rasterizer::{
-        MINIMAL_AMBIANT_LIGHT, Rasterizer, Rect, bounding_box_triangle, draw_vertice_basic,
-        edge_function, world_to_raster_triangle,
+        MINIMAL_AMBIANT_LIGHT, Rect, bounding_box_triangle, draw_vertice_basic, edge_function,
+        settings::Settings, world_to_raster_triangle,
     },
     scene::{Mesh, Texture, Triangle, World},
 };
@@ -26,7 +26,7 @@ impl SingleThreadedEngine for IteratorEngine {
     }
 
     fn rasterize_world<B: DerefMut<Target = [u32]>>(
-        rasterizer: &Rasterizer,
+        settings: &Settings,
         world: &World,
         buffer: &mut B,
         depth_buffer: &mut [f32],
@@ -123,7 +123,7 @@ impl SingleThreadedEngine for IteratorEngine {
             })
             .for_each(|(mut t_raster, bb, light, p01, p20)| {
                 rasterize_triangle(
-                    rasterizer,
+                    settings,
                     &mut t_raster,
                     buffer,
                     depth_buffer,
@@ -153,7 +153,7 @@ impl SingleThreadedEngine for IteratorEngine {
 }
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
-    rasterizer: &Rasterizer,
+    settings: &Settings,
     tri_raster: &mut Triangle,
     buffer: &mut B,
     depth_buffer: &mut [f32],
@@ -266,7 +266,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         stats.nb_triangles_drawn += 1;
     }
 
-    if rasterizer.show_vertices {
+    if settings.show_vertices {
         draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.texture);
         draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.texture);
         draw_vertice_basic(buffer, size, tri_raster.p2, &tri_raster.texture);

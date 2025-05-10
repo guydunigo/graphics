@@ -1,15 +1,19 @@
+mod any_engine;
+mod settings;
 mod single_threaded;
 
-use single_threaded::{IteratorEngine, OriginalEngine};
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 use winit::dpi::PhysicalSize;
 
 use crate::{
     font::TextWriter,
     maths::{Vec3f, Vec4u},
-    scene::{Camera, Texture, Triangle},
-    window::App,
+    scene::{Camera, Texture, Triangle, World},
+    window::AppObserver,
 };
+
+use any_engine::AnyEngine;
+use settings::Settings;
 
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
@@ -27,92 +31,64 @@ pub struct Stats {
     // pub misc: String,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Rasterizer {
-    /// Over-print all vertices
-    pub show_vertices: bool,
-    pub engine: AnyEngine,
-    /// Sort triangles by point with mininum Z value
-    pub sort_triangles: TriangleSorting,
+    engine: AnyEngine,
     text_writer: TextWriter,
+    pub settings: Settings,
+}
+
+impl Default for Rasterizer {
+    fn default() -> Self {
+        let engine = AnyEngine::default();
+        let mut settings = Settings::default();
+        settings.set_engine_type(&engine);
+        Self {
+            engine,
+            text_writer: Default::default(),
+            settings,
+        }
+    }
 }
 
 impl Rasterizer {
-    // TODO: don't pass app !
     pub fn rasterize<B: DerefMut<Target = [u32]>>(
-        app: &App,
+        &mut self,
+        world: &World,
         buffer: &mut B,
         size: PhysicalSize<u32>,
+        app: AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        app.rasterizer.engine.rasterize(
-            app,
+        self.engine.rasterize(
+            &self.settings,
+            &self.text_writer,
+            world,
             buffer,
             size,
+            app,
             #[cfg(feature = "stats")]
             stats,
         );
+    }
+
+    pub fn next_engine(&mut self) {
+        self.engine.set_next();
+        self.settings.set_engine_type(&self.engine);
     }
 }
 
 trait Engine {
     fn rasterize<B: DerefMut<Target = [u32]>>(
         &mut self,
-        app: &App,
+        settings: &Settings,
+        text_writer: &TextWriter,
+        world: &World,
         buffer: &mut B,
         size: PhysicalSize<u32>,
+        app: AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     );
-}
-
-#[derive(Default, Debug, Clone, Copy)]
-pub enum TriangleSorting {
-    #[default]
-    None,
-    BackToFront,
-    FrontToBack,
-}
-
-impl TriangleSorting {
-    pub fn next(&mut self) {
-        match self {
-            TriangleSorting::None => *self = TriangleSorting::BackToFront,
-            TriangleSorting::BackToFront => *self = TriangleSorting::FrontToBack,
-            TriangleSorting::FrontToBack => *self = TriangleSorting::None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum AnyEngine {
-    Original(OriginalEngine),
-    Iterator(IteratorEngine),
-}
-
-impl Default for AnyEngine {
-    fn default() -> Self {
-        AnyEngine::Iterator(Default::default())
-    }
-}
-
-impl AnyEngine {
-    pub fn next(&mut self) {
-        match self {
-            AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
-            AnyEngine::Iterator(_) => *self = AnyEngine::Original(Default::default()),
-        }
-    }
-}
-
-impl<T: Engine> Deref for AnyEngine {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            AnyEngine::Original(e) => e,
-            AnyEngine::Iterator(e) => e,
-        }
-    }
 }
 
 fn world_to_raster(p_world: Vec3f, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3f {

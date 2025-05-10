@@ -3,8 +3,8 @@
 use crate::{
     maths::{Vec3f, Vec4u},
     rasterizer::{
-        MINIMAL_AMBIANT_LIGHT, Rasterizer, TriangleSorting, bounding_box_triangle,
-        draw_vertice_basic, edge_function, world_to_raster_triangle,
+        MINIMAL_AMBIANT_LIGHT, Settings, bounding_box_triangle, draw_vertice_basic, edge_function,
+        settings::TriangleSorting, world_to_raster_triangle,
     },
     scene::{Camera, Mesh, Texture, Triangle, World},
 };
@@ -24,7 +24,7 @@ impl SingleThreadedEngine for OriginalEngine {
     }
 
     fn rasterize_world<B: DerefMut<Target = [u32]>>(
-        rasterizer: &Rasterizer,
+        settings: &Settings,
         world: &World,
         buffer: &mut B,
         depth_buffer: &mut [f32],
@@ -41,7 +41,7 @@ impl SingleThreadedEngine for OriginalEngine {
                 stats.nb_triangles_tot += 1;
             }
             rasterize_triangle(
-                rasterizer,
+                settings,
                 world,
                 &f,
                 buffer,
@@ -54,7 +54,7 @@ impl SingleThreadedEngine for OriginalEngine {
             );
         };
 
-        match rasterizer.sort_triangles {
+        match settings.sort_triangles {
             TriangleSorting::None => triangles.for_each(f),
             TriangleSorting::BackToFront => {
                 let mut array: Vec<Triangle> = triangles.collect();
@@ -71,7 +71,7 @@ impl SingleThreadedEngine for OriginalEngine {
 }
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
-    rasterizer: &Rasterizer,
+    settings: &Settings,
     world: &World,
     triangle: &Triangle,
     buffer: &mut B,
@@ -233,7 +233,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         stats.nb_triangles_drawn += 1;
     }
 
-    if rasterizer.show_vertices {
+    if settings.show_vertices {
         draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.texture);
         draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.texture);
         draw_vertice_basic(buffer, size, tri_raster.p2, &tri_raster.texture);

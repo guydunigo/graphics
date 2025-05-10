@@ -8,9 +8,10 @@ use std::{ops::DerefMut, time::Instant};
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    rasterizer::{Engine, Rasterizer},
+    font::TextWriter,
+    rasterizer::{Engine, Settings},
     scene::{DEFAULT_BACKGROUND_COLOR, World},
-    window::App,
+    window::AppObserver,
 };
 
 /// Common base for engines not requiring buffer synchronization.
@@ -18,7 +19,7 @@ trait SingleThreadedEngine {
     fn depth_buffer_mut(&mut self) -> &mut Vec<f32>;
 
     fn rasterize_world<B: DerefMut<Target = [u32]>>(
-        rasterizer: &Rasterizer,
+        settings: &Settings,
         world: &World,
         buffer: &mut B,
         depth_buffer: &mut [f32],
@@ -30,36 +31,41 @@ trait SingleThreadedEngine {
 impl<T: SingleThreadedEngine> Engine for T {
     fn rasterize<B: DerefMut<Target = [u32]>>(
         &mut self,
-        app: &App,
+        settings: &Settings,
+        text_writer: &TextWriter,
+        world: &World,
         buffer: &mut B,
         size: PhysicalSize<u32>,
+        app: AppObserver,
     ) {
         let buffer_fill_time = clean_buffers(buffer, self.depth_buffer_mut(), size);
 
-        let rendering_time = Instant::now();
-
+        let t = Instant::now();
         Self::rasterize_world(
-            &app.rasterizer,
-            &app.world,
+            settings,
+            world,
             buffer,
             &mut self.depth_buffer_mut()[..],
             size,
             #[cfg(feature = "stats")]
             stats,
         );
+        let rendering_time = Instant::now().duration_since(t).as_millis();
 
         {
-            let cam_rot = app.world.camera.rot();
+            let cam_rot = world.camera.rot();
             #[cfg(feature = "stats")]
             let stats = format!("{:#?}", stats);
             #[cfg(not(feature = "stats"))]
             let stats = "Stats disabled";
             let display = format!(
-                "fps : {} | {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{}",
+                "fps : {} {} | {}ms - {}ms / {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{}",
+                (1000. / app.last_frame_duration as f32).round(),
                 (1000. / app.last_rendering_duration as f32).round(),
                 buffer_fill_time,
-                Instant::now().duration_since(rendering_time).as_millis(),
+                rendering_time,
                 app.last_rendering_duration,
+                app.last_frame_duration,
                 app.cursor
                     .and_then(|cursor| buffer
                         .get(cursor.x as usize + cursor.y as usize * size.width as usize)
@@ -70,16 +76,14 @@ impl<T: SingleThreadedEngine> Engine for T {
                             c
                         )))
                     .unwrap_or(String::from("\nNo cursor position")),
-                app.world.camera.pos,
+                world.camera.pos,
                 cam_rot.u(),
                 cam_rot.v(),
                 cam_rot.w(),
-                app.rasterizer,
+                settings,
                 stats
             );
-            app.rasterizer
-                .text_writer
-                .rasterize(buffer, size, &display[..]);
+            text_writer.rasterize(buffer, size, &display[..]);
         }
     }
 }
