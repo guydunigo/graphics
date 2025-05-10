@@ -1,15 +1,13 @@
-mod iterator;
-mod original;
+mod single_threaded;
 
+use single_threaded::{IteratorEngine, OriginalEngine};
 use std::ops::{Deref, DerefMut};
-
-use iterator::EngineIterator;
 use winit::dpi::PhysicalSize;
 
 use crate::{
     font::TextWriter,
     maths::{Vec3f, Vec4u},
-    scene::{Camera, Texture, Triangle, World},
+    scene::{Camera, Texture, Triangle},
     window::App,
 };
 
@@ -40,18 +38,16 @@ pub struct Rasterizer {
 }
 
 impl Rasterizer {
+    // TODO: don't pass app !
     pub fn rasterize<B: DerefMut<Target = [u32]>>(
-        &self,
-        world: &World,
+        app: &App,
         buffer: &mut B,
-        depth_buffer: &mut [f32],
         size: PhysicalSize<u32>,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        self.engine.rasterize(
-            world,
+        app.rasterizer.engine.rasterize(
+            app,
             buffer,
-            depth_buffer,
             size,
             #[cfg(feature = "stats")]
             stats,
@@ -60,7 +56,13 @@ impl Rasterizer {
 }
 
 trait Engine {
-    fn rasterize<B: DerefMut<Target = [u32]>>(app: &App, buffer: &mut B, size: PhysicalSize<u32>);
+    fn rasterize<B: DerefMut<Target = [u32]>>(
+        &mut self,
+        app: &App,
+        buffer: &mut B,
+        size: PhysicalSize<u32>,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    );
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -81,11 +83,16 @@ impl TriangleSorting {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum AnyEngine {
-    Original(EngineOriginal),
-    #[default]
-    Iterator(EngineIterator),
+    Original(OriginalEngine),
+    Iterator(IteratorEngine),
+}
+
+impl Default for AnyEngine {
+    fn default() -> Self {
+        AnyEngine::Iterator(Default::default())
+    }
 }
 
 impl AnyEngine {

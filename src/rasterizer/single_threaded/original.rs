@@ -1,30 +1,34 @@
-use winit::dpi::PhysicalSize;
+//! First implementation, putting the whole triangle rasterizing in a single function.
 
 use crate::{
     maths::{Vec3f, Vec4u},
-    rasterizer::{MINIMAL_AMBIANT_LIGHT, Rasterizer},
+    rasterizer::{
+        MINIMAL_AMBIANT_LIGHT, Rasterizer, TriangleSorting, bounding_box_triangle,
+        draw_vertice_basic, edge_function, world_to_raster_triangle,
+    },
     scene::{Camera, Mesh, Texture, Triangle, World},
 };
-/// First implementation, putting the whole triangle rasterizing in a single function.
 use std::ops::DerefMut;
+use winit::dpi::PhysicalSize;
 
-use super::{
-    Engine, TriangleSorting, bounding_box_triangle, draw_vertice_basic, edge_function,
-    world_to_raster_triangle,
-};
+use super::SingleThreadedEngine;
 
 #[derive(Default, Debug, Clone)]
-pub struct EngineOriginal {
+pub struct OriginalEngine {
     depth_buffer: Vec<f32>,
 }
 
-impl Engine for EngineOriginal {
-    fn rasterize<B: DerefMut<Target = [u32]>>(
+impl SingleThreadedEngine for OriginalEngine {
+    fn depth_buffer_mut(&mut self) -> &mut Vec<f32> {
+        &mut self.depth_buffer
+    }
+
+    fn rasterize_world<B: DerefMut<Target = [u32]>>(
+        rasterizer: &Rasterizer,
         world: &World,
         buffer: &mut B,
         depth_buffer: &mut [f32],
-        size: &PhysicalSize<u32>,
-        rasterizer: &Rasterizer,
+        size: PhysicalSize<u32>,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         let triangles = world.meshes.iter().flat_map(Mesh::to_world_triangles);
@@ -37,6 +41,7 @@ impl Engine for EngineOriginal {
                 stats.nb_triangles_tot += 1;
             }
             rasterize_triangle(
+                rasterizer,
                 world,
                 &f,
                 buffer,
@@ -44,7 +49,6 @@ impl Engine for EngineOriginal {
                 &world.camera,
                 size,
                 ratio_w_h,
-                rasterizer,
                 #[cfg(feature = "stats")]
                 stats,
             );
@@ -67,14 +71,14 @@ impl Engine for EngineOriginal {
 }
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
+    rasterizer: &Rasterizer,
     world: &World,
     triangle: &Triangle,
     buffer: &mut B,
     depth_buffer: &mut [f32],
     cam: &Camera,
-    size: &PhysicalSize<u32>,
+    size: PhysicalSize<u32>,
     ratio_w_h: f32,
-    rasterizer: &Rasterizer,
     #[cfg(feature = "stats")] stats: &mut Stats,
 ) {
     let tri_raster = world_to_raster_triangle(triangle, cam, size, ratio_w_h);

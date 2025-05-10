@@ -13,7 +13,7 @@ use winit::{
 
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
-use crate::{font::TextWriter, maths::Rotation, rasterizer::Rasterizer, scene::World};
+use crate::{maths::Rotation, rasterizer::Rasterizer, scene::World};
 
 pub struct WindowSurface {
     window: Rc<Window>,
@@ -235,7 +235,7 @@ impl ApplicationHandler for App {
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
 
-                self.rasterizer.rasterize(&self.world, buffer);
+                Rasterizer::rasterize(self, &mut buffer, size);
 
                 buffer
                     .present()
