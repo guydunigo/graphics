@@ -10,7 +10,6 @@ use crate::{
     scene::{Camera, Texture, Triangle, World},
 };
 
-const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 const DEPTH_PRECISION: f32 = 2048.;
 
 pub const fn depth_to_u64(depth: f32) -> u64 {

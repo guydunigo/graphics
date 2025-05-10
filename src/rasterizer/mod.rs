@@ -1,4 +1,5 @@
 mod any_engine;
+mod parallel;
 mod settings;
 mod single_threaded;
 

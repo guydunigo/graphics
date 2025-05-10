@@ -4,7 +4,8 @@ mod rasterizer;
 mod scene;
 mod window;
 
-// mod par_iter_render_pipeline;
+// TODO
+mod par_iter_render_pipeline;
 
 use window::App;
 
