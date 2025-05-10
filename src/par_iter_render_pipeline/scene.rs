@@ -1,9 +1,12 @@
+/// Describing the world...
 use std::sync::{Arc, RwLock, Weak};
 
 use rand::RngCore;
 
-/// # Describing the world...
-use crate::maths::{PI, Rotation, Vec3f};
+use crate::{
+    maths::{PI, Rotation, Vec3f},
+    scene::Texture,
+};
 
 #[derive(Debug, Clone)]
 pub struct Triangle {

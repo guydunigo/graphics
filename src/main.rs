@@ -4,6 +4,8 @@ mod rasterizer;
 mod scene;
 mod window;
 
+mod par_iter_render_pipeline;
+
 use window::App;
 
 fn main() {

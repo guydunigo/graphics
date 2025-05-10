@@ -1,8 +1,9 @@
 mod iterator;
 mod original;
 
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 
+use iterator::EngineIterator;
 use winit::dpi::PhysicalSize;
 
 use crate::{
@@ -30,7 +31,7 @@ pub struct Stats {
 pub struct Rasterizer {
     /// Over-print all vertices
     pub show_vertices: bool,
-    pub engine: Engine,
+    pub engine: AnyEngine,
     /// Sort triangles by point with mininum Z value
     pub sort_triangles: TriangleSorting,
 }
@@ -44,11 +45,26 @@ impl Rasterizer {
         size: &PhysicalSize<u32>,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        match self.engine {
-            Engine::Original => original::rasterize(world, buffer, depth_buffer, size, self),
-            Engine::Iterator => iterator::rasterize(world, buffer, depth_buffer, size, self),
-        }
+        self.engine.rasterize(
+            world,
+            buffer,
+            depth_buffer,
+            size,
+            #[cfg(feature = "stats")]
+            stats,
+        );
     }
+}
+
+trait Engine {
+    fn rasterize<B: DerefMut<Target = [u32]>>(
+        world: &World,
+        buffer: &mut B,
+        depth_buffer: &mut [f32],
+        size: &PhysicalSize<u32>,
+        rasterizer: &Rasterizer,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    );
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -70,17 +86,28 @@ impl TriangleSorting {
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-pub enum Engine {
-    Original,
+pub enum AnyEngine {
+    Original(EngineOriginal),
     #[default]
-    Iterator,
+    Iterator(EngineIterator),
 }
 
-impl Engine {
+impl AnyEngine {
     pub fn next(&mut self) {
         match self {
-            Engine::Original => *self = Engine::Iterator,
-            Engine::Iterator => *self = Engine::Original,
+            AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
+            AnyEngine::Iterator(_) => *self = AnyEngine::Original(Default::default()),
+        }
+    }
+}
+
+impl<T: Engine> Deref for AnyEngine {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            AnyEngine::Original(e) => e,
+            AnyEngine::Iterator(e) => e,
         }
     }
 }

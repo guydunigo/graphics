@@ -9,9 +9,62 @@ use crate::{
 use std::ops::DerefMut;
 
 use super::{
-    TriangleSorting, bounding_box_triangle, draw_vertice_basic, edge_function,
+    Engine, TriangleSorting, bounding_box_triangle, draw_vertice_basic, edge_function,
     world_to_raster_triangle,
 };
+
+#[derive(Default, Debug, Clone)]
+pub struct EngineOriginal {
+    depth_buffer: Vec<f32>,
+}
+
+impl Engine for EngineOriginal {
+    fn rasterize<B: DerefMut<Target = [u32]>>(
+        world: &World,
+        buffer: &mut B,
+        depth_buffer: &mut [f32],
+        size: &PhysicalSize<u32>,
+        rasterizer: &Rasterizer,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    ) {
+        let triangles = world.meshes.iter().flat_map(Mesh::to_world_triangles);
+
+        let ratio_w_h = size.width as f32 / size.height as f32;
+
+        let f = |f| {
+            #[cfg(feature = "stats")]
+            {
+                stats.nb_triangles_tot += 1;
+            }
+            rasterize_triangle(
+                world,
+                &f,
+                buffer,
+                depth_buffer,
+                &world.camera,
+                size,
+                ratio_w_h,
+                rasterizer,
+                #[cfg(feature = "stats")]
+                stats,
+            );
+        };
+
+        match rasterizer.sort_triangles {
+            TriangleSorting::None => triangles.for_each(f),
+            TriangleSorting::BackToFront => {
+                let mut array: Vec<Triangle> = triangles.collect();
+                array.sort_by_key(|t| -t.min_z() as u32);
+                array.drain(..).for_each(f);
+            }
+            TriangleSorting::FrontToBack => {
+                let mut array: Vec<Triangle> = triangles.collect();
+                array.sort_by_key(|t| t.min_z() as u32);
+                array.drain(..).for_each(f);
+            }
+        }
+    }
+}
 
 fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     world: &World,
@@ -180,51 +233,5 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
         draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.texture);
         draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.texture);
         draw_vertice_basic(buffer, size, tri_raster.p2, &tri_raster.texture);
-    }
-}
-
-pub fn rasterize<B: DerefMut<Target = [u32]>>(
-    world: &World,
-    buffer: &mut B,
-    depth_buffer: &mut [f32],
-    size: &PhysicalSize<u32>,
-    rasterizer: &Rasterizer,
-    #[cfg(feature = "stats")] stats: &mut Stats,
-) {
-    let triangles = world.meshes.iter().flat_map(Mesh::to_world_triangles);
-
-    let ratio_w_h = size.width as f32 / size.height as f32;
-
-    let f = |f| {
-        #[cfg(feature = "stats")]
-        {
-            stats.nb_triangles_tot += 1;
-        }
-        rasterize_triangle(
-            world,
-            &f,
-            buffer,
-            depth_buffer,
-            &world.camera,
-            size,
-            ratio_w_h,
-            rasterizer,
-            #[cfg(feature = "stats")]
-            stats,
-        );
-    };
-
-    match rasterizer.sort_triangles {
-        TriangleSorting::None => triangles.for_each(f),
-        TriangleSorting::BackToFront => {
-            let mut array: Vec<Triangle> = triangles.collect();
-            array.sort_by_key(|t| -t.min_z() as u32);
-            array.drain(..).for_each(f);
-        }
-        TriangleSorting::FrontToBack => {
-            let mut array: Vec<Triangle> = triangles.collect();
-            array.sort_by_key(|t| t.min_z() as u32);
-            array.drain(..).for_each(f);
-        }
     }
 }

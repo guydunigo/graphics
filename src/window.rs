@@ -15,20 +15,35 @@ use winit::{
 use crate::rasterizer::Stats;
 use crate::{font::TextWriter, maths::Rotation, rasterizer::Rasterizer, scene::World};
 
-struct Graphics {
+struct WindowSurface {
     window: Rc<Window>,
     surface: Surface<Rc<Window>, Rc<Window>>,
+}
+
+impl WindowSurface {
+    pub fn new(event_loop: &ActiveEventLoop) -> Self {
+        let window = Rc::new(
+            event_loop
+                .create_window(Window::default_attributes())
+                .unwrap(),
+        );
+
+        let context = Context::new(window.clone()).expect("Failed to create a softbuffer context");
+        let surface =
+            Surface::new(&context, window.clone()).expect("Failed to create a softbuffer surface");
+
+        WindowSurface { window, surface }
+    }
 }
 
 #[derive(Default)]
 pub struct App {
     last_rendering_duration: u128,
-    graphics: Option<Graphics>,
+    window_surface: Option<WindowSurface>,
     text_writer: TextWriter,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
-    depth_buffer: Vec<f32>,
     rasterizer: Rasterizer,
 }
 
@@ -46,17 +61,7 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = Rc::new(
-            event_loop
-                .create_window(Window::default_attributes())
-                .unwrap(),
-        );
-
-        let context = Context::new(window.clone()).expect("Failed to create a softbuffer context");
-        let surface =
-            Surface::new(&context, window.clone()).expect("Failed to create a softbuffer surface");
-
-        self.graphics = Some(Graphics { window, surface });
+        self.window_surface = Some(WindowSurface::new(event_loop));
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -123,6 +128,19 @@ impl ApplicationHandler for App {
                         .meshes
                         .iter_mut()
                         .for_each(|m| m.rot *= &Rotation::from_angles(0.1, 0., 0.)),
+                    // TODO: parallel structures
+                    // KeyCode::ArrowLeft => self.world.meshes().iter().for_each(|m| {
+                    //     m.write().unwrap().rot *= &Rotation::from_angles(0., -0.1, 0.)
+                    // }),
+                    // KeyCode::ArrowRight => self.world.meshes().iter().for_each(|m| {
+                    //     m.write().unwrap().rot *= &Rotation::from_angles(0., 0.1, 0.)
+                    // }),
+                    // KeyCode::ArrowUp => self.world.meshes().iter().for_each(|m| {
+                    //     m.write().unwrap().rot *= &Rotation::from_angles(-0.1, 0., 0.)
+                    // }),
+                    // KeyCode::ArrowDown => self.world.meshes().iter().for_each(|m| {
+                    //     m.write().unwrap().rot *= &Rotation::from_angles(0.1, 0., 0.)
+                    // }),
                     KeyCode::Backquote => {
                         self.rasterizer.show_vertices = !self.rasterizer.show_vertices
                     }
@@ -145,7 +163,7 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
-                let window = &self.graphics.as_ref().unwrap().window;
+                let window = &self.window_surface.as_ref().unwrap().window;
                 match state {
                     ElementState::Pressed => {
                         window
@@ -191,10 +209,10 @@ impl ApplicationHandler for App {
                 // this event rather than in AboutToWait, since rendering in here allows
                 // the program to gracefully handle redraws requested by the OS.
 
-                let gfx = self.graphics.as_mut().unwrap();
+                let window_surface = self.window_surface.as_mut().unwrap();
 
                 // Draw.
-                let size = gfx.window.inner_size();
+                let size = window_surface.window.inner_size();
                 {
                     let (Some(width), Some(height)) =
                         (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
@@ -202,12 +220,13 @@ impl ApplicationHandler for App {
                         return;
                     };
 
-                    gfx.surface
+                    window_surface
+                        .surface
                         .resize(width, height)
                         .expect("Failed to resize the softbuffer surface");
                 }
 
-                let mut buffer = gfx
+                let mut buffer = window_surface
                     .surface
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
@@ -276,7 +295,7 @@ impl ApplicationHandler for App {
                 // You only need to call this if you've determined that you need to redraw in
                 // applications which do not always need to. Applications that redraw continuously
                 // can render here instead.
-                gfx.window.request_redraw();
+                window_surface.window.request_redraw();
 
                 self.last_rendering_duration =
                     Instant::now().duration_since(frame_start_time).as_millis();
