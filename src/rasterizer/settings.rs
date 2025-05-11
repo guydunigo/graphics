@@ -18,6 +18,9 @@ impl Settings {
             AnyEngine::Original(_) => self.engine_type = EngineType::Original,
             AnyEngine::Iterator(_) => self.engine_type = EngineType::Iterator,
             AnyEngine::ParIter(_) => self.engine_type = EngineType::ParIter,
+            AnyEngine::ParIter2(_) => self.engine_type = EngineType::ParIter2,
+            AnyEngine::ParIter3(_) => self.engine_type = EngineType::ParIter3,
+            AnyEngine::ParIter4(_) => self.engine_type = EngineType::ParIter4,
         }
     }
 }
@@ -28,6 +31,9 @@ pub enum EngineType {
     #[default]
     Iterator,
     ParIter,
+    ParIter2,
+    ParIter3,
+    ParIter4,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

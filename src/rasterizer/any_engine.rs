@@ -5,7 +5,7 @@ use crate::{font::TextWriter, scene::World, window::AppObserver};
 
 use super::{
     Engine,
-    parallel::ParIterEngine,
+    parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4},
     settings::Settings,
     single_threaded::{IteratorEngine, OriginalEngine},
 };
@@ -15,6 +15,9 @@ pub enum AnyEngine {
     Original(OriginalEngine),
     Iterator(IteratorEngine),
     ParIter(ParIterEngine),
+    ParIter2(ParIterEngine2),
+    ParIter3(ParIterEngine3),
+    ParIter4(ParIterEngine4),
 }
 
 impl Default for AnyEngine {
@@ -28,7 +31,10 @@ impl AnyEngine {
         match self {
             AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
             AnyEngine::Iterator(_) => *self = AnyEngine::ParIter(Default::default()),
-            AnyEngine::ParIter(_) => *self = AnyEngine::Original(Default::default()),
+            AnyEngine::ParIter(_) => *self = AnyEngine::ParIter2(Default::default()),
+            AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
+            AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
+            AnyEngine::ParIter4(_) => *self = AnyEngine::Original(Default::default()),
         }
     }
 }
@@ -48,6 +54,9 @@ impl Engine for AnyEngine {
             AnyEngine::Original(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
             AnyEngine::Iterator(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
             AnyEngine::ParIter(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
+            AnyEngine::ParIter2(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
+            AnyEngine::ParIter3(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
+            AnyEngine::ParIter4(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
         }
     }
 }
