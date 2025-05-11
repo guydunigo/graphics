@@ -31,7 +31,8 @@ impl AnyEngine {
         match self {
             AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
             AnyEngine::Iterator(_) => *self = AnyEngine::ParIter(Default::default()),
-            AnyEngine::ParIter(_) => *self = AnyEngine::ParIter2(Default::default()),
+            // Skip 2
+            AnyEngine::ParIter(_) => *self = AnyEngine::ParIter3(Default::default()),
             AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
             AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
             AnyEngine::ParIter4(_) => *self = AnyEngine::Original(Default::default()),

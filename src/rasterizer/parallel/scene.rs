@@ -2,6 +2,7 @@
 use std::sync::{Arc, RwLock, Weak};
 
 use rand::RngCore;
+use rayon::prelude::*;
 
 use crate::{
     maths::{PI, Rotation, Vec3f},
@@ -54,10 +55,30 @@ impl Default for Mesh {
     }
 }
 
+impl From<&crate::scene::Mesh> for Arc<RwLock<Mesh>> {
+    fn from(m: &crate::scene::Mesh) -> Self {
+        let res = Arc::new(RwLock::new(Mesh {
+            triangles: Default::default(),
+            pos: m.pos,
+            rot: m.rot,
+            scale: m.scale,
+        }));
+        {
+            let mut res_write = res.write().unwrap();
+            res_write.set_triangles(&res, m.triangles.clone());
+        }
+        res
+    }
+}
+
 impl Mesh {
     pub fn new() -> Arc<RwLock<Self>> {
         let mesh = Self::default();
         Arc::new(RwLock::new(mesh))
+    }
+
+    pub fn triangles(&self) -> &[Arc<ParTriangle>] {
+        &self.triangles[..]
     }
 
     pub fn set_triangles(&mut self, me: &Arc<RwLock<Mesh>>, mut ts: Vec<Triangle>) {
@@ -117,6 +138,31 @@ impl Default for World {
             triangles,
             camera: Default::default(),
             sun_direction: Vec3f::new(-1., -1., -1.).normalize(),
+        }
+    }
+}
+
+impl From<&crate::scene::World> for World {
+    fn from(world: &crate::scene::World) -> Self {
+        let mut triangles = Vec::new();
+        let meshes = world
+            .meshes
+            .iter()
+            .map(|m| Into::<Arc<RwLock<Mesh>>>::into(m))
+            .inspect(|m| {
+                m.read()
+                    .unwrap()
+                    .triangles
+                    .iter()
+                    .for_each(|t| triangles.push(Arc::downgrade(t)))
+            })
+            .collect();
+
+        Self {
+            meshes,
+            triangles,
+            camera: world.camera,
+            sun_direction: world.sun_direction,
         }
     }
 }

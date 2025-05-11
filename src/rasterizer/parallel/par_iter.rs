@@ -29,7 +29,7 @@ pub struct ParIterEngine {
     depth_color_buffer: Arc<[AtomicU64]>,
     last_copy_buffer: u128,
     // TODO: merge with sync world ?
-    world: World,
+    world: Option<World>,
 }
 
 impl ParIterEngine {
@@ -37,9 +37,6 @@ impl ParIterEngine {
     const DEFAULT_DEPTH: u32 = u32::MAX;
     const DEFAULT_DEPTH_COLOR: u64 =
         ((Self::DEFAULT_DEPTH as u64) << 32) | (Self::DEFAULT_COLOR as u64);
-
-    // let size = window.inner_size();
-    // let tot_size = (size.width * size.height) as usize;
 
     fn init_buffer<T, F: Fn() -> T>(tot_size: usize, f: F) -> Arc<[T]> {
         let mut v = Vec::with_capacity(tot_size);
@@ -78,10 +75,12 @@ impl Engine for ParIterEngine {
     ) {
         let buffer_fill_time = self.clean_resize_buffer(size);
 
+        let world = self.world.get_or_insert_with(|| world.into());
+
         let t = Instant::now();
         rasterize_world(
             settings,
-            &self.world,
+            world,
             &self.depth_color_buffer,
             size,
             #[cfg(feature = "stats")]
