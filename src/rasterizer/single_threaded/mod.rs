@@ -14,6 +14,8 @@ use crate::{
     window::AppObserver,
 };
 
+use super::{cursor_buffer_index, format_debug};
+
 /// Common base for engines not requiring buffer synchronization.
 trait SingleThreadedEngine {
     fn depth_buffer_mut(&mut self) -> &mut Vec<f32>;
@@ -56,7 +58,7 @@ impl<T: SingleThreadedEngine> Engine for T {
         size: PhysicalSize<u32>,
         app: AppObserver,
     ) {
-        let buffer_fill_time = self.clean_resize_buffers(buffer, size);
+        let buffer_fill_micros = self.clean_resize_buffers(buffer, size);
 
         let t = Instant::now();
         Self::rasterize_world(
@@ -68,56 +70,22 @@ impl<T: SingleThreadedEngine> Engine for T {
             #[cfg(feature = "stats")]
             stats,
         );
-        let rendering_time = Instant::now().duration_since(t).as_micros();
+        let rendering_micros = Instant::now().duration_since(t).as_micros();
 
-        display_debug(
-            settings,
-            text_writer,
-            world,
-            buffer,
-            size,
-            app,
-            buffer_fill_time,
-            rendering_time,
-        );
+        {
+            let cursor_color = cursor_buffer_index(&app.cursor, size).map(|index| buffer[index]);
+            let display = format_debug(
+                settings,
+                world,
+                app,
+                cursor_color,
+                buffer_fill_micros,
+                rendering_micros,
+                0,
+                #[cfg(feature = "stats")]
+                stats,
+            );
+            text_writer.rasterize(buffer, size, &display[..]);
+        }
     }
-}
-
-fn display_debug<B: DerefMut<Target = [u32]>>(
-    settings: &Settings,
-    text_writer: &TextWriter,
-    world: &World,
-    buffer: &mut B,
-    size: PhysicalSize<u32>,
-    app: AppObserver,
-    buffer_fill_time: u128,
-    rendering_time: u128,
-    #[cfg(feature = "stats")] stats: &Stats,
-) {
-    let cam_rot = world.camera.rot();
-    #[cfg(feature = "stats")]
-    let stats = format!("{:#?}", stats);
-    #[cfg(not(feature = "stats"))]
-    let stats = "Stats disabled";
-    let display = format!(
-        "fps : {} {} | {}μs - {}μs / {}μs / {}μs{}\n{} {} {} {}\n{:?}\n{}",
-        (1000_000. / app.last_frame_duration as f32).round(),
-        (1000_000. / app.last_rendering_duration as f32).round(),
-        buffer_fill_time,
-        rendering_time,
-        app.last_rendering_duration,
-        app.last_frame_duration,
-        app.cursor
-            .and_then(|cursor| buffer
-                .get(cursor.x as usize + cursor.y as usize * size.width as usize)
-                .map(|c| format!("\n({},{}) 0x{:x}", cursor.x.floor(), cursor.y.floor(), c)))
-            .unwrap_or(String::from("\nNo cursor position")),
-        world.camera.pos,
-        cam_rot.u(),
-        cam_rot.v(),
-        cam_rot.w(),
-        settings,
-        stats
-    );
-    text_writer.rasterize(buffer, size, &display[..]);
 }

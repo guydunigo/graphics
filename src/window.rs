@@ -43,16 +43,16 @@ impl WindowSurface {
 /// App data infos to be used and displayed, mostly for debugging
 pub struct AppObserver {
     pub cursor: Option<PhysicalPosition<f64>>,
-    pub last_rendering_duration: u128,
-    pub last_frame_duration: u128,
+    pub last_rendering_micros: u128,
+    pub last_frame_micros: u128,
 }
 
 impl AppObserver {
     fn from(value: &App) -> Self {
         AppObserver {
             cursor: value.cursor,
-            last_rendering_duration: value.last_rendering_duration,
-            last_frame_duration: value.last_frame_duration,
+            last_rendering_micros: value.last_rendering_micros,
+            last_frame_micros: value.last_frame_micros,
         }
     }
 }
@@ -62,9 +62,9 @@ pub struct App {
     rasterizer: Rasterizer,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
-    last_rendering_duration: u128,
+    last_rendering_micros: u128,
     last_frame_start_time: Instant,
-    last_frame_duration: u128,
+    last_frame_micros: u128,
     mouse_left_held: bool,
 }
 
@@ -75,9 +75,9 @@ impl Default for App {
             rasterizer: Default::default(),
             world: Default::default(),
             cursor: Default::default(),
-            last_rendering_duration: Default::default(),
+            last_rendering_micros: Default::default(),
             last_frame_start_time: Instant::now(),
-            last_frame_duration: Default::default(),
+            last_frame_micros: Default::default(),
             mouse_left_held: Default::default(),
         }
     }
@@ -237,7 +237,7 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 {
                     let last_frame_start_time = Instant::now();
-                    self.last_frame_duration = last_frame_start_time
+                    self.last_frame_micros = last_frame_start_time
                         .duration_since(self.last_frame_start_time)
                         .as_micros();
                     self.last_frame_start_time = last_frame_start_time;
@@ -290,7 +290,7 @@ impl ApplicationHandler for App {
                 // can render here instead.
                 window_surface.window.request_redraw();
 
-                self.last_rendering_duration = Instant::now()
+                self.last_rendering_micros = Instant::now()
                     .duration_since(self.last_frame_start_time)
                     .as_micros();
             }

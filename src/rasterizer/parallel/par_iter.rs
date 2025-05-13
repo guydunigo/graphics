@@ -13,8 +13,9 @@ use crate::{
     font::TextWriter,
     maths::{Vec3f, Vec4u},
     rasterizer::{
-        Engine, MINIMAL_AMBIANT_LIGHT, Rect, bounding_box_triangle, buffer_index, edge_function,
-        settings::Settings, world_to_raster_triangle,
+        Engine, MINIMAL_AMBIANT_LIGHT, Rect, bounding_box_triangle, buffer_index,
+        cursor_buffer_index, edge_function, format_debug, settings::Settings,
+        world_to_raster_triangle,
     },
     scene::{Texture, Triangle},
     window::AppObserver,
@@ -28,7 +29,7 @@ const DEPTH_PRECISION: f32 = 2048.;
 #[derive(Default, Debug, Clone)]
 pub struct ParIterEngine {
     depth_color_buffer: Arc<[AtomicU64]>,
-    last_copy_buffer: u128,
+    last_copy_buffer_micros: u128,
     // TODO: merge with sync world ?
     world: Option<World>,
 }
@@ -74,65 +75,42 @@ impl Engine for ParIterEngine {
         app: AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        let buffer_fill_time = self.clean_resize_buffer(size);
+        let buffer_fill_micros = self.clean_resize_buffer(size);
 
-        let world = self.world.get_or_insert_with(|| world.into());
+        let par_world = self.world.get_or_insert_with(|| world.into());
 
         let t = Instant::now();
         rasterize_world(
             settings,
-            world,
+            par_world,
             &self.depth_color_buffer,
             size,
             #[cfg(feature = "stats")]
             &stats,
         );
-        let rendering_time = Instant::now().duration_since(t).as_micros();
+        let rendering_micros = Instant::now().duration_since(t).as_micros();
 
-        // TODO: copy from single thread
-        // TODO: extract to function
         {
-            let cam_rot = world.camera.rot();
-            #[cfg(feature = "stats")]
-            let stats = format!("{:#?}", stats);
-            #[cfg(not(feature = "stats"))]
-            let stats = "Stats disabled";
-            let display = format!(
-                "fps : {} {} | {}μs - {}μs - {}μs / {}μs / {}μs{}\n{} {} {} {}\n{:?}\n{}",
-                (1000_000. / app.last_frame_duration as f32).round(),
-                (1000_000. / app.last_rendering_duration as f32).round(),
-                buffer_fill_time,
-                rendering_time,
-                self.last_copy_buffer,
-                app.last_rendering_duration,
-                app.last_frame_duration,
-                app.cursor
-                    .and_then(|cursor| self
-                        .depth_color_buffer
-                        .get(cursor.x as usize + cursor.y as usize * size.width as usize)
-                        .map(|c| format!(
-                            "\n({},{}) 0x{:x}",
-                            cursor.x.floor(),
-                            cursor.y.floor(),
-                            u64_to_color(c.load(Ordering::Relaxed))
-                        )))
-                    .unwrap_or(String::from("\nNo cursor position")),
-                world.camera.pos,
-                cam_rot.u(),
-                cam_rot.v(),
-                cam_rot.w(),
+            let cursor_color = cursor_buffer_index(&app.cursor, size).map(|index| buffer[index]);
+            let display = format_debug(
                 settings,
+                world,
+                app,
+                cursor_color,
+                buffer_fill_micros,
+                rendering_micros,
+                self.last_copy_buffer_micros,
+                #[cfg(feature = "stats")]
                 stats,
             );
             text_writer.rasterize_par(&self.depth_color_buffer, size, &display[..]);
         }
 
-        let copy_buffer = Instant::now();
+        let t = Instant::now();
         (0..(size.width * size.height) as usize).for_each(|i| {
             buffer[i] = u64_to_color(self.depth_color_buffer[i].load(Ordering::Relaxed));
         });
-
-        self.last_copy_buffer = Instant::now().duration_since(copy_buffer).as_micros();
+        self.last_copy_buffer_micros = Instant::now().duration_since(t).as_micros();
     }
 }
 

@@ -4,7 +4,7 @@ mod settings;
 mod single_threaded;
 
 use std::ops::DerefMut;
-use winit::dpi::PhysicalSize;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
     font::TextWriter,
@@ -198,4 +198,58 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
             buffer[i + (size.width as usize)] = color;
         }
     }
+}
+
+fn cursor_buffer_index(
+    cursor: &Option<PhysicalPosition<f64>>,
+    size: PhysicalSize<u32>,
+) -> Option<usize> {
+    let width = size.width as usize;
+    let height = size.height as usize;
+    cursor
+        .map(|c| (c.x as usize, c.y as usize))
+        .filter(|(x, y)| *x >= 0 && *x < width && *y >= 0 && *y < height)
+        .map(|(x, y)| x + y * width)
+}
+
+fn format_debug(
+    settings: &Settings,
+    world: &World,
+    app: AppObserver,
+    cursor_color: Option<u32>,
+    buffer_fill_micros: u128,
+    rendering_micros: u128,
+    buffer_copy_micros: u128,
+    #[cfg(feature = "stats")] stats: &Stats,
+) -> String {
+    let cam_rot = world.camera.rot();
+    #[cfg(feature = "stats")]
+    let stats = format!("{:#?}", stats);
+    #[cfg(not(feature = "stats"))]
+    let stats = "Stats disabled";
+
+    format!(
+        "fps : {} {} | {}μs - {}μs - {}μs / {}μs / {}μs{}\n{} {} {} {}\n{:?}\n{}",
+        (1000_000. / app.last_frame_micros as f32).round(),
+        (1000_000. / app.last_rendering_micros as f32).round(),
+        buffer_fill_micros,
+        rendering_micros,
+        buffer_copy_micros,
+        app.last_rendering_micros,
+        app.last_frame_micros,
+        app.cursor
+            .and_then(|cursor| cursor_color.map(|c| format!(
+                "\n({},{}) 0x{:x}",
+                cursor.x.floor(),
+                cursor.y.floor(),
+                c
+            )))
+            .unwrap_or(String::from("\nNo cursor position")),
+        world.camera.pos,
+        cam_rot.u(),
+        cam_rot.v(),
+        cam_rot.w(),
+        settings,
+        stats
+    )
 }
