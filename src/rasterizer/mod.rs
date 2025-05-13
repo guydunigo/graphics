@@ -79,19 +79,6 @@ impl Rasterizer {
     }
 }
 
-trait Engine {
-    fn rasterize<B: DerefMut<Target = [u32]>>(
-        &mut self,
-        settings: &Settings,
-        text_writer: &TextWriter,
-        world: &World,
-        buffer: &mut B,
-        size: PhysicalSize<u32>,
-        app: &mut AppObserver,
-        #[cfg(feature = "stats")] stats: &mut Stats,
-    );
-}
-
 fn world_to_raster(p_world: Vec3f, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3f {
     // Camera space
     let mut p = cam.world_to_sight(p_world);

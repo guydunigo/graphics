@@ -27,15 +27,14 @@ use crate::{
 };
 
 use super::{
-    Engine, Rect, buffer_index, cursor_buffer_index, edge_function, format_debug,
-    settings::Settings,
+    Rect, buffer_index, cursor_buffer_index, edge_function, format_debug, settings::Settings,
 };
 
 const DEPTH_PRECISION: f32 = 2048.;
 const DEFAULT_DEPTH: u32 = u32::MAX;
 const DEFAULT_DEPTH_COLOR: u64 = ((DEFAULT_DEPTH as u64) << 32) | (DEFAULT_BACKGROUND_COLOR as u64);
 
-trait ParIterEngine {
+pub trait ParIterEngine {
     fn depth_color_buffer(&self) -> &Arc<[AtomicU64]>;
     fn depth_color_buffer_mut(&mut self) -> &mut Arc<[AtomicU64]>;
 
@@ -46,9 +45,7 @@ trait ParIterEngine {
         size: PhysicalSize<u32>,
         #[cfg(feature = "stats")] stats: &Stats,
     );
-}
 
-impl<T: ParIterEngine> Engine for T {
     fn rasterize<B: std::ops::DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,

@@ -13,7 +13,7 @@ use crate::{
     font::TextWriter,
     maths::Vec4u,
     rasterizer::{
-        Engine, MINIMAL_AMBIANT_LIGHT, bounding_box_triangle, cursor_buffer_index, format_debug,
+        MINIMAL_AMBIANT_LIGHT, bounding_box_triangle, cursor_buffer_index, format_debug,
         settings::Settings, world_to_raster_triangle,
     },
     scene::Texture,
@@ -61,10 +61,8 @@ impl ParIterEngine2 {
         }
         Instant::now().duration_since(t).as_micros()
     }
-}
 
-impl Engine for ParIterEngine2 {
-    fn rasterize<B: std::ops::DerefMut<Target = [u32]>>(
+    pub fn rasterize<B: std::ops::DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,
         text_writer: &TextWriter,

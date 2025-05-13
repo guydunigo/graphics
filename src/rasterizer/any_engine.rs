@@ -4,10 +4,9 @@ use winit::dpi::PhysicalSize;
 use crate::{font::TextWriter, scene::World, window::AppObserver};
 
 use super::{
-    Engine,
-    parallel::{ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
+    parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
     settings::Settings,
-    single_threaded::{IteratorEngine, OriginalEngine},
+    single_threaded::{IteratorEngine, OriginalEngine, SingleThreadedEngine},
 };
 
 #[derive(Debug, Clone)]
@@ -37,10 +36,8 @@ impl AnyEngine {
             AnyEngine::ParIter5(_) => *self = AnyEngine::Original(Default::default()),
         }
     }
-}
 
-impl Engine for AnyEngine {
-    fn rasterize<B: DerefMut<Target = [u32]>>(
+    pub fn rasterize<B: DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,
         text_writer: &TextWriter,

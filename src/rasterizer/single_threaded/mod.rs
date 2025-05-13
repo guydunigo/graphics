@@ -9,7 +9,7 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     font::TextWriter,
-    rasterizer::{Engine, Settings},
+    rasterizer::Settings,
     scene::{DEFAULT_BACKGROUND_COLOR, World},
     window::AppObserver,
 };
@@ -17,7 +17,7 @@ use crate::{
 use super::{cursor_buffer_index, format_debug};
 
 /// Common base for engines not requiring buffer synchronization.
-trait SingleThreadedEngine {
+pub trait SingleThreadedEngine {
     fn depth_buffer_mut(&mut self) -> &mut Vec<f32>;
 
     fn rasterize_world<B: DerefMut<Target = [u32]>>(
@@ -28,9 +28,7 @@ trait SingleThreadedEngine {
         size: PhysicalSize<u32>,
         #[cfg(feature = "stats")] stats: &mut Stats,
     );
-}
 
-impl<T: SingleThreadedEngine> Engine for T {
     fn rasterize<B: DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,
