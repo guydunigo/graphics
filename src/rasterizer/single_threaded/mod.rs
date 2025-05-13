@@ -42,7 +42,7 @@ trait SingleThreadedEngine {
             .resize(size.width as usize * size.height as usize, f32::INFINITY);
         self.depth_buffer_mut().fill(f32::INFINITY);
 
-        Instant::now().duration_since(t).as_millis()
+        Instant::now().duration_since(t).as_micros()
     }
 }
 
@@ -68,7 +68,7 @@ impl<T: SingleThreadedEngine> Engine for T {
             #[cfg(feature = "stats")]
             stats,
         );
-        let rendering_time = Instant::now().duration_since(t).as_millis();
+        let rendering_time = Instant::now().duration_since(t).as_micros();
 
         display_debug(
             settings,
@@ -100,9 +100,9 @@ fn display_debug<B: DerefMut<Target = [u32]>>(
     #[cfg(not(feature = "stats"))]
     let stats = "Stats disabled";
     let display = format!(
-        "fps : {} {} | {}ms - {}ms / {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{}",
-        (1000. / app.last_frame_duration as f32).round(),
-        (1000. / app.last_rendering_duration as f32).round(),
+        "fps : {} {} | {}μs - {}μs / {}μs / {}μs{}\n{} {} {} {}\n{:?}\n{}",
+        (1000_000. / app.last_frame_duration as f32).round(),
+        (1000_000. / app.last_rendering_duration as f32).round(),
         buffer_fill_time,
         rendering_time,
         app.last_rendering_duration,

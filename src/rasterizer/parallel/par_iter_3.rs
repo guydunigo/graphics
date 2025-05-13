@@ -22,6 +22,7 @@ use crate::{
 
 const DEPTH_PRECISION: f32 = 2048.;
 
+// par_bridge
 #[derive(Default, Debug, Clone)]
 pub struct ParIterEngine3 {
     depth_color_buffer: Arc<[AtomicU64]>,

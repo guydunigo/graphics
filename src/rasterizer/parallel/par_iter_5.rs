@@ -16,28 +16,27 @@ use crate::{
         Engine, MINIMAL_AMBIANT_LIGHT, Rect, bounding_box_triangle, buffer_index, edge_function,
         settings::Settings, world_to_raster_triangle,
     },
-    scene::{Texture, Triangle},
+    scene::{Texture, Triangle, World},
     window::AppObserver,
 };
 
-use super::scene::World;
-
 const DEPTH_PRECISION: f32 = 2048.;
 
-/// Uses special world with sync structures
+/// Version parallèle mais regroupée en un seul foreach
 #[derive(Default, Debug, Clone)]
-pub struct ParIterEngine {
+pub struct ParIterEngine5 {
     depth_color_buffer: Arc<[AtomicU64]>,
     last_copy_buffer: u128,
-    // TODO: merge with sync world ?
-    world: Option<World>,
 }
 
-impl ParIterEngine {
+impl ParIterEngine5 {
     const DEFAULT_COLOR: u32 = 0xff181818;
     const DEFAULT_DEPTH: u32 = u32::MAX;
     const DEFAULT_DEPTH_COLOR: u64 =
         ((Self::DEFAULT_DEPTH as u64) << 32) | (Self::DEFAULT_COLOR as u64);
+
+    // let size = window.inner_size();
+    // let tot_size = (size.width * size.height) as usize;
 
     fn init_buffer<T, F: Fn() -> T>(tot_size: usize, f: F) -> Arc<[T]> {
         let mut v = Vec::with_capacity(tot_size);
@@ -59,11 +58,11 @@ impl ParIterEngine {
             self.depth_color_buffer =
                 Self::init_buffer(tot_size, || AtomicU64::new(Self::DEFAULT_DEPTH_COLOR));
         }
-        Instant::now().duration_since(t).as_micros()
+        Instant::now().duration_since(t).as_millis()
     }
 }
 
-impl Engine for ParIterEngine {
+impl Engine for ParIterEngine5 {
     fn rasterize<B: std::ops::DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,
@@ -76,8 +75,6 @@ impl Engine for ParIterEngine {
     ) {
         let buffer_fill_time = self.clean_resize_buffer(size);
 
-        let world = self.world.get_or_insert_with(|| world.into());
-
         let t = Instant::now();
         rasterize_world(
             settings,
@@ -87,7 +84,7 @@ impl Engine for ParIterEngine {
             #[cfg(feature = "stats")]
             &stats,
         );
-        let rendering_time = Instant::now().duration_since(t).as_micros();
+        let rendering_time = Instant::now().duration_since(t).as_millis();
 
         // TODO: copy from single thread
         // TODO: extract to function
@@ -98,14 +95,12 @@ impl Engine for ParIterEngine {
             #[cfg(not(feature = "stats"))]
             let stats = "Stats disabled";
             let display = format!(
-                "fps : {} {} | {}μs - {}μs - {}μs / {}μs / {}μs{}\n{} {} {} {}\n{:?}\n{}",
-                (1000_000. / app.last_frame_duration as f32).round(),
-                (1000_000. / app.last_rendering_duration as f32).round(),
+                "fps : {} | {}ms - {}ms - {}ms / {}ms{}\n{} {} {} {}\n{:?}\n{}",
+                (1000. / app.last_rendering_duration as f32).round(),
                 buffer_fill_time,
                 rendering_time,
                 self.last_copy_buffer,
                 app.last_rendering_duration,
-                app.last_frame_duration,
                 app.cursor
                     .and_then(|cursor| self
                         .depth_color_buffer
@@ -132,7 +127,7 @@ impl Engine for ParIterEngine {
             buffer[i] = u64_to_color(self.depth_color_buffer[i].load(Ordering::Relaxed));
         });
 
-        self.last_copy_buffer = Instant::now().duration_since(copy_buffer).as_micros();
+        self.last_copy_buffer = Instant::now().duration_since(copy_buffer).as_millis();
     }
 }
 
@@ -194,54 +189,46 @@ pub fn rasterize_world(
 ) {
     let ratio_w_h = size.width as f32 / size.height as f32;
 
-    world
-        .triangles()
-        .par_iter()
-        .filter_map(|t| t.upgrade())
-        .filter_map(|t| t.to_world())
-        .inspect(|_| {
+    world.meshes.par_iter().for_each(|m| {
+        m.triangles.par_iter().for_each(|t| {
+            let t = t.scale_rot_move(m.scale, &m.rot, m.pos);
+
             #[cfg(feature = "stats")]
             stats.nb_triangles_tot.fetch_add(1, Ordering::Relaxed);
-        })
-        .map(|t| {
+
             // TODO: explode ?
-            let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
+            let mut t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
             let bb = bounding_box_triangle(&t_raster, size);
-            (t, t_raster, bb)
-        })
-        .filter(|(_, _, bb)| {
+
             // TODO: max_z >= MAX_DEPTH ?
-            !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
-        })
-        .inspect(|_| {
+            if bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near {
+                return;
+            }
+
             #[cfg(feature = "stats")]
             stats.nb_triangles_sight.fetch_add(1, Ordering::Relaxed);
-        })
-        .map(|(t, t_raster, bb)| {
+
             let p01 = t_raster.p1 - t_raster.p0;
             let p20 = t_raster.p0 - t_raster.p2;
-            (t, t_raster, bb, p01, p20)
-        })
-        ////////////////////////////////
-        // Back face culling
-        // If triangle normal and camera sight are in same direction (dot product > 0),
-        // it's invisible.
-        .filter(|(_, _, _, p01, p20)| {
+
+            ////////////////////////////////
+            // Back face culling
+            // If triangle normal and camera sight are in same direction (dot product > 0),
+            // it's invisible.
             // Calculate only of normal z
-            let raster_normale = p01.cross(*p20);
-            raster_normale.z >= 0.
-        })
-        .inspect(|_| {
+            if p01.cross(p20).z <= 0. {
+                return;
+            }
+
             #[cfg(feature = "stats")]
             stats.nb_triangles_facing.fetch_add(1, Ordering::Relaxed);
-        })
-        ////////////////////////////////
-        // Sunlight
-        // Dot product gives negative if two vectors are opposed, so we compare light
-        // vector to face normal vector to see if they are opposed (face is lit).
-        //
-        // Also simplifying colours.
-        .map(|(t, mut t_raster, bb, p01, p20)| {
+
+            ////////////////////////////////
+            // Sunlight
+            // Dot product gives negative if two vectors are opposed, so we compare light
+            // vector to face normal vector to see if they are opposed (face is lit).
+            //
+            // Also simplifying colours.
             let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
             let light = world
                 .sun_direction
@@ -261,9 +248,6 @@ pub fn rasterize_world(
                     Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
             }
 
-            (t_raster, bb, light, p01, p20)
-        })
-        .for_each(|(t_raster, bb, light, p01, p20)| {
             rasterize_triangle(
                 &t_raster,
                 depth_color_buffer,
@@ -276,8 +260,9 @@ pub fn rasterize_world(
                 light,
                 p01,
                 p20,
-            )
-        });
+            );
+        })
+    });
 }
 
 fn rasterize_triangle(

@@ -239,7 +239,7 @@ impl ApplicationHandler for App {
                     let last_frame_start_time = Instant::now();
                     self.last_frame_duration = last_frame_start_time
                         .duration_since(self.last_frame_start_time)
-                        .as_millis();
+                        .as_micros();
                     self.last_frame_start_time = last_frame_start_time;
                 }
 
@@ -292,7 +292,7 @@ impl ApplicationHandler for App {
 
                 self.last_rendering_duration = Instant::now()
                     .duration_since(self.last_frame_start_time)
-                    .as_millis();
+                    .as_micros();
             }
             _ => (),
         }
