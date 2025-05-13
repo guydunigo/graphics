@@ -10,6 +10,7 @@ pub struct Settings {
     ///
     /// Not implemented everywhere
     pub sort_triangles: TriangleSorting,
+    pub parallel_text: bool,
 }
 
 impl Settings {

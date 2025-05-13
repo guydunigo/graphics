@@ -71,7 +71,7 @@ pub trait ParIterEngine {
         );
         app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
 
-        {
+        if settings.parallel_text {
             let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
             let display = format_debug(
                 settings,
@@ -89,6 +89,19 @@ pub trait ParIterEngine {
             buffer[i] = u64_to_color(depth_color_buffer[i].load(Ordering::Relaxed));
         });
         app.last_buffer_copy_micros = Instant::now().duration_since(t).as_micros();
+
+        if !settings.parallel_text {
+            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
+            let display = format_debug(
+                settings,
+                world,
+                app,
+                cursor_color,
+                #[cfg(feature = "stats")]
+                stats,
+            );
+            text_writer.rasterize(buffer, size, &display[..]);
+        }
     }
 }
 
