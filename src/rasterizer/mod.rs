@@ -8,8 +8,8 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
     font::TextWriter,
-    maths::{Vec3f, Vec4u},
-    scene::{Camera, Texture, Triangle, World},
+    maths::Vec3f,
+    scene::{Camera, Triangle, World},
     window::AppObserver,
 };
 
@@ -160,33 +160,6 @@ fn buffer_index(p: Vec3f, size: PhysicalSize<u32>) -> Option<usize> {
     }
 }
 
-fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
-    buffer: &mut B,
-    size: PhysicalSize<u32>,
-    v: Vec3f,
-    texture: &Texture,
-) {
-    if v.x >= 1. && v.x < (size.width as f32) - 1. && v.y >= 1. && v.y < (size.height as f32) - 1. {
-        if let Some(i) = buffer_index(v, size) {
-            let color = match texture {
-                Texture::Color(col) => *col,
-                // TODO: Better color calculus
-                Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
-                    + Vec4u::from_color_u32(*c1)
-                    + Vec4u::from_color_u32(*c2))
-                    / 3.)
-                    .as_color_u32(),
-            };
-
-            buffer[i] = color;
-            buffer[i - 1] = color;
-            buffer[i + 1] = color;
-            buffer[i - (size.width as usize)] = color;
-            buffer[i + (size.width as usize)] = color;
-        }
-    }
-}
-
 fn cursor_buffer_index(
     cursor: &Option<PhysicalPosition<f64>>,
     size: PhysicalSize<u32>,
@@ -194,8 +167,9 @@ fn cursor_buffer_index(
     let width = size.width as usize;
     let height = size.height as usize;
     cursor
+        .filter(|c| c.x >= 0. && c.y >= 0.)
         .map(|c| (c.x as usize, c.y as usize))
-        .filter(|(x, y)| *x >= 0 && *x < width && *y >= 0 && *y < height)
+        .filter(|(x, y)| *x < width && *y < height)
         .map(|(x, y)| x + y * width)
 }
 
@@ -214,8 +188,8 @@ fn format_debug(
 
     format!(
         "fps : {} {} | {}μs - {}μs - {}μs / {}μs / {}μs{}\n{} {} {} {}\n{:?}\n{}",
-        (1000_000. / app.last_frame_micros() as f32).round(),
-        (1000_000. / app.last_full_render_loop_micros() as f32).round(),
+        (1_000_000. / app.last_frame_micros() as f32).round(),
+        (1_000_000. / app.last_full_render_loop_micros() as f32).round(),
         app.last_buffer_fill_micros,
         app.last_rendering_micros,
         app.last_buffer_copy_micros,

@@ -20,9 +20,7 @@ use crate::{
     window::AppObserver,
 };
 
-use super::{rasterize_triangle, scene::World, u64_to_color};
-
-const DEPTH_PRECISION: f32 = 2048.;
+use super::{clean_resize_buffer, rasterize_triangle, scene::World, u64_to_color};
 
 /// Test parallel iter directly on memory array of triangles
 ///
@@ -34,34 +32,6 @@ pub struct ParIterEngine2 {
 }
 
 impl ParIterEngine2 {
-    const DEFAULT_COLOR: u32 = 0xff181818;
-    const DEFAULT_DEPTH: u32 = u32::MAX;
-    const DEFAULT_DEPTH_COLOR: u64 =
-        ((Self::DEFAULT_DEPTH as u64) << 32) | (Self::DEFAULT_COLOR as u64);
-
-    fn init_buffer<T, F: Fn() -> T>(tot_size: usize, f: F) -> Arc<[T]> {
-        let mut v = Vec::with_capacity(tot_size);
-        v.resize_with(tot_size, f);
-        v.into()
-    }
-
-    /// Resize `depth_color_buffer` if necessary and fills it with [`Self::DEFAULT_DEPTH_COLOR`]
-    fn clean_resize_buffer(&mut self, size: PhysicalSize<u32>) -> u128 {
-        let t = Instant::now();
-        let tot_size = (size.width * size.height) as usize;
-
-        if self.depth_color_buffer.len() >= tot_size {
-            self.depth_color_buffer
-                .par_iter()
-                .take(tot_size)
-                .for_each(|v| v.store(Self::DEFAULT_DEPTH_COLOR, Ordering::Relaxed))
-        } else {
-            self.depth_color_buffer =
-                Self::init_buffer(tot_size, || AtomicU64::new(Self::DEFAULT_DEPTH_COLOR));
-        }
-        Instant::now().duration_since(t).as_micros()
-    }
-
     pub fn rasterize<B: std::ops::DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,
@@ -72,7 +42,7 @@ impl ParIterEngine2 {
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        app.last_buffer_fill_micros = self.clean_resize_buffer(size);
+        app.last_buffer_fill_micros = clean_resize_buffer(&mut self.depth_color_buffer, size);
 
         let par_world = self.world.get_or_insert_with(|| world.into());
 
@@ -88,7 +58,7 @@ impl ParIterEngine2 {
         app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
 
         {
-            let cursor_color = cursor_buffer_index(&app.cursor(), size).map(|index| buffer[index]);
+            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
             let display = format_debug(
                 settings,
                 world,

@@ -72,7 +72,7 @@ pub trait ParIterEngine {
         app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
 
         {
-            let cursor_color = cursor_buffer_index(&app.cursor(), size).map(|index| buffer[index]);
+            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
             let display = format_debug(
                 settings,
                 world,

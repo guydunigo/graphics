@@ -9,12 +9,13 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     font::TextWriter,
+    maths::{Vec3f, Vec4u},
     rasterizer::Settings,
-    scene::{DEFAULT_BACKGROUND_COLOR, World},
+    scene::{DEFAULT_BACKGROUND_COLOR, Texture, World},
     window::AppObserver,
 };
 
-use super::{cursor_buffer_index, format_debug};
+use super::{buffer_index, cursor_buffer_index, format_debug};
 
 /// Common base for engines not requiring buffer synchronization.
 pub trait SingleThreadedEngine {
@@ -54,7 +55,7 @@ pub trait SingleThreadedEngine {
         app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
 
         {
-            let cursor_color = cursor_buffer_index(&app.cursor(), size).map(|index| buffer[index]);
+            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
             let display = format_debug(
                 settings,
                 world,
@@ -70,7 +71,8 @@ pub trait SingleThreadedEngine {
 
 /// - Resize `depth_buffer` and fill it with inifite depth
 /// - Fill `buffer` with `DEFAULT_BACKGROUND_COLOR`
-/// `buffer` should be already resized.
+///
+/// | `buffer` should be already resized.
 fn clean_resize_buffers<B: DerefMut<Target = [u32]>>(
     depth_buffer: &mut Vec<f32>,
     buffer: &mut B,
@@ -83,4 +85,31 @@ fn clean_resize_buffers<B: DerefMut<Target = [u32]>>(
     depth_buffer.fill(f32::INFINITY);
 
     Instant::now().duration_since(t).as_micros()
+}
+
+fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
+    buffer: &mut B,
+    size: PhysicalSize<u32>,
+    v: Vec3f,
+    texture: &Texture,
+) {
+    if v.x >= 1. && v.x < (size.width as f32) - 1. && v.y >= 1. && v.y < (size.height as f32) - 1. {
+        if let Some(i) = buffer_index(v, size) {
+            let color = match texture {
+                Texture::Color(col) => *col,
+                // TODO: Better color calculus
+                Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
+                    + Vec4u::from_color_u32(*c1)
+                    + Vec4u::from_color_u32(*c2))
+                    / 3.)
+                    .as_color_u32(),
+            };
+
+            buffer[i] = color;
+            buffer[i - 1] = color;
+            buffer[i + 1] = color;
+            buffer[i - (size.width as usize)] = color;
+            buffer[i + (size.width as usize)] = color;
+        }
+    }
 }

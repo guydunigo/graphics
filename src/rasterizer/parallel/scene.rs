@@ -2,7 +2,6 @@
 use std::sync::{Arc, RwLock, Weak};
 
 use rand::RngCore;
-use rayon::prelude::*;
 
 use crate::{
     maths::{PI, Rotation, Vec3f},
@@ -148,7 +147,7 @@ impl From<&crate::scene::World> for World {
         let meshes = world
             .meshes
             .iter()
-            .map(|m| Into::<Arc<RwLock<Mesh>>>::into(m))
+            .map(Into::<Arc<RwLock<Mesh>>>::into)
             .inspect(|m| {
                 m.read()
                     .unwrap()
@@ -208,7 +207,7 @@ mod obj {
         let mut triangles = Vec::with_capacity(obj.polygons.len());
         for (poly_index, poly) in obj.polygons.iter().enumerate() {
             let texture = find_mtl_texture(&obj.meshes, &mtls, poly_index).unwrap_or_default();
-            triangles.push(polygon_to_triangle(&obj.positions[..], texture, poly).into());
+            triangles.push(polygon_to_triangle(&obj.positions[..], texture, poly));
         }
 
         let res = Mesh::new();

@@ -3,7 +3,7 @@
 use crate::{
     maths::{Vec3f, Vec4u},
     rasterizer::{
-        MINIMAL_AMBIANT_LIGHT, Settings, bounding_box_triangle, draw_vertice_basic, edge_function,
+        MINIMAL_AMBIANT_LIGHT, Settings, bounding_box_triangle, edge_function,
         settings::TriangleSorting, world_to_raster_triangle,
     },
     scene::{Camera, Mesh, Texture, Triangle, World},
@@ -11,7 +11,7 @@ use crate::{
 use std::ops::DerefMut;
 use winit::dpi::PhysicalSize;
 
-use super::SingleThreadedEngine;
+use super::{SingleThreadedEngine, draw_vertice_basic};
 
 #[derive(Default, Debug, Clone)]
 pub struct OriginalEngine {
