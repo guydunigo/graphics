@@ -49,6 +49,8 @@ pub struct AppObserver {
     pub last_buffer_fill_micros: u128,
     pub last_rendering_micros: u128,
     pub last_buffer_copy_micros: u128,
+    fps_avg: u32,
+    frame_avg_micros: u128,
 }
 
 impl AppObserver {
