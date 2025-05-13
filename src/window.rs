@@ -41,19 +41,47 @@ impl WindowSurface {
 }
 
 /// App data infos to be used and displayed, mostly for debugging
+#[derive(Default, Debug, Clone, Copy)]
 pub struct AppObserver {
-    pub cursor: Option<PhysicalPosition<f64>>,
+    cursor: Option<PhysicalPosition<f64>>,
+    last_full_render_loop_micros: u128,
+    last_frame_micros: u128,
+    pub last_buffer_fill_micros: u128,
     pub last_rendering_micros: u128,
-    pub last_frame_micros: u128,
+    pub last_buffer_copy_micros: u128,
 }
 
 impl AppObserver {
+    pub fn cursor(&self) -> &Option<PhysicalPosition<f64>> {
+        &self.cursor
+    }
+
+    pub fn last_full_render_loop_micros(&self) -> u128 {
+        self.last_full_render_loop_micros
+    }
+
+    pub fn last_frame_micros(&self) -> u128 {
+        self.last_frame_micros
+    }
+
     fn from(value: &App) -> Self {
         AppObserver {
             cursor: value.cursor,
-            last_rendering_micros: value.last_rendering_micros,
+            last_full_render_loop_micros: value.last_full_render_loop_micros,
             last_frame_micros: value.last_frame_micros,
+            last_buffer_fill_micros: value.last_buffer_fill_micros,
+            last_rendering_micros: value.last_rendering_micros,
+            last_buffer_copy_micros: value.last_buffer_copy_micros,
         }
+    }
+
+    fn update_app(&self, app: &mut App) {
+        app.cursor = self.cursor;
+        app.last_full_render_loop_micros = self.last_full_render_loop_micros;
+        app.last_frame_micros = self.last_frame_micros;
+        app.last_buffer_fill_micros = self.last_buffer_fill_micros;
+        app.last_rendering_micros = self.last_rendering_micros;
+        app.last_buffer_copy_micros = self.last_buffer_copy_micros;
     }
 }
 
@@ -62,10 +90,13 @@ pub struct App {
     rasterizer: Rasterizer,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
-    last_rendering_micros: u128,
+    mouse_left_held: bool,
+    last_full_render_loop_micros: u128,
     last_frame_start_time: Instant,
     last_frame_micros: u128,
-    mouse_left_held: bool,
+    last_buffer_fill_micros: u128,
+    last_rendering_micros: u128,
+    last_buffer_copy_micros: u128,
 }
 
 impl Default for App {
@@ -75,9 +106,12 @@ impl Default for App {
             rasterizer: Default::default(),
             world: Default::default(),
             cursor: Default::default(),
-            last_rendering_micros: Default::default(),
+            last_full_render_loop_micros: Default::default(),
             last_frame_start_time: Instant::now(),
             last_frame_micros: Default::default(),
+            last_buffer_fill_micros: Default::default(),
+            last_rendering_micros: Default::default(),
+            last_buffer_copy_micros: Default::default(),
             mouse_left_held: Default::default(),
         }
     }
@@ -252,7 +286,7 @@ impl ApplicationHandler for App {
                 // this event rather than in AboutToWait, since rendering in here allows
                 // the program to gracefully handle redraws requested by the OS.
 
-                let obs = AppObserver::from(self);
+                let mut obs = AppObserver::from(self);
 
                 // TODO: no unwrap
                 let window_surface = self.window_surface.as_mut().unwrap();
@@ -275,9 +309,8 @@ impl ApplicationHandler for App {
                     .surface()
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
-
                 self.rasterizer
-                    .rasterize(&self.world, &mut buffer, size, obs);
+                    .rasterize(&self.world, &mut buffer, size, &mut obs);
 
                 buffer
                     .present()
@@ -290,7 +323,9 @@ impl ApplicationHandler for App {
                 // can render here instead.
                 window_surface.window.request_redraw();
 
-                self.last_rendering_micros = Instant::now()
+                obs.update_app(self);
+
+                self.last_full_render_loop_micros = Instant::now()
                     .duration_since(self.last_frame_start_time)
                     .as_micros();
             }

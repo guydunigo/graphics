@@ -58,7 +58,7 @@ impl Rasterizer {
         world: &World,
         buffer: &mut B,
         size: PhysicalSize<u32>,
-        app: AppObserver,
+        app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         self.engine.rasterize(
@@ -87,7 +87,7 @@ trait Engine {
         world: &World,
         buffer: &mut B,
         size: PhysicalSize<u32>,
-        app: AppObserver,
+        app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     );
 }
@@ -215,11 +215,8 @@ fn cursor_buffer_index(
 fn format_debug(
     settings: &Settings,
     world: &World,
-    app: AppObserver,
+    app: &AppObserver,
     cursor_color: Option<u32>,
-    buffer_fill_micros: u128,
-    rendering_micros: u128,
-    buffer_copy_micros: u128,
     #[cfg(feature = "stats")] stats: &Stats,
 ) -> String {
     let cam_rot = world.camera.rot();
@@ -230,14 +227,14 @@ fn format_debug(
 
     format!(
         "fps : {} {} | {}μs - {}μs - {}μs / {}μs / {}μs{}\n{} {} {} {}\n{:?}\n{}",
-        (1000_000. / app.last_frame_micros as f32).round(),
-        (1000_000. / app.last_rendering_micros as f32).round(),
-        buffer_fill_micros,
-        rendering_micros,
-        buffer_copy_micros,
+        (1000_000. / app.last_frame_micros() as f32).round(),
+        (1000_000. / app.last_full_render_loop_micros() as f32).round(),
+        app.last_buffer_fill_micros,
         app.last_rendering_micros,
-        app.last_frame_micros,
-        app.cursor
+        app.last_buffer_copy_micros,
+        app.last_full_render_loop_micros(),
+        app.last_frame_micros(),
+        app.cursor()
             .and_then(|cursor| cursor_color.map(|c| format!(
                 "\n({},{}) 0x{:x}",
                 cursor.x.floor(),
