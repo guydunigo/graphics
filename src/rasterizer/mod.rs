@@ -187,14 +187,14 @@ fn format_debug(
     let stats = "Stats disabled";
 
     format!(
-        "fps : {} {} | {}μs - {}μs - {}μs / {}μs / {}μs{}\n{} {} {} {}\n{:?}\n{}",
-        (1_000_000. / app.last_frame_micros() as f32).round(),
-        (1_000_000. / app.last_full_render_loop_micros() as f32).round(),
+        "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\n{} {} {} {}\n{:?}\n{}",
+        app.fps_avg().round(),
         app.last_buffer_fill_micros,
         app.last_rendering_micros,
         app.last_buffer_copy_micros,
         app.last_full_render_loop_micros(),
         app.last_frame_micros(),
+        app.frame_avg_micros(),
         app.cursor()
             .and_then(|cursor| cursor_color.map(|c| format!(
                 "\n({},{}) 0x{:x}",

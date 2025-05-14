@@ -15,6 +15,8 @@ use winit::{
 use crate::rasterizer::Stats;
 use crate::{maths::Rotation, rasterizer::Rasterizer, scene::World};
 
+const BLENDING_RATIO: f32 = 0.01;
+
 pub struct WindowSurface {
     window: Rc<Window>,
     surface: Surface<Rc<Window>, Rc<Window>>,
@@ -46,11 +48,11 @@ pub struct AppObserver {
     cursor: Option<PhysicalPosition<f64>>,
     last_full_render_loop_micros: u128,
     last_frame_micros: u128,
+    frame_avg_micros: u128,
+    fps_avg: f32,
     pub last_buffer_fill_micros: u128,
     pub last_rendering_micros: u128,
     pub last_buffer_copy_micros: u128,
-    fps_avg: u32,
-    frame_avg_micros: u128,
 }
 
 impl AppObserver {
@@ -66,11 +68,21 @@ impl AppObserver {
         self.last_frame_micros
     }
 
+    pub fn frame_avg_micros(&self) -> u128 {
+        self.frame_avg_micros
+    }
+
+    pub fn fps_avg(&self) -> f32 {
+        self.fps_avg
+    }
+
     fn from(value: &App) -> Self {
         AppObserver {
             cursor: value.cursor,
             last_full_render_loop_micros: value.last_full_render_loop_micros,
             last_frame_micros: value.last_frame_micros,
+            frame_avg_micros: value.frame_avg_micros,
+            fps_avg: value.fps_avg,
             last_buffer_fill_micros: value.last_buffer_fill_micros,
             last_rendering_micros: value.last_rendering_micros,
             last_buffer_copy_micros: value.last_buffer_copy_micros,
@@ -81,6 +93,8 @@ impl AppObserver {
         app.cursor = self.cursor;
         app.last_full_render_loop_micros = self.last_full_render_loop_micros;
         app.last_frame_micros = self.last_frame_micros;
+        app.frame_avg_micros = self.frame_avg_micros;
+        app.fps_avg = self.fps_avg;
         app.last_buffer_fill_micros = self.last_buffer_fill_micros;
         app.last_rendering_micros = self.last_rendering_micros;
         app.last_buffer_copy_micros = self.last_buffer_copy_micros;
@@ -96,6 +110,8 @@ pub struct App {
     last_full_render_loop_micros: u128,
     last_frame_start_time: Instant,
     last_frame_micros: u128,
+    frame_avg_micros: u128,
+    fps_avg: f32,
     last_buffer_fill_micros: u128,
     last_rendering_micros: u128,
     last_buffer_copy_micros: u128,
@@ -108,13 +124,15 @@ impl Default for App {
             rasterizer: Default::default(),
             world: Default::default(),
             cursor: Default::default(),
+            mouse_left_held: Default::default(),
             last_full_render_loop_micros: Default::default(),
             last_frame_start_time: Instant::now(),
             last_frame_micros: Default::default(),
+            frame_avg_micros: Default::default(),
+            fps_avg: Default::default(),
             last_buffer_fill_micros: Default::default(),
             last_rendering_micros: Default::default(),
             last_buffer_copy_micros: Default::default(),
-            mouse_left_held: Default::default(),
         }
     }
 }
@@ -128,6 +146,20 @@ impl App {
 
         let mut app = App::default();
         event_loop.run_app(&mut app).unwrap();
+    }
+
+    pub fn update_last_frame_micros(&mut self) {
+        let last_frame_start_time = Instant::now();
+        self.last_frame_micros = last_frame_start_time
+            .duration_since(self.last_frame_start_time)
+            .as_micros();
+        self.last_frame_start_time = last_frame_start_time;
+
+        self.frame_avg_micros = (self.frame_avg_micros as f32 * (1. - BLENDING_RATIO)
+            + self.last_frame_micros as f32 * BLENDING_RATIO)
+            as u128;
+        self.fps_avg = self.fps_avg * (1. - BLENDING_RATIO)
+            + BLENDING_RATIO * 1_000_000. / (self.last_frame_micros as f32);
     }
 }
 
@@ -274,13 +306,7 @@ impl ApplicationHandler for App {
                 self.cursor = Some(position);
             }
             WindowEvent::RedrawRequested => {
-                {
-                    let last_frame_start_time = Instant::now();
-                    self.last_frame_micros = last_frame_start_time
-                        .duration_since(self.last_frame_start_time)
-                        .as_micros();
-                    self.last_frame_start_time = last_frame_start_time;
-                }
+                self.update_last_frame_micros();
 
                 #[cfg(feature = "stats")]
                 let mut stats = Stats::default();
