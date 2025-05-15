@@ -255,6 +255,7 @@ impl ApplicationHandler for App {
                         self.rasterizer.settings.parallel_text =
                             !self.rasterizer.settings.parallel_text
                     }
+                    KeyCode::Digit4 => self.rasterizer.settings.x4 = !self.rasterizer.settings.x4,
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {

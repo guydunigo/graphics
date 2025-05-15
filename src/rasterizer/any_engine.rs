@@ -21,7 +21,7 @@ pub enum AnyEngine {
 
 impl Default for AnyEngine {
     fn default() -> Self {
-        AnyEngine::Iterator(Default::default())
+        AnyEngine::ParIter4(Default::default())
     }
 }
 

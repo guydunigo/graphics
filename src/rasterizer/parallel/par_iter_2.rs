@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    font::TextWriter,
+    font::{self, TextWriter},
     maths::Vec4u,
     rasterizer::{
         MINIMAL_AMBIANT_LIGHT, bounding_box_triangle, cursor_buffer_index, format_debug,
@@ -67,9 +67,10 @@ impl ParIterEngine2 {
                 #[cfg(feature = "stats")]
                 stats,
             );
-            text_writer.rasterize_par(&self.depth_color_buffer, size, &display[..]);
+            text_writer.rasterize_par(&self.depth_color_buffer, size, font::PX, &display[..]);
         }
 
+        // TODO: parallel (safe split ref vec)
         let t = Instant::now();
         (0..(size.width * size.height) as usize).for_each(|i| {
             buffer[i] = u64_to_color(self.depth_color_buffer[i].load(Ordering::Relaxed));

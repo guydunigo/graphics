@@ -8,7 +8,7 @@ use std::{ops::DerefMut, time::Instant};
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    font::TextWriter,
+    font::{self, TextWriter},
     maths::{Vec3f, Vec4u},
     rasterizer::Settings,
     scene::{DEFAULT_BACKGROUND_COLOR, Texture, World},
@@ -64,7 +64,7 @@ pub trait SingleThreadedEngine {
                 #[cfg(feature = "stats")]
                 stats,
             );
-            text_writer.rasterize(buffer, size, &display[..]);
+            text_writer.rasterize(buffer, size, font::PX, &display[..]);
         }
     }
 }

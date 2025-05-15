@@ -1,6 +1,6 @@
 use super::any_engine::AnyEngine;
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Settings {
     /// Over-print all vertices
     pub show_vertices: bool,
@@ -11,6 +11,19 @@ pub struct Settings {
     /// Not implemented everywhere
     pub sort_triangles: TriangleSorting,
     pub parallel_text: bool,
+    pub x4: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            show_vertices: Default::default(),
+            engine_type: Default::default(),
+            sort_triangles: Default::default(),
+            parallel_text: true,
+            x4: Default::default(),
+        }
+    }
 }
 
 impl Settings {

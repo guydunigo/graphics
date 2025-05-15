@@ -20,7 +20,7 @@ pub use par_iter_5::ParIterEngine5;
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    font::TextWriter,
+    font::{self, TextWriter},
     maths::{Vec3f, Vec4u},
     scene::{DEFAULT_BACKGROUND_COLOR, Texture, Triangle, World},
     window::AppObserver,
@@ -52,10 +52,22 @@ pub trait ParIterEngine {
         text_writer: &TextWriter,
         world: &crate::scene::World,
         buffer: &mut B,
-        size: PhysicalSize<u32>,
+        mut size: PhysicalSize<u32>,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
+        let original_size = size;
+
+        // If x4 is set :
+        let mut font_size = font::PX;
+        if settings.x4 {
+            size.width *= 2;
+            size.height *= 2;
+            if settings.parallel_text {
+                font_size *= 2.;
+            }
+        }
+
         app.last_buffer_fill_micros = clean_resize_buffer(self.depth_color_buffer_mut(), size);
 
         let depth_color_buffer = self.depth_color_buffer();
@@ -81,13 +93,29 @@ pub trait ParIterEngine {
                 #[cfg(feature = "stats")]
                 stats,
             );
-            text_writer.rasterize_par(depth_color_buffer, size, &display[..]);
+            text_writer.rasterize_par(depth_color_buffer, size, font_size, &display[..]);
         }
 
+        // TODO: parallel (safe split ref vec)
         let t = Instant::now();
-        (0..(size.width * size.height) as usize).for_each(|i| {
-            buffer[i] = u64_to_color(depth_color_buffer[i].load(Ordering::Relaxed));
-        });
+        if settings.x4 {
+            (0..((size.height * size.width) as usize))
+                .step_by(size.width as usize)
+                .enumerate()
+                .for_each(|(j, jx4)| {
+                    (0..(size.width as usize))
+                        .step_by(2)
+                        .enumerate()
+                        .for_each(|(i, ix4)| {
+                            buffer[j + i] =
+                                u64_to_color(depth_color_buffer[jx4 + ix4].load(Ordering::Relaxed));
+                        });
+                });
+        } else {
+            (0..(size.width * size.height) as usize).for_each(|i| {
+                buffer[i] = u64_to_color(depth_color_buffer[i].load(Ordering::Relaxed));
+            });
+        }
         app.last_buffer_copy_micros = Instant::now().duration_since(t).as_micros();
 
         if !settings.parallel_text {
@@ -100,7 +128,7 @@ pub trait ParIterEngine {
                 #[cfg(feature = "stats")]
                 stats,
             );
-            text_writer.rasterize(buffer, size, &display[..]);
+            text_writer.rasterize(buffer, size, font_size, &display[..]);
         }
     }
 }
