@@ -60,6 +60,7 @@ pub trait SingleThreadedEngine {
                 settings,
                 world,
                 app,
+                size,
                 cursor_color,
                 #[cfg(feature = "stats")]
                 stats,

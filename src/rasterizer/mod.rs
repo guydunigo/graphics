@@ -177,6 +177,7 @@ fn format_debug(
     settings: &Settings,
     world: &World,
     app: &AppObserver,
+    size: PhysicalSize<u32>,
     cursor_color: Option<u32>,
     #[cfg(feature = "stats")] stats: &Stats,
 ) -> String {
@@ -187,7 +188,7 @@ fn format_debug(
     let stats = "Stats disabled";
 
     format!(
-        "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\n{} {} {} {}\n{:?}\n{}",
+        "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\n{}x{}\n{} {} {} {}\n{:?}\n{}",
         app.fps_avg().round(),
         app.last_buffer_fill_micros,
         app.last_rendering_micros,
@@ -203,6 +204,8 @@ fn format_debug(
                 c
             )))
             .unwrap_or(String::from("\nNo cursor position")),
+        size.width,
+        size.height,
         world.camera.pos,
         cam_rot.u(),
         cam_rot.v(),

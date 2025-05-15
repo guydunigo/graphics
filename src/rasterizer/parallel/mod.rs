@@ -84,11 +84,13 @@ pub trait ParIterEngine {
         app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
 
         if settings.parallel_text {
-            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
+            let cursor_color = cursor_buffer_index(app.cursor(), size)
+                .map(|index| u64_to_color(depth_color_buffer[index].load(Ordering::Relaxed)));
             let display = format_debug(
                 settings,
                 world,
                 app,
+                size,
                 cursor_color,
                 #[cfg(feature = "stats")]
                 stats,
@@ -99,17 +101,30 @@ pub trait ParIterEngine {
         // TODO: parallel (safe split ref vec)
         let t = Instant::now();
         if settings.x4 {
-            (0..((size.height * size.width) as usize))
-                .step_by(size.width as usize)
-                .enumerate()
-                .for_each(|(j, jx4)| {
-                    (0..(size.width as usize))
-                        .step_by(2)
-                        .enumerate()
-                        .for_each(|(i, ix4)| {
-                            buffer[j + i] =
-                                u64_to_color(depth_color_buffer[jx4 + ix4].load(Ordering::Relaxed));
-                        });
+            (0..((original_size.height * original_size.width) as usize))
+                .step_by(original_size.width as usize)
+                .for_each(|jx4| {
+                    (0..(original_size.width as usize)).for_each(|ix4| {
+                        // println!(
+                        //     "{jx4},{ix4} {} {} {} {}",
+                        //     jx4 * 4 + ix4 * 2,
+                        //     jx4 * 4 + ix4 * 2 + 1,
+                        //     jx4 * 4 + size.width as usize + ix4 * 2,
+                        //     jx4 * 4 + size.width as usize + ix4 * 2 + 1,
+                        // );
+                        buffer[jx4 + ix4] = ((Vec4u::from_color_u32(u64_to_color(
+                            depth_color_buffer[jx4 * 4 + ix4 * 2].load(Ordering::Relaxed),
+                        )) + Vec4u::from_color_u32(u64_to_color(
+                            depth_color_buffer[jx4 * 4 + ix4 * 2 + 1].load(Ordering::Relaxed),
+                        )) + Vec4u::from_color_u32(u64_to_color(
+                            depth_color_buffer[jx4 * 4 + size.width as usize + ix4 * 2]
+                                .load(Ordering::Relaxed),
+                        )) + Vec4u::from_color_u32(u64_to_color(
+                            depth_color_buffer[jx4 * 4 + size.width as usize + ix4 * 2 + 1]
+                                .load(Ordering::Relaxed),
+                        ))) / 4.)
+                            .as_color_u32();
+                    });
                 });
         } else {
             (0..(size.width * size.height) as usize).for_each(|i| {
@@ -119,16 +134,18 @@ pub trait ParIterEngine {
         app.last_buffer_copy_micros = Instant::now().duration_since(t).as_micros();
 
         if !settings.parallel_text {
-            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
+            let cursor_color =
+                cursor_buffer_index(app.cursor(), original_size).map(|index| buffer[index]);
             let display = format_debug(
                 settings,
                 world,
                 app,
+                original_size,
                 cursor_color,
                 #[cfg(feature = "stats")]
                 stats,
             );
-            text_writer.rasterize(buffer, size, font_size, &display[..]);
+            text_writer.rasterize(buffer, original_size, font_size, &display[..]);
         }
     }
 }
