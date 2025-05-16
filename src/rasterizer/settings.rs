@@ -11,7 +11,7 @@ pub struct Settings {
     /// Not implemented everywhere
     pub sort_triangles: TriangleSorting,
     pub parallel_text: bool,
-    pub x4: bool,
+    pub oversampling: usize,
 }
 
 impl Default for Settings {
@@ -21,7 +21,7 @@ impl Default for Settings {
             engine_type: Default::default(),
             sort_triangles: Default::default(),
             parallel_text: true,
-            x4: Default::default(),
+            oversampling: 1,
         }
     }
 }
@@ -36,6 +36,15 @@ impl Settings {
             AnyEngine::ParIter4(_) => self.engine_type = EngineType::ParIter4,
             AnyEngine::ParIter5(_) => self.engine_type = EngineType::ParIter5,
         }
+    }
+
+    pub fn next_oversampling(&mut self) {
+        self.oversampling = match self.oversampling {
+            1 => 2,
+            2 => 4,
+            4 => 8,
+            _ => 1,
+        };
     }
 }
 

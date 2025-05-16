@@ -60,12 +60,10 @@ pub trait ParIterEngine {
 
         // If x4 is set :
         let mut font_size = font::PX;
-        if settings.x4 {
-            size.width *= 2;
-            size.height *= 2;
-            if settings.parallel_text {
-                font_size *= 2.;
-            }
+        size.width *= settings.oversampling as u32;
+        size.height *= settings.oversampling as u32;
+        if settings.parallel_text {
+            font_size *= settings.oversampling as f32;
         }
 
         app.last_buffer_fill_micros = clean_resize_buffer(self.depth_color_buffer_mut(), size);
@@ -100,11 +98,14 @@ pub trait ParIterEngine {
 
         // TODO: parallel (safe split ref vec)
         let t = Instant::now();
-        if settings.x4 {
+        if settings.oversampling > 1 {
+            let oversampling_2 = settings.oversampling * settings.oversampling;
+
             (0..((original_size.height * original_size.width) as usize))
                 .step_by(original_size.width as usize)
-                .for_each(|jx4| {
-                    (0..(original_size.width as usize)).for_each(|ix4| {
+                .for_each(|j| {
+                    let jx = j * oversampling_2;
+                    (0..(original_size.width as usize)).for_each(|i| {
                         // println!(
                         //     "{jx4},{ix4} {} {} {} {}",
                         //     jx4 * 4 + ix4 * 2,
@@ -112,18 +113,21 @@ pub trait ParIterEngine {
                         //     jx4 * 4 + size.width as usize + ix4 * 2,
                         //     jx4 * 4 + size.width as usize + ix4 * 2 + 1,
                         // );
-                        buffer[jx4 + ix4] = ((Vec4u::from_color_u32(u64_to_color(
-                            depth_color_buffer[jx4 * 4 + ix4 * 2].load(Ordering::Relaxed),
-                        )) + Vec4u::from_color_u32(u64_to_color(
-                            depth_color_buffer[jx4 * 4 + ix4 * 2 + 1].load(Ordering::Relaxed),
-                        )) + Vec4u::from_color_u32(u64_to_color(
-                            depth_color_buffer[jx4 * 4 + size.width as usize + ix4 * 2]
-                                .load(Ordering::Relaxed),
-                        )) + Vec4u::from_color_u32(u64_to_color(
-                            depth_color_buffer[jx4 * 4 + size.width as usize + ix4 * 2 + 1]
-                                .load(Ordering::Relaxed),
-                        ))) / 4.)
-                            .as_color_u32();
+                        let ix = i * settings.oversampling;
+
+                        let color_avg: Vec4u = (0..(settings.oversampling * size.width as usize))
+                            .step_by(size.width as usize)
+                            .flat_map(|jo| {
+                                (0..settings.oversampling).map(move |io| {
+                                    Vec4u::from_color_u32(u64_to_color(
+                                        depth_color_buffer[jx + jo + ix + io]
+                                            .load(Ordering::Relaxed),
+                                    ))
+                                })
+                            })
+                            .sum();
+                        let color_avg = color_avg / oversampling_2 as f32;
+                        buffer[j + i] = color_avg.as_color_u32();
                     });
                 });
         } else {

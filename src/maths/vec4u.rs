@@ -1,5 +1,6 @@
 use std::{
     fmt,
+    iter::Sum,
     ops::{Add, Div, Mul, MulAssign, Sub},
 };
 
@@ -37,6 +38,12 @@ impl Add for Vec4u {
         self.z += other.z;
         self.w += other.w;
         self
+    }
+}
+
+impl Sum for Vec4u {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(Vec4u::default(), |a, b| a + b)
     }
 }
 
