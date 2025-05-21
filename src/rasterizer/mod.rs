@@ -4,8 +4,11 @@ mod settings;
 mod single_threaded;
 mod vulkan;
 
-use std::ops::DerefMut;
-use winit::dpi::{PhysicalPosition, PhysicalSize};
+use std::{ops::DerefMut, rc::Rc};
+use winit::{
+    dpi::{PhysicalPosition, PhysicalSize},
+    window::Window,
+};
 
 use crate::{
     font::TextWriter,
@@ -33,7 +36,6 @@ pub struct Stats {
     // pub misc: String,
 }
 
-#[derive(Debug, Clone)]
 pub struct Rasterizer {
     engine: AnyEngine,
     text_writer: TextWriter,
@@ -74,8 +76,8 @@ impl Rasterizer {
         );
     }
 
-    pub fn next_engine(&mut self) {
-        self.engine.set_next();
+    pub fn next_engine(&mut self, window: &Rc<Window>) {
+        self.engine.set_next(window);
         self.settings.set_engine_type(&self.engine);
     }
 }

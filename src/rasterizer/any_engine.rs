@@ -1,5 +1,5 @@
-use std::ops::DerefMut;
-use winit::dpi::PhysicalSize;
+use std::{ops::DerefMut, rc::Rc};
+use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{font::TextWriter, scene::World, window::AppObserver};
 
@@ -13,7 +13,6 @@ use super::{
 #[cfg(feature = "stats")]
 use super::Stats;
 
-#[derive(Debug, Clone)]
 pub enum AnyEngine {
     Original(OriginalEngine),
     Iterator(IteratorEngine),
@@ -26,19 +25,19 @@ pub enum AnyEngine {
 
 impl Default for AnyEngine {
     fn default() -> Self {
-        AnyEngine::Vulkan(Default::default())
+        AnyEngine::ParIter5(Default::default())
     }
 }
 
 impl AnyEngine {
-    pub fn set_next(&mut self) {
+    pub fn set_next(&mut self, window: &Rc<Window>) {
         match self {
             AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
             AnyEngine::Iterator(_) => *self = AnyEngine::ParIter2(Default::default()),
             AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
             AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
             AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
-            AnyEngine::ParIter5(_) => *self = AnyEngine::Vulkan(Default::default()),
+            AnyEngine::ParIter5(_) => *self = AnyEngine::Vulkan(VulkanEngine::new(window.clone())),
             AnyEngine::Vulkan(_) => *self = AnyEngine::Original(Default::default()),
         }
     }

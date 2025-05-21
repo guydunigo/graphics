@@ -249,7 +249,10 @@ impl ApplicationHandler for App {
                         self.rasterizer.settings.show_vertices =
                             !self.rasterizer.settings.show_vertices
                     }
-                    KeyCode::Digit1 => self.rasterizer.next_engine(),
+                    KeyCode::Digit1 => {
+                        let window = &self.window_surface.as_ref().unwrap().window;
+                        self.rasterizer.next_engine(window);
+                    }
                     KeyCode::Digit2 => self.rasterizer.settings.sort_triangles.next(),
                     KeyCode::Digit3 => {
                         self.rasterizer.settings.parallel_text =

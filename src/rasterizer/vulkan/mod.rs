@@ -1,11 +1,16 @@
 use std::{
-    ffi::{CStr, CString},
-    ops::DerefMut,
+    borrow::Cow,
+    ffi::{self, CStr, c_char},
+    ops::{Deref, DerefMut},
     rc::Rc,
 };
 
-use ash::{Entry, Instance, LoadingError, vk};
-use winit::{dpi::PhysicalSize, window::Window};
+use ash::{Entry, Instance, ext::debug_utils, khr::surface, vk};
+use winit::{
+    dpi::PhysicalSize,
+    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
+    window::Window,
+};
 
 use crate::{font::TextWriter, scene::World, window::AppObserver};
 
@@ -44,8 +49,8 @@ impl VulkanEngine {
         todo!();
     }
 
-    fn init(window: Window) -> Self {
-        let instance = Self::init_vulkan();
+    pub fn new(window: Rc<Window>) -> Self {
+        Self::init_vulkan(&window);
 
         // let mut res = Self {
         //     window,
@@ -67,22 +72,77 @@ impl VulkanEngine {
         // Self::init_sync_structures();
     }
 
-    fn init_vulkan() -> vk::Instance {
+    // Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
+    fn init_vulkan<W: Deref<Target = Window>>(window: &W) -> vk::Instance {
         let entry = unsafe { Entry::load().unwrap() };
-        let app_info = vk::ApplicationInfo::default()
-            .api_version(vk::make_api_version(1, 3, 0, 0))
-            .application_name(APP_NAME);
-        // TODO: other parameters : engine name + version, ...
-        let create_info = vk::InstanceCreateInfo {
-            p_application_info: &app_info,
-            ..Default::default()
-        };
+
+        let validation_layers = validation_layers();
+        let extension_names = extension_names(window);
+        let app_info = app_info();
+        let create_flags = instance_create_flags();
+        let create_info = vk::InstanceCreateInfo::default()
+            .application_info(&app_info)
+            .enabled_layer_names(&validation_layers)
+            .enabled_extension_names(&extension_names)
+            .flags(create_flags);
+
         let instance = unsafe { entry.create_instance(&create_info, None).unwrap() };
 
-        // TODO: look into ash-examples/src/lib
-        // TODO: validation layers + default debug messenger
+        let debug_messenger = debug_messenger(&entry, &instance);
+        let surface = surface(window, &entry, &instance);
+
+        {
+            let features = vk::PhysicalDeviceVulkan13Features::default()
+                .dynamic_rendering(true)
+                .synchronization2(true);
+            let features12 = vk::PhysicalDeviceVulkan12Features::default()
+                .buffer_device_address(true)
+                .descriptor_indexing(true);
+        }
+
+        let surface_loader = surface::Instance::new(&entry, &instance);
+        let pdevices = unsafe {
+            instance
+                .enumerate_physical_devices()
+                .expect("Physical device error")
+        };
+        let (pdevice, queue_family_index) = pdevices
+            .iter()
+            .inspect(|d| println!("device {:?}", d))
+            .find_map(|pdevice| {
+                // let a = unsafe { instance.get_physical_device_features(*pdevice) };
+                unsafe { instance.get_physical_device_queue_family_properties(*pdevice) }
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, info)| {
+                        let supports_graphic_and_surface =
+                            info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                                && unsafe {
+                                    surface_loader
+                                        .get_physical_device_surface_support(
+                                            *pdevice,
+                                            index as u32,
+                                            surface,
+                                        )
+                                        .unwrap()
+                                };
+                        if supports_graphic_and_surface {
+                            Some((*pdevice, index))
+                        } else {
+                            None
+                        }
+                    })
+            })
+            .expect("Couldn't find suitable device.");
 
         todo!();
+
+        // Self {
+        //     window,
+
+        //     instance,
+        //     debug_messenger,
+        // }
     }
 
     fn init_swapchain(&mut self) {
@@ -100,7 +160,122 @@ impl VulkanEngine {
 
 impl Drop for VulkanEngine {
     fn drop(&mut self) {
-        unsafe { self.instance.destroy_instance(None) };
-        todo!()
+        // unsafe { self.instance.destroy_instance(None) };
+        // todo!()
+    }
+}
+
+/// From ash-examples/src/lib.rs
+unsafe extern "system" fn vulkan_debug_callback(
+    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
+    message_type: vk::DebugUtilsMessageTypeFlagsEXT,
+    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT<'_>,
+    _user_data: *mut std::os::raw::c_void,
+) -> vk::Bool32 {
+    unsafe {
+        let callback_data = *p_callback_data;
+        let message_id_number = callback_data.message_id_number;
+
+        let message_id_name = if callback_data.p_message_id_name.is_null() {
+            Cow::from("")
+        } else {
+            ffi::CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
+        };
+
+        let message = if callback_data.p_message.is_null() {
+            Cow::from("")
+        } else {
+            ffi::CStr::from_ptr(callback_data.p_message).to_string_lossy()
+        };
+
+        println!(
+            "{message_severity:?}:\n{message_type:?} [{message_id_name} ({message_id_number})] : {message}\n",
+        );
+    }
+
+    vk::FALSE
+}
+
+fn extension_names<W: Deref<Target = Window>>(window: &W) -> Vec<*const c_char> {
+    let mut extension_names =
+        ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw())
+            .unwrap()
+            .to_vec();
+    extension_names.push(debug_utils::NAME.as_ptr());
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        extension_names.push(ash::khr::portability_enumeration::NAME.as_ptr());
+        // Enabling this extension is a requirement when using `VK_KHR_portability_subset`
+        extension_names.push(ash::khr::get_physical_device_properties2::NAME.as_ptr());
+    }
+
+    extension_names
+}
+
+fn validation_layers() -> Vec<*const c_char> {
+    let layer_names = [c"VK_LAYER_KHRONOS_validation"];
+    layer_names
+        .iter()
+        .map(|raw_name| raw_name.as_ptr())
+        .collect()
+}
+
+fn app_info() -> vk::ApplicationInfo<'static> {
+    // TODO: other parameters : engine name + version, ...
+    vk::ApplicationInfo::default()
+        .api_version(vk::make_api_version(0, 1, 3, 0))
+        .application_name(APP_NAME)
+        .application_version(0)
+        .engine_name(APP_NAME)
+        .engine_version(0)
+}
+
+fn instance_create_flags() -> vk::InstanceCreateFlags {
+    if cfg!(any(target_os = "macos", target_os = "ios")) {
+        vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR
+    } else {
+        vk::InstanceCreateFlags::default()
+    }
+}
+
+fn debug_messenger(entry: &Entry, instance: &Instance) -> vk::DebugUtilsMessengerEXT {
+    let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
+        .message_severity(
+            vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
+                | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO,
+        )
+        .message_type(
+            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
+        )
+        .pfn_user_callback(Some(vulkan_debug_callback));
+
+    let debug_utils_loader = debug_utils::Instance::new(entry, instance);
+    let debug_call_back = unsafe {
+        debug_utils_loader
+            .create_debug_utils_messenger(&debug_info, None)
+            .unwrap()
+    };
+
+    debug_call_back
+}
+
+fn surface<W: Deref<Target = Window>>(
+    window: &W,
+    entry: &Entry,
+    instance: &Instance,
+) -> vk::SurfaceKHR {
+    unsafe {
+        ash_window::create_surface(
+            entry,
+            instance,
+            window.display_handle().unwrap().as_raw(),
+            window.window_handle().unwrap().as_raw(),
+            None,
+        )
+        .unwrap()
     }
 }
