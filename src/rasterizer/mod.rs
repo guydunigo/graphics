@@ -2,6 +2,7 @@ mod any_engine;
 mod parallel;
 mod settings;
 mod single_threaded;
+mod vulkan;
 
 use std::ops::DerefMut;
 use winit::dpi::{PhysicalPosition, PhysicalSize};

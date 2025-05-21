@@ -13,6 +13,9 @@ use winit::dpi::PhysicalSize;
 
 use super::{SingleThreadedEngine, draw_vertice_basic};
 
+#[cfg(feature = "stats")]
+use crate::rasterizer::Stats;
+
 #[derive(Default, Debug, Clone)]
 pub struct OriginalEngine {
     depth_buffer: Vec<f32>,

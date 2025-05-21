@@ -35,6 +35,7 @@ impl Settings {
             AnyEngine::ParIter3(_) => self.engine_type = EngineType::ParIter3,
             AnyEngine::ParIter4(_) => self.engine_type = EngineType::ParIter4,
             AnyEngine::ParIter5(_) => self.engine_type = EngineType::ParIter5,
+            AnyEngine::Vulkan(_) => self.engine_type = EngineType::Vulkan,
         }
     }
 
@@ -57,6 +58,7 @@ pub enum EngineType {
     ParIter3,
     ParIter4,
     ParIter5,
+    Vulkan,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

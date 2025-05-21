@@ -12,6 +12,11 @@ use crate::{
 
 use super::{ParIterEngine, rasterize_triangle};
 
+#[cfg(feature = "stats")]
+use super::ParStats;
+#[cfg(feature = "stats")]
+use std::sync::atomic::Ordering;
+
 /// par_bridge
 #[derive(Default, Debug, Clone)]
 pub struct ParIterEngine3 {
@@ -32,7 +37,7 @@ impl ParIterEngine for ParIterEngine3 {
         world: &World,
         depth_color_buffer: &[AtomicU64],
         size: PhysicalSize<u32>,
-        #[cfg(feature = "stats")] stats: &Stats,
+        #[cfg(feature = "stats")] stats: &ParStats,
     ) {
         let ratio_w_h = size.width as f32 / size.height as f32;
 

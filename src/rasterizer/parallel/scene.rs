@@ -94,16 +94,18 @@ impl Mesh {
 
 #[derive(Debug, Clone)]
 pub struct World {
-    meshes: Vec<Arc<RwLock<Mesh>>>,
+    _meshes: Vec<Arc<RwLock<Mesh>>>,
     triangles: Vec<Weak<ParTriangle>>,
     pub camera: Camera,
     pub sun_direction: Vec3f,
 }
 
 impl World {
+    /*
     pub fn meshes(&self) -> &[Arc<RwLock<Mesh>>] {
         &self.meshes
     }
+    */
 
     pub fn triangles(&self) -> &Vec<Weak<ParTriangle>> {
         &self.triangles
@@ -133,7 +135,7 @@ impl Default for World {
         .collect();
 
         World {
-            meshes,
+            _meshes: meshes,
             triangles,
             camera: Default::default(),
             sun_direction: Vec3f::new(-1., -1., -1.).normalize(),
@@ -158,7 +160,7 @@ impl From<&crate::scene::World> for World {
             .collect();
 
         Self {
-            meshes,
+            _meshes: meshes,
             triangles,
             camera: world.camera,
             sun_direction: world.sun_direction,

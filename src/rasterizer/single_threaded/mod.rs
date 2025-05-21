@@ -17,6 +17,9 @@ use crate::{
 
 use super::{buffer_index, cursor_buffer_index, format_debug};
 
+#[cfg(feature = "stats")]
+use crate::rasterizer::Stats;
+
 /// Common base for engines not requiring buffer synchronization.
 pub trait SingleThreadedEngine {
     fn depth_buffer_mut(&mut self) -> &mut Vec<f32>;

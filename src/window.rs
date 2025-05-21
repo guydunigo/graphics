@@ -341,8 +341,14 @@ impl ApplicationHandler for App {
                     .surface()
                     .buffer_mut()
                     .expect("Failed to get the softbuffer buffer");
-                self.rasterizer
-                    .rasterize(&self.world, &mut buffer, size, &mut obs);
+                self.rasterizer.rasterize(
+                    &self.world,
+                    &mut buffer,
+                    size,
+                    &mut obs,
+                    #[cfg(feature = "stats")]
+                    &mut stats,
+                );
 
                 buffer
                     .present()

@@ -22,6 +22,11 @@ use crate::{
 
 use super::{clean_resize_buffer, rasterize_triangle, scene::World, u64_to_color};
 
+#[cfg(feature = "stats")]
+use super::ParStats;
+#[cfg(feature = "stats")]
+use crate::rasterizer::Stats;
+
 /// Test parallel iter directly on memory array of triangles
 ///
 /// This needs a modified world where triangles have pointers to meshes...
@@ -46,16 +51,22 @@ impl ParIterEngine2 {
 
         let par_world = self.world.get_or_insert_with(|| world.into());
 
-        let t = Instant::now();
-        rasterize_world(
-            settings,
-            par_world,
-            &self.depth_color_buffer,
-            size,
+        {
+            let t = Instant::now();
             #[cfg(feature = "stats")]
-            &stats,
-        );
-        app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
+            let par_stats = ParStats::from(&*stats);
+            rasterize_world(
+                settings,
+                par_world,
+                &self.depth_color_buffer,
+                size,
+                #[cfg(feature = "stats")]
+                &par_stats,
+            );
+            #[cfg(feature = "stats")]
+            par_stats.update_stats(stats);
+            app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
+        }
 
         {
             let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
@@ -85,7 +96,7 @@ pub fn rasterize_world(
     world: &World,
     depth_color_buffer: &[AtomicU64],
     size: PhysicalSize<u32>,
-    #[cfg(feature = "stats")] stats: &Stats,
+    #[cfg(feature = "stats")] stats: &ParStats,
 ) {
     let ratio_w_h = size.width as f32 / size.height as f32;
 

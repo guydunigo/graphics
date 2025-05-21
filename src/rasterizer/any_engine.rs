@@ -7,7 +7,11 @@ use super::{
     parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
     settings::Settings,
     single_threaded::{IteratorEngine, OriginalEngine, SingleThreadedEngine},
+    vulkan::VulkanEngine,
 };
+
+#[cfg(feature = "stats")]
+use super::Stats;
 
 #[derive(Debug, Clone)]
 pub enum AnyEngine {
@@ -17,11 +21,12 @@ pub enum AnyEngine {
     ParIter3(ParIterEngine3),
     ParIter4(ParIterEngine4),
     ParIter5(ParIterEngine5),
+    Vulkan(VulkanEngine),
 }
 
 impl Default for AnyEngine {
     fn default() -> Self {
-        AnyEngine::ParIter4(Default::default())
+        AnyEngine::Vulkan(Default::default())
     }
 }
 
@@ -33,7 +38,8 @@ impl AnyEngine {
             AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
             AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
             AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
-            AnyEngine::ParIter5(_) => *self = AnyEngine::Original(Default::default()),
+            AnyEngine::ParIter5(_) => *self = AnyEngine::Vulkan(Default::default()),
+            AnyEngine::Vulkan(_) => *self = AnyEngine::Original(Default::default()),
         }
     }
 
@@ -48,12 +54,76 @@ impl AnyEngine {
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         match self {
-            AnyEngine::Original(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
-            AnyEngine::Iterator(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
-            AnyEngine::ParIter2(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
-            AnyEngine::ParIter3(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
-            AnyEngine::ParIter4(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
-            AnyEngine::ParIter5(e) => e.rasterize(settings, text_writer, world, buffer, size, app),
+            AnyEngine::Original(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::Iterator(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ParIter2(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ParIter3(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ParIter4(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ParIter5(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::Vulkan(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
         }
     }
 }

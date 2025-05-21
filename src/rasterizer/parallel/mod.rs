@@ -6,6 +6,7 @@ mod scene;
 
 use rayon::prelude::*;
 use std::{
+    ops::DerefMut,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -18,6 +19,11 @@ pub use par_iter_3::ParIterEngine3;
 pub use par_iter_4::ParIterEngine4;
 pub use par_iter_5::ParIterEngine5;
 use winit::dpi::PhysicalSize;
+
+#[cfg(feature = "stats")]
+use super::Stats;
+#[cfg(feature = "stats")]
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 
 use crate::{
     font::{self, TextWriter},
@@ -43,10 +49,10 @@ pub trait ParIterEngine {
         world: &World,
         depth_color_buffer: &[AtomicU64],
         size: PhysicalSize<u32>,
-        #[cfg(feature = "stats")] stats: &Stats,
+        #[cfg(feature = "stats")] stats: &ParStats,
     );
 
-    fn rasterize<B: std::ops::DerefMut<Target = [u32]>>(
+    fn rasterize<B: DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,
         text_writer: &TextWriter,
@@ -70,16 +76,22 @@ pub trait ParIterEngine {
 
         let depth_color_buffer = self.depth_color_buffer();
 
-        let t = Instant::now();
-        Self::rasterize_world(
-            settings,
-            world,
-            depth_color_buffer,
-            size,
+        {
+            let t = Instant::now();
             #[cfg(feature = "stats")]
-            &stats,
-        );
-        app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
+            let par_stats = ParStats::from(&*stats);
+            Self::rasterize_world(
+                settings,
+                world,
+                depth_color_buffer,
+                size,
+                #[cfg(feature = "stats")]
+                &par_stats,
+            );
+            #[cfg(feature = "stats")]
+            par_stats.update_stats(stats);
+            app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
+        }
 
         if settings.parallel_text {
             let cursor_color = cursor_buffer_index(app.cursor(), size)
@@ -160,7 +172,7 @@ fn rasterize_triangle(
     z_near: f32,
     size: PhysicalSize<u32>,
     settings: &Settings,
-    #[cfg(feature = "stats")] stats: &Stats,
+    #[cfg(feature = "stats")] stats: &ParStats,
     bb: &Rect,
     light: f32,
     p01: Vec3f,
@@ -301,7 +313,7 @@ const fn u64_to_color(depth_color: u64) -> u32 {
 
 #[cfg(feature = "stats")]
 #[derive(Default, Debug)]
-pub struct Stats {
+pub struct ParStats {
     pub nb_triangles_tot: AtomicUsize,
     pub nb_triangles_sight: AtomicUsize,
     pub nb_triangles_facing: AtomicUsize,
@@ -311,6 +323,36 @@ pub struct Stats {
     pub nb_pixels_front: AtomicUsize,
     pub nb_pixels_written: AtomicUsize,
     // pub misc: String,
+}
+
+#[cfg(feature = "stats")]
+impl ParStats {
+    fn update_stats(self, stats: &mut Stats) {
+        stats.nb_triangles_tot = self.nb_triangles_tot.into_inner();
+        stats.nb_triangles_sight = self.nb_triangles_sight.into_inner();
+        stats.nb_triangles_facing = self.nb_triangles_facing.into_inner();
+        stats.nb_triangles_drawn = self.nb_triangles_drawn.into_inner();
+        stats.nb_pixels_tested = self.nb_pixels_tested.into_inner();
+        stats.nb_pixels_in = self.nb_pixels_in.into_inner();
+        stats.nb_pixels_front = self.nb_pixels_front.into_inner();
+        stats.nb_pixels_written = self.nb_pixels_written.into_inner();
+    }
+}
+
+#[cfg(feature = "stats")]
+impl From<&Stats> for ParStats {
+    fn from(value: &Stats) -> Self {
+        Self {
+            nb_triangles_tot: value.nb_triangles_tot.into(),
+            nb_triangles_sight: value.nb_triangles_sight.into(),
+            nb_triangles_facing: value.nb_triangles_facing.into(),
+            nb_triangles_drawn: value.nb_triangles_drawn.into(),
+            nb_pixels_tested: value.nb_pixels_tested.into(),
+            nb_pixels_in: value.nb_pixels_in.into(),
+            nb_pixels_front: value.nb_pixels_front.into(),
+            nb_pixels_written: value.nb_pixels_written.into(),
+        }
+    }
 }
 
 fn draw_vertice_basic(

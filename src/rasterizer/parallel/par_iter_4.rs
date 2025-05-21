@@ -2,6 +2,11 @@ use rayon::prelude::*;
 use std::sync::{Arc, atomic::AtomicU64};
 use winit::dpi::PhysicalSize;
 
+#[cfg(feature = "stats")]
+use super::ParStats;
+#[cfg(feature = "stats")]
+use std::sync::atomic::Ordering;
+
 use crate::{
     maths::Vec4u,
     rasterizer::{
@@ -32,7 +37,7 @@ impl ParIterEngine for ParIterEngine4 {
         world: &World,
         depth_color_buffer: &[AtomicU64],
         size: PhysicalSize<u32>,
-        #[cfg(feature = "stats")] stats: &Stats,
+        #[cfg(feature = "stats")] stats: &ParStats,
     ) {
         let ratio_w_h = size.width as f32 / size.height as f32;
 
