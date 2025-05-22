@@ -5,7 +5,7 @@ use super::vulkan_base::VulkanBase;
 const IMAGE_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 
 pub struct VulkanSwapchain {
-    device: Device,
+    device_copy: Device,
 
     swapchain_loader: swapchain::Device,
     swapchain: vk::SwapchainKHR,
@@ -96,7 +96,7 @@ impl VulkanSwapchain {
         Self {
             // I hope it's okay to clone the device...
             // It's needed for Drop, but I'd like to keep this object separated from `VulkanBase`.
-            device: base.device.clone(),
+            device_copy: base.device.clone(),
             swapchain_loader,
             swapchain,
             images,
@@ -109,12 +109,12 @@ impl Drop for VulkanSwapchain {
     fn drop(&mut self) {
         println!("drop VulkanSwapchain");
         unsafe {
+            self.device_copy.device_wait_idle().unwrap();
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain, None);
-
             self.image_views
                 .drain(..)
-                .for_each(|v| self.device.destroy_image_view(v, None));
+                .for_each(|v| self.device_copy.destroy_image_view(v, None));
         }
     }
 }

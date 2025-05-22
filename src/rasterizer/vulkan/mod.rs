@@ -1,4 +1,4 @@
-use std::{ops::DerefMut, rc::Rc};
+use std::{ops::DerefMut, rc::Rc, time::Duration};
 
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -10,19 +10,19 @@ mod vulkan_base;
 use vulkan_base::VulkanBase;
 mod vulkan_swapchain;
 use vulkan_swapchain::VulkanSwapchain;
+mod vulkan_commands;
+use vulkan_commands::VulkanCommands;
 
 #[cfg(feature = "stats")]
 use super::Stats;
 
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine {
-    // TODO: convert to Rust way ?
-    // frame_number: usize,
-    // window_extent: vk::Extent2D,
-
     // Elements are placed in the order they should be dropped, so inverse order of creation.
+    commands: VulkanCommands,
     swapchain: VulkanSwapchain,
     vulkan: VulkanBase,
+    // TODO: window_extent: vk::Extent2D,
 }
 
 impl VulkanEngine {
@@ -36,25 +36,16 @@ impl VulkanEngine {
         _app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
-        // todo!();
+        std::thread::sleep(Duration::from_millis(16))
     }
 
     pub fn new(window: Rc<Window>) -> Self {
         let vulkan = VulkanBase::new(window);
-        let swapchain = VulkanSwapchain::new(&vulkan);
+
         Self {
+            commands: VulkanCommands::new(&vulkan),
+            swapchain: VulkanSwapchain::new(&vulkan),
             vulkan,
-            swapchain,
-            // Self::init_commands();
-            // Self::init_sync_structures();
         }
-    }
-
-    fn init_commands(&mut self) {
-        todo!();
-    }
-
-    fn init_sync_structures(&mut self) {
-        todo!();
     }
 }

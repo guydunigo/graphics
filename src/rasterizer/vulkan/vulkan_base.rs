@@ -29,6 +29,7 @@ pub struct VulkanBase {
     pub chosen_gpu: vk::PhysicalDevice,
     pub device: Device,
     pub surface: vk::SurfaceKHR,
+    pub queue_family_index: u32,
 }
 
 impl VulkanBase {
@@ -56,7 +57,7 @@ impl VulkanBase {
         let (surface_loader, chosen_gpu, queue_family_index) =
             find_physical_device(&entry, &instance, &app_info, &surface);
 
-        let device = device(&instance, chosen_gpu, queue_family_index as u32);
+        let device = device(&instance, chosen_gpu, queue_family_index);
 
         VulkanBase {
             window,
@@ -69,6 +70,8 @@ impl VulkanBase {
             chosen_gpu,
             device,
             surface,
+
+            queue_family_index,
         }
     }
 }
@@ -212,7 +215,7 @@ fn find_physical_device(
     instance: &Instance,
     app_info: &vk::ApplicationInfo,
     surface: &vk::SurfaceKHR,
-) -> (surface::Instance, vk::PhysicalDevice, usize) {
+) -> (surface::Instance, vk::PhysicalDevice, u32) {
     let surface_loader = surface::Instance::new(entry, instance);
     let pdevices = unsafe {
         instance
@@ -318,7 +321,7 @@ fn find_physical_device(
         })
         .expect("Couldn't find suitable device.");
 
-    (surface_loader, pdevice, queue_family_index)
+    (surface_loader, pdevice, queue_family_index as u32)
 }
 
 const DEVICE_EXTENSION_NAMES: &[&CStr] = &[
