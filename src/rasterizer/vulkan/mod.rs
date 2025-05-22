@@ -91,26 +91,60 @@ impl VulkanEngine {
         let debug_messenger = debug_messenger(&entry, &instance);
         let surface = surface(window, &entry, &instance);
 
-        {
-            let features = vk::PhysicalDeviceVulkan13Features::default()
-                .dynamic_rendering(true)
-                .synchronization2(true);
-            let features12 = vk::PhysicalDeviceVulkan12Features::default()
-                .buffer_device_address(true)
-                .descriptor_indexing(true);
-        }
-
         let surface_loader = surface::Instance::new(&entry, &instance);
         let pdevices = unsafe {
             instance
                 .enumerate_physical_devices()
                 .expect("Physical device error")
         };
+        println!("There are {} found GPUs.", pdevices.len());
         let (pdevice, queue_family_index) = pdevices
             .iter()
-            .inspect(|d| println!("device {:?}", d))
             .find_map(|pdevice| {
-                // let a = unsafe { instance.get_physical_device_features(*pdevice) };
+                let properties = unsafe { instance.get_physical_device_properties(*pdevice) };
+                println!(
+                    "\tDevice Name: {}, id: {}, type: {:?}, API version: {}.{}.{}",
+                    properties.device_name_as_c_str().unwrap().to_string_lossy(),
+                    properties.device_id,
+                    properties.device_type,
+                    vk::api_version_major(properties.api_version),
+                    vk::api_version_minor(properties.api_version),
+                    vk::api_version_patch(properties.api_version),
+                );
+                if properties.api_version < app_info.api_version {
+                    // TODO: reject device
+                    eprintln!(
+                        "Device Vulkan version lower than app, required : {}.{}.{} !!!",
+                        vk::api_version_major(app_info.api_version),
+                        vk::api_version_minor(app_info.api_version),
+                        vk::api_version_patch(app_info.api_version),
+                    );
+                }
+
+                {
+                    let mut features13 = vk::PhysicalDeviceVulkan13Features::default();
+                    let mut features12 = vk::PhysicalDeviceVulkan12Features::default();
+                    let mut features = vk::PhysicalDeviceFeatures2::default()
+                        .push_next(&mut features13)
+                        .push_next(&mut features12);
+                    unsafe { instance.get_physical_device_features2(*pdevice, &mut features) };
+
+                    if features12.buffer_device_address == vk::FALSE {
+                        eprintln!("\tMissing feature 1.2 : buffer_device_address");
+                    }
+                    if features12.descriptor_indexing == vk::FALSE {
+                        eprintln!("\tMissing feature 1.2 : descriptor_indexing");
+                    }
+                    if features13.dynamic_rendering == vk::FALSE {
+                        eprintln!("\tMissing feature 1.3 : dynamic_rendering");
+                    }
+                    if features13.synchronization2 == vk::FALSE {
+                        eprintln!("\tMissing feature 1.3 : synchronization2");
+                    }
+                    // TODO: reject device
+                }
+
+                // Find a queue that can do graphics and that is supported by surface.
                 unsafe { instance.get_physical_device_queue_family_properties(*pdevice) }
                     .iter()
                     .enumerate()
@@ -134,6 +168,8 @@ impl VulkanEngine {
                     })
             })
             .expect("Couldn't find suitable device.");
+
+        // TODO: check features + vulkan version
 
         todo!();
 
@@ -160,6 +196,7 @@ impl VulkanEngine {
 
 impl Drop for VulkanEngine {
     fn drop(&mut self) {
+        // TODO: clean debug, ... ?
         // unsafe { self.instance.destroy_instance(None) };
         // todo!()
     }
@@ -224,7 +261,7 @@ fn validation_layers() -> Vec<*const c_char> {
 fn app_info() -> vk::ApplicationInfo<'static> {
     // TODO: other parameters : engine name + version, ...
     vk::ApplicationInfo::default()
-        .api_version(vk::make_api_version(0, 1, 3, 0))
+        .api_version(vk::API_VERSION_1_3)
         .application_name(APP_NAME)
         .application_version(0)
         .engine_name(APP_NAME)
