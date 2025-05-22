@@ -166,6 +166,10 @@ impl App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.window_surface = Some(WindowSurface::new(event_loop));
+        {
+            let window = &self.window_surface.as_ref().unwrap().window;
+            self.rasterizer.next_engine(window);
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
