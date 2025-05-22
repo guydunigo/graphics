@@ -91,85 +91,8 @@ impl VulkanEngine {
         let debug_messenger = debug_messenger(&entry, &instance);
         let surface = surface(window, &entry, &instance);
 
-        let surface_loader = surface::Instance::new(&entry, &instance);
-        let pdevices = unsafe {
-            instance
-                .enumerate_physical_devices()
-                .expect("Physical device error")
-        };
-        println!("There are {} found GPUs.", pdevices.len());
-        let (pdevice, queue_family_index) = pdevices
-            .iter()
-            .find_map(|pdevice| {
-                let properties = unsafe { instance.get_physical_device_properties(*pdevice) };
-                println!(
-                    "\tDevice Name: {}, id: {}, type: {:?}, API version: {}.{}.{}",
-                    properties.device_name_as_c_str().unwrap().to_string_lossy(),
-                    properties.device_id,
-                    properties.device_type,
-                    vk::api_version_major(properties.api_version),
-                    vk::api_version_minor(properties.api_version),
-                    vk::api_version_patch(properties.api_version),
-                );
-                if properties.api_version < app_info.api_version {
-                    // TODO: reject device
-                    eprintln!(
-                        "Device Vulkan version lower than app, required : {}.{}.{} !!!",
-                        vk::api_version_major(app_info.api_version),
-                        vk::api_version_minor(app_info.api_version),
-                        vk::api_version_patch(app_info.api_version),
-                    );
-                }
-
-                {
-                    let mut features13 = vk::PhysicalDeviceVulkan13Features::default();
-                    let mut features12 = vk::PhysicalDeviceVulkan12Features::default();
-                    let mut features = vk::PhysicalDeviceFeatures2::default()
-                        .push_next(&mut features13)
-                        .push_next(&mut features12);
-                    unsafe { instance.get_physical_device_features2(*pdevice, &mut features) };
-
-                    if features12.buffer_device_address == vk::FALSE {
-                        eprintln!("\tMissing feature 1.2 : buffer_device_address");
-                    }
-                    if features12.descriptor_indexing == vk::FALSE {
-                        eprintln!("\tMissing feature 1.2 : descriptor_indexing");
-                    }
-                    if features13.dynamic_rendering == vk::FALSE {
-                        eprintln!("\tMissing feature 1.3 : dynamic_rendering");
-                    }
-                    if features13.synchronization2 == vk::FALSE {
-                        eprintln!("\tMissing feature 1.3 : synchronization2");
-                    }
-                    // TODO: reject device
-                }
-
-                // Find a queue that can do graphics and that is supported by surface.
-                unsafe { instance.get_physical_device_queue_family_properties(*pdevice) }
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, info)| {
-                        let supports_graphic_and_surface =
-                            info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-                                && unsafe {
-                                    surface_loader
-                                        .get_physical_device_surface_support(
-                                            *pdevice,
-                                            index as u32,
-                                            surface,
-                                        )
-                                        .unwrap()
-                                };
-                        if supports_graphic_and_surface {
-                            Some((*pdevice, index))
-                        } else {
-                            None
-                        }
-                    })
-            })
-            .expect("Couldn't find suitable device.");
-
-        // TODO: check features + vulkan version
+        let (pdevice, queue_family_index) =
+            find_physical_device(&entry, &instance, &app_info, &surface);
 
         todo!();
 
@@ -291,13 +214,12 @@ fn debug_messenger(entry: &Entry, instance: &Instance) -> vk::DebugUtilsMessenge
         .pfn_user_callback(Some(vulkan_debug_callback));
 
     let debug_utils_loader = debug_utils::Instance::new(entry, instance);
-    let debug_call_back = unsafe {
+
+    unsafe {
         debug_utils_loader
             .create_debug_utils_messenger(&debug_info, None)
             .unwrap()
-    };
-
-    debug_call_back
+    }
 }
 
 fn surface<W: Deref<Target = Window>>(
@@ -315,4 +237,101 @@ fn surface<W: Deref<Target = Window>>(
         )
         .unwrap()
     }
+}
+
+fn find_physical_device(
+    entry: &Entry,
+    instance: &Instance,
+    app_info: &vk::ApplicationInfo,
+    surface: &vk::SurfaceKHR,
+) -> (vk::PhysicalDevice, usize) {
+    let surface_loader = surface::Instance::new(entry, instance);
+    let pdevices = unsafe {
+        instance
+            .enumerate_physical_devices()
+            .expect("Physical device error")
+    };
+    println!("There are {} found GPUs : ", pdevices.len());
+    let (pdevice, queue_family_index) = pdevices
+        .iter()
+        .filter(|pdevice| {
+            let properties = unsafe { instance.get_physical_device_properties(**pdevice) };
+            println!(
+                "- Device Name: {}, id: {}, type: {:?}, API version: {}.{}.{}",
+                properties.device_name_as_c_str().unwrap().to_string_lossy(),
+                properties.device_id,
+                properties.device_type,
+                vk::api_version_major(properties.api_version),
+                vk::api_version_minor(properties.api_version),
+                vk::api_version_patch(properties.api_version),
+            );
+            if properties.api_version < app_info.api_version {
+                eprintln!(
+                    "\tDevice Vulkan API version lower than app, required : {}.{}.{}",
+                    vk::api_version_major(app_info.api_version),
+                    vk::api_version_minor(app_info.api_version),
+                    vk::api_version_patch(app_info.api_version),
+                );
+
+                false
+            } else {
+                true
+            }
+        })
+        .filter(|pdevice| {
+            let mut features13 = vk::PhysicalDeviceVulkan13Features::default();
+            let mut features12 = vk::PhysicalDeviceVulkan12Features::default();
+            let mut features = vk::PhysicalDeviceFeatures2::default()
+                .push_next(&mut features13)
+                .push_next(&mut features12);
+            unsafe { instance.get_physical_device_features2(**pdevice, &mut features) };
+
+            let mut has_features = true;
+            if features12.buffer_device_address == vk::FALSE {
+                eprintln!("\tMissing feature 1.2 : buffer_device_address");
+                has_features = false;
+            }
+            if features12.descriptor_indexing == vk::FALSE {
+                eprintln!("\tMissing feature 1.2 : descriptor_indexing");
+
+                has_features = false;
+            }
+            if features13.dynamic_rendering == vk::FALSE {
+                eprintln!("\tMissing feature 1.3 : dynamic_rendering");
+                has_features = false;
+            }
+            if features13.synchronization2 == vk::FALSE {
+                eprintln!("\tMissing feature 1.3 : synchronization2");
+                has_features = false;
+            }
+
+            has_features
+        })
+        .find_map(|pdevice| {
+            // Find a queue that can do graphics and that is supported by surface.
+            unsafe { instance.get_physical_device_queue_family_properties(*pdevice) }
+                .iter()
+                .enumerate()
+                .find_map(|(index, info)| {
+                    let supports_graphic_and_surface =
+                        info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                            && unsafe {
+                                surface_loader
+                                    .get_physical_device_surface_support(
+                                        *pdevice,
+                                        index as u32,
+                                        *surface,
+                                    )
+                                    .unwrap()
+                            };
+                    if supports_graphic_and_surface {
+                        Some((*pdevice, index))
+                    } else {
+                        None
+                    }
+                })
+        })
+        .expect("Couldn't find suitable device.");
+
+    (pdevice, queue_family_index)
 }
