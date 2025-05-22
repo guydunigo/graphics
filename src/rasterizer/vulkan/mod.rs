@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use ash::{Entry, Instance, ext::debug_utils, khr::surface, vk};
+use ash::{Device, Entry, Instance, ext::debug_utils, khr::surface, vk};
 use winit::{
     dpi::PhysicalSize,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
@@ -22,16 +22,15 @@ use super::Stats;
 const APP_NAME: &CStr = c"My rasterizer";
 
 pub struct VulkanEngine {
-    window: Window,
+    window: Rc<Window>,
 
-    // TODO: convert to Rust way...
-    frame_number: usize,
-    window_extent: vk::Extent2D,
-
+    // TODO: convert to Rust way ?
+    // frame_number: usize,
+    // window_extent: vk::Extent2D,
     instance: Instance,
     debug_messenger: vk::DebugUtilsMessengerEXT,
     chosen_gpu: vk::PhysicalDevice,
-    device: vk::Device,
+    device: Device,
     surface: vk::SurfaceKHR,
 }
 
@@ -50,7 +49,7 @@ impl VulkanEngine {
     }
 
     pub fn new(window: Rc<Window>) -> Self {
-        Self::init_vulkan(&window);
+        Self::init_vulkan(window);
 
         // let mut res = Self {
         //     window,
@@ -73,11 +72,11 @@ impl VulkanEngine {
     }
 
     // Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
-    fn init_vulkan<W: Deref<Target = Window>>(window: &W) -> vk::Instance {
+    fn init_vulkan(window: Rc<Window>) -> Self {
         let entry = unsafe { Entry::load().unwrap() };
 
         let validation_layers = validation_layers();
-        let extension_names = extension_names(window);
+        let extension_names = extension_names(&window);
         let app_info = app_info();
         let create_flags = instance_create_flags();
         let create_info = vk::InstanceCreateInfo::default()
@@ -89,19 +88,22 @@ impl VulkanEngine {
         let instance = unsafe { entry.create_instance(&create_info, None).unwrap() };
 
         let debug_messenger = debug_messenger(&entry, &instance);
-        let surface = surface(window, &entry, &instance);
+        let surface = surface(&window, &entry, &instance);
 
-        let (pdevice, queue_family_index) =
+        let (chosen_gpu, queue_family_index) =
             find_physical_device(&entry, &instance, &app_info, &surface);
 
-        todo!();
+        let device = device(&instance, chosen_gpu, queue_family_index as u32);
 
-        // Self {
-        //     window,
+        Self {
+            window,
 
-        //     instance,
-        //     debug_messenger,
-        // }
+            instance,
+            debug_messenger,
+            chosen_gpu,
+            device,
+            surface,
+        }
     }
 
     fn init_swapchain(&mut self) {
@@ -239,6 +241,7 @@ fn surface<W: Deref<Target = Window>>(
     }
 }
 
+/// Enable features in create device info in [`device`]
 fn find_physical_device(
     entry: &Entry,
     instance: &Instance,
@@ -279,11 +282,11 @@ fn find_physical_device(
             }
         })
         .filter(|pdevice| {
-            let mut features13 = vk::PhysicalDeviceVulkan13Features::default();
             let mut features12 = vk::PhysicalDeviceVulkan12Features::default();
+            let mut features13 = vk::PhysicalDeviceVulkan13Features::default();
             let mut features = vk::PhysicalDeviceFeatures2::default()
-                .push_next(&mut features13)
-                .push_next(&mut features12);
+                .push_next(&mut features12)
+                .push_next(&mut features13);
             unsafe { instance.get_physical_device_features2(**pdevice, &mut features) };
 
             let mut has_features = true;
@@ -334,4 +337,31 @@ fn find_physical_device(
         .expect("Couldn't find suitable device.");
 
     (pdevice, queue_family_index)
+}
+
+/// Sync features with device search in [`find_physical_device`]
+fn device(instance: &Instance, chosen_gpu: vk::PhysicalDevice, queue_family_index: u32) -> Device {
+    let queue_info = vk::DeviceQueueCreateInfo::default()
+        .queue_family_index(queue_family_index)
+        .queue_priorities(&[1.0]);
+
+    let mut features12 = vk::PhysicalDeviceVulkan12Features::default()
+        .buffer_device_address(true)
+        .descriptor_indexing(true);
+    let mut features13 = vk::PhysicalDeviceVulkan13Features::default()
+        .dynamic_rendering(true)
+        .synchronization2(true);
+    let mut features = vk::PhysicalDeviceFeatures2::default()
+        .push_next(&mut features12)
+        .push_next(&mut features13);
+
+    let device_create_info = vk::DeviceCreateInfo::default()
+        .queue_create_infos(std::slice::from_ref(&queue_info))
+        .push_next(&mut features);
+
+    unsafe {
+        instance
+            .create_device(chosen_gpu, &device_create_info, None)
+            .unwrap()
+    }
 }
