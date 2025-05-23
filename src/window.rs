@@ -360,6 +360,9 @@ impl ApplicationHandler for App {
                 buffer
                     .present()
                     .expect("Failed to present the softbuffer buffer");
+                todo!(
+                    "Don't handle buffer (and even surface) with Vulkan ! WindowSurface as enum between CPU/Vulkan."
+                );
 
                 // Queue a RedrawRequested event.
                 //
