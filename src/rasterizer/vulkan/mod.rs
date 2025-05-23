@@ -1,5 +1,6 @@
-use std::{ops::DerefMut, rc::Rc, time::Duration};
+use std::{ops::DerefMut, rc::Rc};
 
+use ash::vk;
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{font::TextWriter, scene::World, window::AppObserver};
@@ -21,7 +22,7 @@ pub struct VulkanEngine {
     // Elements are placed in the order they should be dropped, so inverse order of creation.
     commands: VulkanCommands,
     swapchain: VulkanSwapchain,
-    vulkan: VulkanBase,
+    base: VulkanBase,
     // TODO: window_extent: vk::Extent2D,
 }
 
@@ -36,16 +37,40 @@ impl VulkanEngine {
         _app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
-        std::thread::sleep(Duration::from_millis(16))
+        let current_frame = self.commands.current_frame();
+        // TODO: or deref device ?
+        let device = &self.base.device;
+
+        unsafe {
+            device
+                .wait_for_fences(&[current_frame.fence_render], true, 1_000_000_000)
+                .unwrap();
+            device.reset_fences(&[current_frame.fence_render]).unwrap();
+        }
+
+        self.swapchain.acquire_next_image(current_frame);
+        // TODO: move
+        let cmd_buf_begin_info = vk::CommandBufferBeginInfo::default()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+        unsafe {
+            device
+                .reset_command_buffer(current_frame.cmd_buf, vk::CommandBufferResetFlags::empty())
+                .unwrap();
+            device
+                .begin_command_buffer(current_frame.cmd_buf, &cmd_buf_begin_info)
+                .unwrap();
+        }
+
+        // std::thread::sleep(Duration::from_millis(16))
     }
 
     pub fn new(window: Rc<Window>) -> Self {
-        let vulkan = VulkanBase::new(window);
+        let base = VulkanBase::new(window);
 
         Self {
-            commands: VulkanCommands::new(&vulkan),
-            swapchain: VulkanSwapchain::new(&vulkan),
-            vulkan,
+            commands: VulkanCommands::new(&base),
+            swapchain: VulkanSwapchain::new(&base),
+            base,
         }
     }
 }

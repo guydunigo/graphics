@@ -7,10 +7,10 @@ const FRAME_OVERLAP: usize = 2;
 #[derive(Debug)]
 pub struct FrameData {
     cmd_pool: vk::CommandPool,
-    cmd_buf: vk::CommandBuffer,
+    pub cmd_buf: vk::CommandBuffer,
 
-    fence_render: vk::Fence,
-    sem_swapchain: vk::Semaphore,
+    pub fence_render: vk::Fence,
+    pub sem_swapchain: vk::Semaphore,
     sem_render: vk::Semaphore,
 }
 

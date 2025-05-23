@@ -1,14 +1,15 @@
 use ash::{Device, khr::swapchain, vk};
 
-use super::vulkan_base::VulkanBase;
+use super::{vulkan_base::VulkanBase, vulkan_commands::FrameData};
 
 const IMAGE_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 
 pub struct VulkanSwapchain {
     device_copy: Device,
 
-    swapchain_loader: swapchain::Device,
+    pub swapchain_loader: swapchain::Device,
     swapchain: vk::SwapchainKHR,
+    // TODO: separé de views ou vec de tuples ?
     images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
 }
@@ -102,6 +103,24 @@ impl VulkanSwapchain {
             images,
             image_views,
         }
+    }
+
+    pub fn acquire_next_image(&self, current_frame: &FrameData) -> u32 {
+        let (swapchain_img_index, is_suboptimal) = unsafe {
+            self.swapchain_loader
+                .acquire_next_image(
+                    self.swapchain,
+                    1_000_000_000,
+                    current_frame.sem_swapchain,
+                    vk::Fence::null(),
+                )
+                .unwrap()
+        };
+        assert!(
+            !is_suboptimal,
+            "Swapchain is suboptimal and no longer matches the surface properties exactly, see VK_SUBOPTIMAL_KHR"
+        );
+        swapchain_img_index
     }
 }
 

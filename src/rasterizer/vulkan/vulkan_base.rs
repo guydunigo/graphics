@@ -19,9 +19,14 @@ use winit::{
 const APP_NAME: &CStr = c"My rasterizer";
 
 pub struct VulkanBase {
+    // `_entry` must be kept alive all along in dynamic loading mode (not linked).
+    // If it is dyn loaded and gets dropped, all references to vulkan functions and data
+    // would crash !
+    _entry: Entry,
+
     // TODO: store here ?
     pub window: Rc<Window>,
-    entry: Entry,
+
     pub instance: Instance,
     debug_utils_loader: debug_utils::Instance,
     debug_messenger: vk::DebugUtilsMessengerEXT,
@@ -60,9 +65,10 @@ impl VulkanBase {
         let device = device(&instance, chosen_gpu, queue_family_index);
 
         VulkanBase {
+            _entry: entry,
+
             window,
 
-            entry,
             instance,
             debug_utils_loader,
             debug_messenger,
