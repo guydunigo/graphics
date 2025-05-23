@@ -11,7 +11,6 @@ pub struct FrameData {
 
     pub fence_render: vk::Fence,
     pub sem_swapchain: vk::Semaphore,
-    pub sem_render: vk::Semaphore,
 }
 
 impl FrameData {
@@ -96,18 +95,12 @@ impl VulkanCommands {
                         .create_semaphore(&sem_create_info, None)
                         .unwrap()
                 };
-                let sem_render = unsafe {
-                    base.device
-                        .create_semaphore(&sem_create_info, None)
-                        .unwrap()
-                };
 
                 FrameData {
                     cmd_pool,
                     cmd_buf,
                     fence_render,
                     sem_swapchain,
-                    sem_render,
                 }
             })
             .collect();
@@ -148,7 +141,6 @@ impl Drop for VulkanCommands {
                 self.device_copy.destroy_command_pool(f.cmd_pool, None);
                 self.device_copy.destroy_fence(f.fence_render, None);
                 self.device_copy.destroy_semaphore(f.sem_swapchain, None);
-                self.device_copy.destroy_semaphore(f.sem_render, None);
             });
         }
     }

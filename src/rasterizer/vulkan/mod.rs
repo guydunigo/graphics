@@ -50,8 +50,9 @@ impl VulkanEngine {
         }
 
         // TODO: move create commands
-        let swapchain_img_index = {
-            let (swapchain_img_index, image) = self.swapchain.acquire_next_image(current_frame);
+        let (swapchain_img_index, sem_render) = {
+            let (swapchain_img_index, image, sem_render) =
+                self.swapchain.acquire_next_image(current_frame);
 
             let cmd_buf_begin_info = vk::CommandBufferBeginInfo::default()
                 .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
@@ -98,7 +99,7 @@ impl VulkanEngine {
 
             unsafe { device.end_command_buffer(current_frame.cmd_buf).unwrap() };
 
-            swapchain_img_index
+            (swapchain_img_index, sem_render)
         };
 
         // TODO: move
@@ -111,7 +112,7 @@ impl VulkanEngine {
                 .device_index(0)
                 .value(1)];
             let signal_semaphore_info = [vk::SemaphoreSubmitInfo::default()
-                .semaphore(current_frame.sem_render)
+                .semaphore(*sem_render)
                 .stage_mask(vk::PipelineStageFlags2::ALL_GRAPHICS)
                 .device_index(0)
                 .value(1)];
@@ -134,7 +135,7 @@ impl VulkanEngine {
 
         {
             let swapchains = [self.swapchain.swapchain];
-            let wait_semaphores = [current_frame.sem_render];
+            let wait_semaphores = [*sem_render];
             let images_indices = [swapchain_img_index];
             let present_info = vk::PresentInfoKHR::default()
                 .swapchains(&swapchains)

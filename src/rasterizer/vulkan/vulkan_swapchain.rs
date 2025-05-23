@@ -9,9 +9,7 @@ pub struct VulkanSwapchain {
 
     pub swapchain_loader: swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
-    // TODO: separé de views ou vec de tuples ?
-    images: Vec<vk::Image>,
-    image_views: Vec<vk::ImageView>,
+    images: Vec<(vk::Image, vk::ImageView, vk::Semaphore)>,
 }
 
 impl VulkanSwapchain {
@@ -72,10 +70,10 @@ impl VulkanSwapchain {
                 .unwrap()
         };
 
-        let images = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() };
-        let image_views: Vec<vk::ImageView> = images
-            .iter()
-            .map(|&image| {
+        let sem_create_info = vk::SemaphoreCreateInfo::default();
+        let images = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() }
+            .drain(..)
+            .map(|image| {
                 let create_view_info = vk::ImageViewCreateInfo::default()
                     .view_type(vk::ImageViewType::TYPE_2D)
                     .format(IMAGE_FORMAT)
@@ -86,11 +84,19 @@ impl VulkanSwapchain {
                             .layer_count(1),
                     )
                     .image(image);
-                unsafe {
+                let view = unsafe {
                     base.device
                         .create_image_view(&create_view_info, None)
                         .unwrap()
-                }
+                };
+
+                let sem_render = unsafe {
+                    base.device
+                        .create_semaphore(&sem_create_info, None)
+                        .unwrap()
+                };
+
+                (image, view, sem_render)
             })
             .collect();
 
@@ -101,11 +107,13 @@ impl VulkanSwapchain {
             swapchain_loader,
             swapchain,
             images,
-            image_views,
         }
     }
 
-    pub fn acquire_next_image(&self, current_frame: &FrameData) -> (u32, &vk::Image) {
+    pub fn acquire_next_image(
+        &self,
+        current_frame: &FrameData,
+    ) -> (u32, &vk::Image, &vk::Semaphore) {
         let (swapchain_img_index, is_suboptimal) = unsafe {
             self.swapchain_loader
                 .acquire_next_image(
@@ -120,10 +128,8 @@ impl VulkanSwapchain {
             !is_suboptimal,
             "Swapchain is suboptimal and no longer matches the surface properties exactly, see VK_SUBOPTIMAL_KHR"
         );
-        (
-            swapchain_img_index,
-            &self.images[swapchain_img_index as usize],
-        )
+        let (i, _, s) = &self.images[swapchain_img_index as usize];
+        (swapchain_img_index, i, s)
     }
 }
 
@@ -134,9 +140,10 @@ impl Drop for VulkanSwapchain {
             self.device_copy.device_wait_idle().unwrap();
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain, None);
-            self.image_views
-                .drain(..)
-                .for_each(|v| self.device_copy.destroy_image_view(v, None));
+            self.images.drain(..).for_each(|(_, v, s)| {
+                self.device_copy.destroy_image_view(v, None);
+                self.device_copy.destroy_semaphore(s, None);
+            });
         }
     }
 }
