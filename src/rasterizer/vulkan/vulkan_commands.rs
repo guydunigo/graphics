@@ -11,15 +11,51 @@ pub struct FrameData {
 
     pub fence_render: vk::Fence,
     pub sem_swapchain: vk::Semaphore,
-    sem_render: vk::Semaphore,
+    pub sem_render: vk::Semaphore,
+}
+
+impl FrameData {
+    pub fn transition_image(
+        &self,
+        // TODO: store Device copy in FrameData ?
+        device: &Device,
+        image: &vk::Image,
+        current_layout: vk::ImageLayout,
+        new_layout: vk::ImageLayout,
+    ) {
+        let aspect_mask = if new_layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
+            vk::ImageAspectFlags::DEPTH
+        } else {
+            vk::ImageAspectFlags::COLOR
+        };
+
+        let sub_image = VulkanCommands::image_subresource_range(aspect_mask);
+
+        // TODO: replace ALL_COMMANDS by more accurate masks to not stop whole GPU pipeline
+        // https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples
+        let image_barrier = vk::ImageMemoryBarrier2::default()
+            .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+            .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+            .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+            .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ)
+            .old_layout(current_layout)
+            .new_layout(new_layout)
+            .subresource_range(sub_image)
+            .image(*image);
+
+        let ibs = [image_barrier];
+        let dep_info = vk::DependencyInfo::default().image_memory_barriers(&ibs);
+
+        unsafe { device.cmd_pipeline_barrier2(self.cmd_buf, &dep_info) };
+    }
 }
 
 pub struct VulkanCommands {
     device_copy: Device,
 
-    queue: vk::Queue,
+    pub queue: vk::Queue,
     frames: [FrameData; FRAME_OVERLAP],
-    frame_number: usize,
+    pub frame_number: usize,
 }
 
 impl VulkanCommands {
@@ -91,6 +127,15 @@ impl VulkanCommands {
     // TODO: to infinite iter ? .cycle() + self.frames.next().unwrap()
     pub fn current_frame(&self) -> &FrameData {
         &self.frames[self.frame_number % FRAME_OVERLAP]
+    }
+
+    pub fn image_subresource_range(aspect_mask: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
+        vk::ImageSubresourceRange::default()
+            .aspect_mask(aspect_mask)
+            .base_mip_level(0)
+            .level_count(vk::REMAINING_MIP_LEVELS)
+            .base_array_layer(0)
+            .layer_count(vk::REMAINING_ARRAY_LAYERS)
     }
 }
 

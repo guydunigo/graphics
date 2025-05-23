@@ -8,7 +8,7 @@ pub struct VulkanSwapchain {
     device_copy: Device,
 
     pub swapchain_loader: swapchain::Device,
-    swapchain: vk::SwapchainKHR,
+    pub swapchain: vk::SwapchainKHR,
     // TODO: separé de views ou vec de tuples ?
     images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
@@ -105,7 +105,7 @@ impl VulkanSwapchain {
         }
     }
 
-    pub fn acquire_next_image(&self, current_frame: &FrameData) -> u32 {
+    pub fn acquire_next_image(&self, current_frame: &FrameData) -> (u32, &vk::Image) {
         let (swapchain_img_index, is_suboptimal) = unsafe {
             self.swapchain_loader
                 .acquire_next_image(
@@ -120,7 +120,10 @@ impl VulkanSwapchain {
             !is_suboptimal,
             "Swapchain is suboptimal and no longer matches the surface properties exactly, see VK_SUBOPTIMAL_KHR"
         );
-        swapchain_img_index
+        (
+            swapchain_img_index,
+            &self.images[swapchain_img_index as usize],
+        )
     }
 }
 
