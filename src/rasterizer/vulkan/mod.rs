@@ -38,6 +38,8 @@ impl VulkanEngine {
         _app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
+        self.swapchain.resize_if_necessary(&self.base);
+
         let current_frame = self.commands.current_frame();
         let device = &self.base.device;
 

@@ -1,4 +1,7 @@
+use std::cell::RefCell;
+
 use ash::{Device, khr::swapchain, vk};
+use winit::dpi::PhysicalSize;
 
 use super::{vulkan_base::VulkanBase, vulkan_commands::FrameData};
 
@@ -7,6 +10,8 @@ const IMAGE_FORMAT: vk::Format = vk::Format::B8G8R8A8_UNORM;
 pub struct VulkanSwapchain {
     device_copy: Device,
 
+    window_size: PhysicalSize<u32>,
+    is_suboptimal: RefCell<bool>,
     pub swapchain_loader: swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
     images: Vec<(vk::Image, vk::ImageView, vk::Semaphore)>,
@@ -104,9 +109,25 @@ impl VulkanSwapchain {
             // I hope it's okay to clone the device...
             // It's needed for Drop, but I'd like to keep this object separated from `VulkanBase`.
             device_copy: base.device.clone(),
+            window_size,
+            is_suboptimal: Default::default(),
             swapchain_loader,
             swapchain,
             images,
+        }
+    }
+
+    fn set_suboptimal(&self, is_suboptimal: bool) {
+        if is_suboptimal {
+            *self.is_suboptimal.borrow_mut() |= is_suboptimal;
+        }
+    }
+
+    /// If window is resized, we need to recreate the whole swapchain.
+    pub fn resize_if_necessary(&mut self, base: &VulkanBase) {
+        // TODO: need to compare window_size or is_suboptimal is enough ?
+        if *self.is_suboptimal.borrow() || self.window_size != base.window.inner_size() {
+            *self = VulkanSwapchain::new(base);
         }
     }
 
@@ -124,10 +145,8 @@ impl VulkanSwapchain {
                 )
                 .unwrap()
         };
-        assert!(
-            !is_suboptimal,
-            "Swapchain is suboptimal and no longer matches the surface properties exactly, see VK_SUBOPTIMAL_KHR"
-        );
+        self.set_suboptimal(is_suboptimal);
+
         let (i, _, s) = &self.images[swapchain_img_index as usize];
         (swapchain_img_index, i, s)
     }
@@ -140,11 +159,12 @@ impl VulkanSwapchain {
             .swapchains(&swapchains)
             .wait_semaphores(&wait_semaphores)
             .image_indices(&images_indices);
-        assert!(!unsafe {
+        let is_suboptimal = unsafe {
             self.swapchain_loader
                 .queue_present(queue, &present_info)
                 .unwrap()
-        });
+        };
+        self.set_suboptimal(is_suboptimal);
     }
 }
 
