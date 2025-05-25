@@ -1,24 +1,24 @@
-mod any_engine;
+mod cpu_engine;
 mod parallel;
 mod settings;
 mod single_threaded;
 mod vulkan;
 
-use std::{ops::DerefMut, rc::Rc};
+use std::rc::Rc;
+use vulkan::VulkanEngine;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     window::Window,
 };
 
 use crate::{
-    font::TextWriter,
     maths::Vec3f,
     scene::{Camera, Triangle, World},
     window::AppObserver,
 };
 
-use any_engine::AnyEngine;
-use settings::Settings;
+use cpu_engine::CPUEngine;
+use settings::{EngineType, Settings};
 
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
@@ -36,49 +36,37 @@ pub struct Stats {
     // pub misc: String,
 }
 
+#[derive(Default)]
 pub struct Rasterizer {
-    engine: AnyEngine,
-    text_writer: TextWriter,
+    engine: Option<Engine>,
     pub settings: Settings,
 }
 
-impl Default for Rasterizer {
-    fn default() -> Self {
-        let engine = AnyEngine::default();
-        let mut settings = Settings::default();
-        settings.set_engine_type(&engine);
-        Self {
-            engine,
-            text_writer: Default::default(),
-            settings,
-        }
-    }
-}
-
 impl Rasterizer {
-    pub fn rasterize<B: DerefMut<Target = [u32]>>(
+    pub fn init_window(&mut self, window: Rc<Window>) {
+        self.engine = Some(Engine::new(window));
+    }
+
+    pub fn rasterize(
         &mut self,
         world: &World,
-        buffer: &mut B,
-        size: PhysicalSize<u32>,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        self.engine.rasterize(
+        self.engine.as_mut().unwrap().rasterize(
             &self.settings,
-            &self.text_writer,
             world,
-            buffer,
-            size,
             app,
             #[cfg(feature = "stats")]
             stats,
         );
     }
 
-    pub fn next_engine(&mut self, window: &Rc<Window>) {
-        self.engine.set_next(window);
-        self.settings.set_engine_type(&self.engine);
+    pub fn set_next_engine(&mut self) {
+        if let Some(engine) = &mut self.engine {
+            engine.set_next();
+            self.settings.engine_type = engine.as_engine_type();
+        }
     }
 }
 
@@ -216,4 +204,58 @@ fn format_debug(
         settings,
         stats
     )
+}
+
+enum Engine {
+    CPU(CPUEngine),
+    Vulkan(VulkanEngine),
+}
+
+impl Engine {
+    pub fn new(window: Rc<Window>) -> Self {
+        Self::Vulkan(VulkanEngine::new(window))
+    }
+
+    pub fn set_next(&mut self) {
+        match self {
+            Engine::CPU(e) => {
+                if e.set_next() {
+                    *self = Engine::Vulkan(VulkanEngine::new(e.window().clone()));
+                }
+            }
+            Engine::Vulkan(e) => *self = Engine::CPU(CPUEngine::new(e.window().clone())),
+        }
+    }
+
+    pub fn as_engine_type(&self) -> EngineType {
+        match self {
+            Self::CPU(e) => e.as_engine_type(),
+            Self::Vulkan(_) => EngineType::Vulkan,
+        }
+    }
+
+    pub fn rasterize(
+        &mut self,
+        settings: &Settings,
+        world: &World,
+        app: &mut AppObserver,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    ) {
+        match self {
+            Self::CPU(e) => e.rasterize(
+                settings,
+                world,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            Self::Vulkan(e) => e.rasterize(
+                settings,
+                world,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+        }
+    }
 }

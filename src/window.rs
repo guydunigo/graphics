@@ -1,6 +1,5 @@
-use std::{num::NonZeroU32, rc::Rc, time::Instant};
+use std::{rc::Rc, time::Instant};
 
-use softbuffer::{Context, Surface};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
@@ -16,31 +15,6 @@ use crate::rasterizer::Stats;
 use crate::{maths::Rotation, rasterizer::Rasterizer, scene::World};
 
 const BLENDING_RATIO: f32 = 0.01;
-
-pub struct WindowSurface {
-    window: Rc<Window>,
-    surface: Surface<Rc<Window>, Rc<Window>>,
-}
-
-impl WindowSurface {
-    pub fn new(event_loop: &ActiveEventLoop) -> Self {
-        let window = Rc::new(
-            event_loop
-                .create_window(Window::default_attributes())
-                .unwrap(),
-        );
-
-        let context = Context::new(window.clone()).expect("Failed to create a softbuffer context");
-        let surface =
-            Surface::new(&context, window.clone()).expect("Failed to create a softbuffer surface");
-
-        WindowSurface { window, surface }
-    }
-
-    pub fn surface(&mut self) -> &mut Surface<Rc<Window>, Rc<Window>> {
-        &mut self.surface
-    }
-}
 
 /// App data infos to be used and displayed, mostly for debugging
 #[derive(Default, Debug, Clone, Copy)]
@@ -102,7 +76,7 @@ impl AppObserver {
 }
 
 pub struct App {
-    window_surface: Option<WindowSurface>,
+    window: Option<Rc<Window>>,
     rasterizer: Rasterizer,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
@@ -120,7 +94,7 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            window_surface: Default::default(),
+            window: Default::default(),
             rasterizer: Default::default(),
             world: Default::default(),
             cursor: Default::default(),
@@ -165,11 +139,14 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.window_surface = Some(WindowSurface::new(event_loop));
-        {
-            let window = &self.window_surface.as_ref().unwrap().window;
-            self.rasterizer.next_engine(window);
-        }
+        let window = Rc::new(
+            event_loop
+                .create_window(Window::default_attributes())
+                .unwrap(),
+        );
+
+        self.rasterizer.init_window(window.clone());
+        self.window = Some(window);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
@@ -253,10 +230,7 @@ impl ApplicationHandler for App {
                         self.rasterizer.settings.show_vertices =
                             !self.rasterizer.settings.show_vertices
                     }
-                    KeyCode::Digit1 => {
-                        let window = &self.window_surface.as_ref().unwrap().window;
-                        self.rasterizer.next_engine(window);
-                    }
+                    KeyCode::Digit1 => self.rasterizer.set_next_engine(),
                     KeyCode::Digit2 => self.rasterizer.settings.sort_triangles.next(),
                     KeyCode::Digit3 => {
                         self.rasterizer.settings.parallel_text =
@@ -279,7 +253,8 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
-                let window = &self.window_surface.as_ref().unwrap().window;
+                let window = self.window.as_ref().unwrap();
+
                 match state {
                     ElementState::Pressed => {
                         window
@@ -327,41 +302,11 @@ impl ApplicationHandler for App {
 
                 let mut obs = AppObserver::from(self);
 
-                // TODO: no unwrap
-                let window_surface = self.window_surface.as_mut().unwrap();
-
-                // Draw.
-                let size = window_surface.window.inner_size();
-
-                let (Some(width), Some(height)) =
-                    (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-                else {
-                    return;
-                };
-
-                window_surface
-                    .surface()
-                    .resize(width, height)
-                    .expect("Failed to resize the softbuffer surface");
-
-                let mut buffer = window_surface
-                    .surface()
-                    .buffer_mut()
-                    .expect("Failed to get the softbuffer buffer");
                 self.rasterizer.rasterize(
                     &self.world,
-                    &mut buffer,
-                    size,
                     &mut obs,
                     #[cfg(feature = "stats")]
                     &mut stats,
-                );
-
-                buffer
-                    .present()
-                    .expect("Failed to present the softbuffer buffer");
-                todo!(
-                    "Don't handle buffer (and even surface) with Vulkan ! WindowSurface as enum between CPU/Vulkan."
                 );
 
                 // Queue a RedrawRequested event.
@@ -369,7 +314,7 @@ impl ApplicationHandler for App {
                 // You only need to call this if you've determined that you need to redraw in
                 // applications which do not always need to. Applications that redraw continuously
                 // can render here instead.
-                window_surface.window.request_redraw();
+                self.window.as_ref().unwrap().request_redraw();
 
                 obs.update_app(self);
 

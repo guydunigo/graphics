@@ -1,9 +1,9 @@
-use std::{ops::DerefMut, rc::Rc};
+use std::rc::Rc;
 
 use ash::vk;
-use winit::{dpi::PhysicalSize, window::Window};
+use winit::window::Window;
 
-use crate::{font::TextWriter, scene::World, window::AppObserver};
+use crate::{scene::World, window::AppObserver};
 
 use super::settings::Settings;
 
@@ -27,13 +27,14 @@ pub struct VulkanEngine {
 }
 
 impl VulkanEngine {
-    pub fn rasterize<B: DerefMut<Target = [u32]>>(
+    pub fn window(&self) -> &Rc<Window> {
+        &self.base.window
+    }
+
+    pub fn rasterize(
         &mut self,
         _settings: &Settings,
-        _text_writer: &TextWriter,
         _world: &World,
-        _buffer: &mut B,
-        mut _size: PhysicalSize<u32>,
         _app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
