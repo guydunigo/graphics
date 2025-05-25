@@ -111,10 +111,11 @@ impl SingleThreadedEngine for IteratorEngine {
 
                 // If a `Texture::VertexColor` has the same color for all vertices, then we can
                 // consider it like a `Texture::Color`.
-                if let Texture::VertexColor(c0, c1, c2) = t_raster.texture {
-                    if c0 == c1 && c1 == c2 {
-                        t_raster.texture = Texture::Color(c0);
-                    }
+                if let Texture::VertexColor(c0, c1, c2) = t_raster.texture
+                    && c0 == c1
+                    && c1 == c2
+                {
+                    t_raster.texture = Texture::Color(c0);
                 }
 
                 if let Texture::Color(col) = t_raster.texture {

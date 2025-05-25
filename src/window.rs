@@ -332,10 +332,10 @@ impl ApplicationHandler for App {
         _device_id: DeviceId,
         event: DeviceEvent,
     ) {
-        if let DeviceEvent::MouseMotion { delta: (x, y) } = event {
-            if self.mouse_left_held {
-                self.world.camera.rotate_from_mouse(x as f32, y as f32);
-            }
+        if let DeviceEvent::MouseMotion { delta: (x, y) } = event
+            && self.mouse_left_held
+        {
+            self.world.camera.rotate_from_mouse(x as f32, y as f32);
         }
     }
 }

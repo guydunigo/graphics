@@ -207,29 +207,29 @@ fn format_debug(
 }
 
 enum Engine {
-    CPU(CPUEngine),
-    Vulkan(VulkanEngine),
+    Cpu(CPUEngine),
+    Vulkan(Box<VulkanEngine>),
 }
 
 impl Engine {
     pub fn new(window: Rc<Window>) -> Self {
-        Self::Vulkan(VulkanEngine::new(window))
+        Self::Vulkan(Box::new(VulkanEngine::new(window)))
     }
 
     pub fn set_next(&mut self) {
         match self {
-            Engine::CPU(e) => {
+            Engine::Cpu(e) => {
                 if e.set_next() {
-                    *self = Engine::Vulkan(VulkanEngine::new(e.window().clone()));
+                    *self = Engine::Vulkan(Box::new(VulkanEngine::new(e.window().clone())));
                 }
             }
-            Engine::Vulkan(e) => *self = Engine::CPU(CPUEngine::new(e.window().clone())),
+            Engine::Vulkan(e) => *self = Engine::Cpu(CPUEngine::new(e.window().clone())),
         }
     }
 
     pub fn as_engine_type(&self) -> EngineType {
         match self {
-            Self::CPU(e) => e.as_engine_type(),
+            Self::Cpu(e) => e.as_engine_type(),
             Self::Vulkan(_) => EngineType::Vulkan,
         }
     }
@@ -242,7 +242,7 @@ impl Engine {
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         match self {
-            Self::CPU(e) => e.rasterize(
+            Self::Cpu(e) => e.rasterize(
                 settings,
                 world,
                 app,

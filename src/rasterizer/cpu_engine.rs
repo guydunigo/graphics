@@ -117,7 +117,7 @@ impl AnyEngine {
             }
         }
 
-        return false;
+        false
     }
 
     pub fn rasterize<B: DerefMut<Target = [u32]>>(

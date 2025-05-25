@@ -97,23 +97,26 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
     v: Vec3f,
     texture: &Texture,
 ) {
-    if v.x >= 1. && v.x < (size.width as f32) - 1. && v.y >= 1. && v.y < (size.height as f32) - 1. {
-        if let Some(i) = buffer_index(v, size) {
-            let color = match texture {
-                Texture::Color(col) => *col,
-                // TODO: Better color calculus
-                Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
-                    + Vec4u::from_color_u32(*c1)
-                    + Vec4u::from_color_u32(*c2))
-                    / 3.)
-                    .as_color_u32(),
-            };
+    if v.x >= 1.
+        && v.x < (size.width as f32) - 1.
+        && v.y >= 1.
+        && v.y < (size.height as f32) - 1.
+        && let Some(i) = buffer_index(v, size)
+    {
+        let color = match texture {
+            Texture::Color(col) => *col,
+            // TODO: Better color calculus
+            Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
+                + Vec4u::from_color_u32(*c1)
+                + Vec4u::from_color_u32(*c2))
+                / 3.)
+                .as_color_u32(),
+        };
 
-            buffer[i] = color;
-            buffer[i - 1] = color;
-            buffer[i + 1] = color;
-            buffer[i - (size.width as usize)] = color;
-            buffer[i + (size.width as usize)] = color;
-        }
+        buffer[i] = color;
+        buffer[i - 1] = color;
+        buffer[i + 1] = color;
+        buffer[i - (size.width as usize)] = color;
+        buffer[i + (size.width as usize)] = color;
     }
 }

@@ -131,6 +131,21 @@ impl VulkanSwapchain {
         let (i, _, s) = &self.images[swapchain_img_index as usize];
         (swapchain_img_index, i, s)
     }
+
+    pub fn present(&self, swapchain_img_index: u32, sem_render: &vk::Semaphore, queue: vk::Queue) {
+        let swapchains = [self.swapchain];
+        let wait_semaphores = [*sem_render];
+        let images_indices = [swapchain_img_index];
+        let present_info = vk::PresentInfoKHR::default()
+            .swapchains(&swapchains)
+            .wait_semaphores(&wait_semaphores)
+            .image_indices(&images_indices);
+        assert!(!unsafe {
+            self.swapchain_loader
+                .queue_present(queue, &present_info)
+                .unwrap()
+        });
+    }
 }
 
 impl Drop for VulkanSwapchain {
