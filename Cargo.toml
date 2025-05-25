@@ -11,6 +11,7 @@ obj-rs = "0.7.4"
 rand = "0.9.1"
 rayon = "1.10.0"
 softbuffer = "0.4.6"
+vk-mem = "0.4.0"
 winit = "0.30.11"
 
 [profile.dev.package."*"]

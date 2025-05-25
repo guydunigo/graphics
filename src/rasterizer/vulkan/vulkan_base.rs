@@ -35,6 +35,10 @@ pub struct VulkanBase {
     pub device: Device,
     pub surface: vk::SurfaceKHR,
     pub queue_family_index: u32,
+
+    allocator: vk_mem::Allocator,
+    draw_img: AllocatedImage,
+    draw_extent: vk::Extent2D,
 }
 
 impl VulkanBase {
@@ -64,6 +68,12 @@ impl VulkanBase {
 
         let device = device(&instance, chosen_gpu, queue_family_index);
 
+        let allocator = {
+            let mut create_info = vk_mem::AllocatorCreateInfo::new(&instance, &device, chosen_gpu);
+            create_info.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
+            unsafe { vk_mem::Allocator::new(create_info).unwrap() }
+        };
+
         VulkanBase {
             _entry: entry,
 
@@ -78,6 +88,8 @@ impl VulkanBase {
             surface,
 
             queue_family_index,
+
+            allocator,
         }
     }
 }
@@ -365,4 +377,12 @@ fn device(instance: &Instance, chosen_gpu: vk::PhysicalDevice, queue_family_inde
             .create_device(chosen_gpu, &device_create_info, None)
             .unwrap()
     }
+}
+
+struct AllocatedImage {
+    img: vk::Image,
+    img_view: vk::ImageView,
+    allocation: vk_mem::Allocation,
+    extent: vk::Extent3D,
+    format: vk::Format,
 }
