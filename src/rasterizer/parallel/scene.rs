@@ -8,6 +8,8 @@ use crate::{
     scene::{Camera, Texture, Triangle},
 };
 
+// TODO: try with Arc::new_cyclic ?
+
 #[derive(Default, Debug, Clone)]
 pub struct ParTriangle {
     pub triangle: Triangle,

@@ -32,13 +32,11 @@ pub struct VulkanBase {
     debug_messenger: vk::DebugUtilsMessengerEXT,
     pub surface_loader: surface::Instance,
     pub chosen_gpu: vk::PhysicalDevice,
-    pub device: Device,
+    pub device: Rc<Device>,
     pub surface: vk::SurfaceKHR,
     pub queue_family_index: u32,
 
-    allocator: vk_mem::Allocator,
-    draw_img: AllocatedImage,
-    draw_extent: vk::Extent2D,
+    pub allocator: Rc<vk_mem::Allocator>,
 }
 
 impl VulkanBase {
@@ -84,12 +82,12 @@ impl VulkanBase {
             debug_messenger,
             surface_loader,
             chosen_gpu,
-            device,
+            device: Rc::new(device),
             surface,
 
             queue_family_index,
 
-            allocator,
+            allocator: Rc::new(allocator),
         }
     }
 }
@@ -99,6 +97,11 @@ impl Drop for VulkanBase {
         println!("drop VulkanBase");
         unsafe {
             self.device.device_wait_idle().unwrap();
+            // TODO: ideally, i'd wrap this device into a droppable type...
+            assert!(
+                Rc::strong_count(&self.device) == 1,
+                "About to destroy device but it is referenced elsewhere !"
+            );
             self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
             self.debug_utils_loader
@@ -377,12 +380,4 @@ fn device(instance: &Instance, chosen_gpu: vk::PhysicalDevice, queue_family_inde
             .create_device(chosen_gpu, &device_create_info, None)
             .unwrap()
     }
-}
-
-struct AllocatedImage {
-    img: vk::Image,
-    img_view: vk::ImageView,
-    allocation: vk_mem::Allocation,
-    extent: vk::Extent3D,
-    format: vk::Format,
 }

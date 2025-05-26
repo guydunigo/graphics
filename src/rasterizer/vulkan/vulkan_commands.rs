@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use ash::{Device, vk};
 
 use super::vulkan_base::VulkanBase;
@@ -5,7 +7,7 @@ use super::vulkan_base::VulkanBase;
 const FRAME_OVERLAP: usize = 2;
 
 pub struct FrameData {
-    device_copy: Device,
+    device_copy: Rc<Device>,
 
     cmd_pool: vk::CommandPool,
     pub cmd_buf: vk::CommandBuffer,
@@ -28,7 +30,7 @@ impl Drop for FrameData {
 
 impl FrameData {
     pub fn new(
-        device: &Device,
+        device: Rc<Device>,
         pool_create_info: &vk::CommandPoolCreateInfo,
         fence_create_info: &vk::FenceCreateInfo,
         sem_create_info: &vk::SemaphoreCreateInfo,
@@ -51,7 +53,7 @@ impl FrameData {
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
 
         Self {
-            device_copy: device.clone(),
+            device_copy: device,
             cmd_pool,
             cmd_buf,
             fence_render,
@@ -166,7 +168,7 @@ impl VulkanCommands {
         let frames: Vec<FrameData> = (0..FRAME_OVERLAP)
             .map(|_| {
                 FrameData::new(
-                    &base.device,
+                    base.device.clone(),
                     &pool_create_info,
                     &fence_create_info,
                     &sem_create_info,
