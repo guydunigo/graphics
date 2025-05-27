@@ -42,54 +42,33 @@ impl VulkanEngine {
 
         let current_frame = self.commands.current_frame();
         let device = &self.base.device;
+        let image = self.swapchain.draw_img();
 
         current_frame.wait_for_fences();
+        current_frame.begin_cmd_buf();
+        current_frame.transition_image(
+            device,
+            *image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::GENERAL,
+        );
 
-        let (swapchain_img_index, sem_render) = {
-            let (swapchain_img_index, image, sem_render) =
-                self.swapchain.acquire_next_image(current_frame);
+        current_frame.draw_background(*image, self.commands.frame_number);
 
-            current_frame.begin_cmd_buf();
-            current_frame.transition_image(
-                device,
-                image,
-                vk::ImageLayout::UNDEFINED,
-                vk::ImageLayout::GENERAL,
-            );
-
-            let flash = (self.commands.frame_number as f32 / 120.).sin().abs();
-            let clear_value = vk::ClearColorValue {
-                float32: [0., 0., flash, 1.],
-            };
-            let clear_range = VulkanCommands::image_subresource_range(vk::ImageAspectFlags::COLOR);
-            unsafe {
-                device.cmd_clear_color_image(
-                    current_frame.cmd_buf,
-                    *image,
-                    vk::ImageLayout::GENERAL,
-                    &clear_value,
-                    &[clear_range],
-                )
-            };
-
-            current_frame.transition_image(
-                device,
-                image,
-                vk::ImageLayout::GENERAL,
-                vk::ImageLayout::PRESENT_SRC_KHR,
-            );
-            current_frame.end_cmd_buf();
-
-            (swapchain_img_index, sem_render)
-        };
-
+        let (swapchain_img_index, swapchain_image, sem_render) =
+            self.swapchain.acquire_next_image(current_frame);
+        current_frame.copy_img_swapchain(
+            *image,
+            self.swapchain.draw_extent(),
+            *swapchain_image,
+            self.swapchain.swapchain_extent,
+        );
+        current_frame.end_cmd_buf();
         current_frame.submit(sem_render, self.commands.queue);
         self.swapchain
             .present(swapchain_img_index, sem_render, self.commands.queue);
 
         self.commands.frame_number += 1;
-
-        // std::thread::sleep(Duration::from_millis(16))
     }
 
     pub fn new(window: Rc<Window>) -> Self {

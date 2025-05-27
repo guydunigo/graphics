@@ -13,7 +13,8 @@ pub struct VulkanSwapchain {
     is_suboptimal: RefCell<bool>,
     pub swapchain_loader: swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
-    images: Vec<(vk::Image, vk::ImageView, vk::Semaphore)>,
+    swapchain_images: Vec<(vk::Image, vk::ImageView, vk::Semaphore)>,
+    pub swapchain_extent: vk::Extent2D,
 
     draw_img: AllocatedImage,
     // TODO: draw_extent: vk::Extent2D,
@@ -47,7 +48,7 @@ impl VulkanSwapchain {
             desired_image_count = surface_capabilities.max_image_count;
         }
         let window_size = base.window.inner_size();
-        let surface_resolution = match surface_capabilities.current_extent.width {
+        let swapchain_extent = match surface_capabilities.current_extent.width {
             u32::MAX => vk::Extent2D {
                 width: window_size.width,
                 height: window_size.height,
@@ -70,7 +71,7 @@ impl VulkanSwapchain {
             .image_format(surface_format.format)
             .image_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
             .present_mode(present_mode)
-            .image_extent(surface_resolution)
+            .image_extent(swapchain_extent)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::TRANSFER_DST)
             .min_image_count(desired_image_count)
             .pre_transform(pre_transform)
@@ -84,7 +85,7 @@ impl VulkanSwapchain {
         };
 
         let sem_create_info = vk::SemaphoreCreateInfo::default();
-        let images = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() }
+        let swapchain_images = unsafe { swapchain_loader.get_swapchain_images(swapchain).unwrap() }
             .drain(..)
             .map(|image| {
                 let create_view_info = image_view_create_info(
@@ -116,7 +117,8 @@ impl VulkanSwapchain {
             is_suboptimal: Default::default(),
             swapchain_loader,
             swapchain,
-            images,
+            swapchain_images,
+            swapchain_extent,
             draw_img: AllocatedImage::new(base, window_size),
         }
     }
@@ -151,7 +153,7 @@ impl VulkanSwapchain {
         };
         self.set_suboptimal(is_suboptimal);
 
-        let (i, _, s) = &self.images[swapchain_img_index as usize];
+        let (i, _, s) = &self.swapchain_images[swapchain_img_index as usize];
         (swapchain_img_index, i, s)
     }
 
@@ -170,6 +172,17 @@ impl VulkanSwapchain {
         };
         self.set_suboptimal(is_suboptimal);
     }
+
+    pub fn draw_img(&self) -> &vk::Image {
+        &self.draw_img.img
+    }
+
+    pub fn draw_extent(&self) -> vk::Extent2D {
+        vk::Extent2D {
+            width: self.draw_img.extent.width,
+            height: self.draw_img.extent.height,
+        }
+    }
 }
 
 impl Drop for VulkanSwapchain {
@@ -179,7 +192,7 @@ impl Drop for VulkanSwapchain {
             self.device_copy.device_wait_idle().unwrap();
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain, None);
-            self.images.drain(..).for_each(|(_, v, s)| {
+            self.swapchain_images.drain(..).for_each(|(_, v, s)| {
                 self.device_copy.destroy_image_view(v, None);
                 self.device_copy.destroy_semaphore(s, None);
             });
@@ -301,44 +314,4 @@ impl Drop for AllocatedImage {
                 .destroy_image(self.img, &mut self.allocation);
         }
     }
-}
-
-fn copy_img(
-    device: &Device,
-    cmd_buf: vk::CommandBuffer,
-    src: vk::Image,
-    dst: vk::Image,
-    src_size: vk::Extent2D,
-    dst_size: vk::Extent2D,
-) {
-    let mut blit_region = vk::ImageBlit2::default();
-    blit_region.src_offsets[1].x = src_size.width as i32;
-    blit_region.src_offsets[1].y = src_size.height as i32;
-    blit_region.src_offsets[1].z = 1;
-
-    blit_region.dst_offsets[1].x = dst_size.width as i32;
-    blit_region.dst_offsets[1].y = dst_size.height as i32;
-    blit_region.dst_offsets[1].z = 1;
-
-    blit_region.src_subresource.aspect_mask = vk::ImageAspectFlags::COLOR;
-    blit_region.src_subresource.base_array_layer = 0;
-    blit_region.src_subresource.layer_count = 1;
-    blit_region.src_subresource.mip_level = 0;
-
-    blit_region.dst_subresource.aspect_mask = vk::ImageAspectFlags::COLOR;
-    blit_region.dst_subresource.base_array_layer = 0;
-    blit_region.dst_subresource.layer_count = 1;
-    blit_region.dst_subresource.mip_level = 0;
-
-    let blit_regions = [blit_region];
-
-    let blit_info = vk::BlitImageInfo2::default()
-        .src_image(src)
-        .src_image_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
-        .dst_image(dst)
-        .dst_image_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-        .filter(vk::Filter::LINEAR)
-        .regions(&blit_regions);
-
-    unsafe { device.cmd_blit_image2(cmd_buf, &blit_info) };
 }

@@ -65,7 +65,7 @@ impl FrameData {
         &self,
         // TODO: store Device copy in FrameData ?
         device: &Device,
-        image: &vk::Image,
+        image: vk::Image,
         current_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
     ) {
@@ -87,7 +87,7 @@ impl FrameData {
             .old_layout(current_layout)
             .new_layout(new_layout)
             .subresource_range(sub_image)
-            .image(*image);
+            .image(image);
 
         let ibs = [image_barrier];
         let dep_info = vk::DependencyInfo::default().image_memory_barriers(&ibs);
@@ -144,6 +144,92 @@ impl FrameData {
             self.device_copy
                 .queue_submit2(queue, &[submit_info], self.fence_render)
                 .unwrap()
+        };
+    }
+
+    fn copy_img(
+        &self,
+        src: vk::Image,
+        dst: vk::Image,
+        src_size: vk::Extent2D,
+        dst_size: vk::Extent2D,
+    ) {
+        let mut blit_region = vk::ImageBlit2::default();
+        blit_region.src_offsets[1].x = src_size.width as i32;
+        blit_region.src_offsets[1].y = src_size.height as i32;
+        blit_region.src_offsets[1].z = 1;
+
+        blit_region.dst_offsets[1].x = dst_size.width as i32;
+        blit_region.dst_offsets[1].y = dst_size.height as i32;
+        blit_region.dst_offsets[1].z = 1;
+
+        blit_region.src_subresource.aspect_mask = vk::ImageAspectFlags::COLOR;
+        blit_region.src_subresource.base_array_layer = 0;
+        blit_region.src_subresource.layer_count = 1;
+        blit_region.src_subresource.mip_level = 0;
+
+        blit_region.dst_subresource.aspect_mask = vk::ImageAspectFlags::COLOR;
+        blit_region.dst_subresource.base_array_layer = 0;
+        blit_region.dst_subresource.layer_count = 1;
+        blit_region.dst_subresource.mip_level = 0;
+
+        let blit_regions = [blit_region];
+
+        let blit_info = vk::BlitImageInfo2::default()
+            .src_image(src)
+            .src_image_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .dst_image(dst)
+            .dst_image_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .filter(vk::Filter::LINEAR)
+            .regions(&blit_regions);
+
+        unsafe { self.device_copy.cmd_blit_image2(self.cmd_buf, &blit_info) };
+    }
+
+    /// draw_image must be in [`vk::ImageLayout::GENERAL`] and ends in [`vk::ImageLayout::TRANSFER_SRC_OPTIMAL`]
+    /// swapchain_image ends in [`vk::ImageLayout::PRESENT_SRC_KHR`]
+    pub fn copy_img_swapchain(
+        &self,
+        draw_image: vk::Image,
+        draw_extent: vk::Extent2D,
+        swapchain_image: vk::Image,
+        swapchain_extent: vk::Extent2D,
+    ) {
+        self.transition_image(
+            &self.device_copy,
+            draw_image,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        );
+        self.transition_image(
+            &self.device_copy,
+            swapchain_image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        );
+        self.copy_img(draw_image, swapchain_image, draw_extent, swapchain_extent);
+        self.transition_image(
+            &self.device_copy,
+            swapchain_image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            vk::ImageLayout::PRESENT_SRC_KHR,
+        );
+    }
+
+    pub fn draw_background(&self, image: vk::Image, frame_number: usize) {
+        let flash = (frame_number as f32 / 120.).sin().abs();
+        let clear_value = vk::ClearColorValue {
+            float32: [0., 0., flash, 1.],
+        };
+        let clear_range = VulkanCommands::image_subresource_range(vk::ImageAspectFlags::COLOR);
+        unsafe {
+            self.device_copy.cmd_clear_color_image(
+                self.cmd_buf,
+                image,
+                vk::ImageLayout::GENERAL,
+                &clear_value,
+                &[clear_range],
+            )
         };
     }
 }
