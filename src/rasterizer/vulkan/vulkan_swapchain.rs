@@ -302,3 +302,43 @@ impl Drop for AllocatedImage {
         }
     }
 }
+
+fn copy_img(
+    device: &Device,
+    cmd_buf: vk::CommandBuffer,
+    src: vk::Image,
+    dst: vk::Image,
+    src_size: vk::Extent2D,
+    dst_size: vk::Extent2D,
+) {
+    let mut blit_region = vk::ImageBlit2::default();
+    blit_region.src_offsets[1].x = src_size.width as i32;
+    blit_region.src_offsets[1].y = src_size.height as i32;
+    blit_region.src_offsets[1].z = 1;
+
+    blit_region.dst_offsets[1].x = dst_size.width as i32;
+    blit_region.dst_offsets[1].y = dst_size.height as i32;
+    blit_region.dst_offsets[1].z = 1;
+
+    blit_region.src_subresource.aspect_mask = vk::ImageAspectFlags::COLOR;
+    blit_region.src_subresource.base_array_layer = 0;
+    blit_region.src_subresource.layer_count = 1;
+    blit_region.src_subresource.mip_level = 0;
+
+    blit_region.dst_subresource.aspect_mask = vk::ImageAspectFlags::COLOR;
+    blit_region.dst_subresource.base_array_layer = 0;
+    blit_region.dst_subresource.layer_count = 1;
+    blit_region.dst_subresource.mip_level = 0;
+
+    let blit_regions = [blit_region];
+
+    let blit_info = vk::BlitImageInfo2::default()
+        .src_image(src)
+        .src_image_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+        .dst_image(dst)
+        .dst_image_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+        .filter(vk::Filter::LINEAR)
+        .regions(&blit_regions);
+
+    unsafe { device.cmd_blit_image2(cmd_buf, &blit_info) };
+}
