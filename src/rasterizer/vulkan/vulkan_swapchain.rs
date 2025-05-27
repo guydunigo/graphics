@@ -19,7 +19,8 @@ pub struct VulkanSwapchain {
     pub swapchain_extent: vk::Extent2D,
 
     draw_img: AllocatedImage,
-    descriptors: VulkanDescriptors,
+    /// TODO: need to recreate on resize along swapchain because we use draw_img ?
+    pub descriptors: VulkanDescriptors,
     // TODO: draw_extent: vk::Extent2D,
 }
 

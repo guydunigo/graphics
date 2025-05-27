@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use ash::{Device, vk};
 
-use super::vulkan_base::VulkanBase;
+use super::{vulkan_base::VulkanBase, vulkan_swapchain::VulkanSwapchain};
 
 const FRAME_OVERLAP: usize = 2;
 
@@ -216,21 +216,47 @@ impl FrameData {
         );
     }
 
-    pub fn draw_background(&self, image: vk::Image, frame_number: usize) {
-        let flash = (frame_number as f32 / 120.).sin().abs();
-        let clear_value = vk::ClearColorValue {
-            float32: [0., 0., flash, 1.],
-        };
-        let clear_range = VulkanCommands::image_subresource_range(vk::ImageAspectFlags::COLOR);
+    // pub fn draw_background_simple(&self, image: vk::Image, frame_number: usize) {
+    //     let flash = (frame_number as f32 / 120.).sin().abs();
+    //     let clear_value = vk::ClearColorValue {
+    //         float32: [0., 0., flash, 1.],
+    //     };
+    //     let clear_range = VulkanCommands::image_subresource_range(vk::ImageAspectFlags::COLOR);
+    //     unsafe {
+    //         self.device_copy.cmd_clear_color_image(
+    //             self.cmd_buf,
+    //             image,
+    //             vk::ImageLayout::GENERAL,
+    //             &clear_value,
+    //             &[clear_range],
+    //         )
+    //     };
+    // }
+
+    pub fn draw_background(&self, swapchain: &VulkanSwapchain) {
         unsafe {
-            self.device_copy.cmd_clear_color_image(
+            self.device_copy.cmd_bind_pipeline(
                 self.cmd_buf,
-                image,
-                vk::ImageLayout::GENERAL,
-                &clear_value,
-                &[clear_range],
-            )
-        };
+                vk::PipelineBindPoint::COMPUTE,
+                swapchain.descriptors.gradient_pipeline,
+            );
+            self.device_copy.cmd_bind_descriptor_sets(
+                self.cmd_buf,
+                vk::PipelineBindPoint::COMPUTE,
+                swapchain.descriptors.gradient_pipeline_layout,
+                0,
+                &[swapchain.descriptors.draw_img_descs],
+                &[],
+            );
+
+            let draw_extent = swapchain.draw_extent();
+            self.device_copy.cmd_dispatch(
+                self.cmd_buf,
+                (draw_extent.width as f32 / 16.).ceil() as u32,
+                (draw_extent.width as f32 / 16.).ceil() as u32,
+                1,
+            );
+        }
     }
 }
 

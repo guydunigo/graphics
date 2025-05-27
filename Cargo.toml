@@ -7,6 +7,7 @@ edition = "2024"
 ash = "0.38.0"
 ash-window = "0.13.0"
 fontdue = { version = "0.9.3", features = ["std"] }
+naga = { version = "25.0.1", features = ["glsl-in", "spv-out"] }
 obj-rs = "0.7.4"
 rand = "0.9.1"
 rayon = "1.10.0"

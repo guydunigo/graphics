@@ -54,7 +54,7 @@ impl VulkanEngine {
             vk::ImageLayout::GENERAL,
         );
 
-        current_frame.draw_background(*image, self.commands.frame_number);
+        current_frame.draw_background(&self.swapchain);
 
         let (swapchain_img_index, swapchain_image, sem_render) =
             self.swapchain.acquire_next_image(current_frame);
