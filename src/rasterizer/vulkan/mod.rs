@@ -13,6 +13,7 @@ mod vulkan_swapchain;
 use vulkan_swapchain::VulkanSwapchain;
 mod vulkan_commands;
 use vulkan_commands::VulkanCommands;
+mod vulkan_descriptors;
 
 #[cfg(feature = "stats")]
 use super::Stats;

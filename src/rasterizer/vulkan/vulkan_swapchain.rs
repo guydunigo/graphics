@@ -4,7 +4,9 @@ use ash::{Device, khr::swapchain, vk};
 use vk_mem::Alloc;
 use winit::dpi::PhysicalSize;
 
-use super::{vulkan_base::VulkanBase, vulkan_commands::FrameData};
+use super::{
+    vulkan_base::VulkanBase, vulkan_commands::FrameData, vulkan_descriptors::VulkanDescriptors,
+};
 
 pub struct VulkanSwapchain {
     device_copy: Rc<Device>,
@@ -17,6 +19,7 @@ pub struct VulkanSwapchain {
     pub swapchain_extent: vk::Extent2D,
 
     draw_img: AllocatedImage,
+    descriptors: VulkanDescriptors,
     // TODO: draw_extent: vk::Extent2D,
 }
 
@@ -109,6 +112,9 @@ impl VulkanSwapchain {
             })
             .collect();
 
+        let draw_img = AllocatedImage::new(base, window_size);
+        let descriptors = VulkanDescriptors::new(base.device.clone(), draw_img.img_view);
+
         Self {
             // I hope it's okay to clone the device...
             // It's needed for Drop, but I'd like to keep this object separated from `VulkanBase`.
@@ -119,7 +125,8 @@ impl VulkanSwapchain {
             swapchain,
             swapchain_images,
             swapchain_extent,
-            draw_img: AllocatedImage::new(base, window_size),
+            draw_img,
+            descriptors,
         }
     }
 
