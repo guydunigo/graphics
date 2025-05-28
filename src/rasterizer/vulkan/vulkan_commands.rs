@@ -314,11 +314,12 @@ impl VulkanCommands {
         let submit_info = vk::SubmitInfo2::default().command_buffer_infos(&cmd_buf_submit_info);
 
         unsafe {
+            // TODO: use different queue than graphics queue
             self.device_copy
                 .queue_submit2(self.queue, &[submit_info], self.imm_fence)
                 .unwrap();
             self.device_copy
-                .wait_for_fences(&fences[..], true, 9999999999)
+                .wait_for_fences(&fences[..], true, 9_999_999_999)
                 .unwrap();
         }
     }
