@@ -8,6 +8,9 @@ pub const PX: f32 = 12.;
 const BASE_X: usize = 3;
 const BASE_Y: usize = 3;
 
+pub const FONT_NAME: &str = "DejaVuSansMono";
+pub const FONT: &[u8] = include_bytes!("../resources/DejaVuSansMono.ttf") as &[u8];
+
 #[derive(Debug, Clone)]
 pub struct TextWriter {
     font: Font,
@@ -15,9 +18,8 @@ pub struct TextWriter {
 
 impl Default for TextWriter {
     fn default() -> Self {
-        let font = include_bytes!("../resources/DejaVuSansMono.ttf") as &[u8];
         Self {
-            font: Font::from_bytes(font, FontSettings::default()).unwrap(),
+            font: Font::from_bytes(FONT, FontSettings::default()).unwrap(),
         }
     }
 }

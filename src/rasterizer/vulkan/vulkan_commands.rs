@@ -52,8 +52,6 @@ impl FrameData {
 
     pub fn transition_image(
         &self,
-        // TODO: store Device copy in FrameData ?
-        device: &Device,
         image: vk::Image,
         current_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
@@ -81,7 +79,10 @@ impl FrameData {
         let ibs = [image_barrier];
         let dep_info = vk::DependencyInfo::default().image_memory_barriers(&ibs);
 
-        unsafe { device.cmd_pipeline_barrier2(self.cmd_buf, &dep_info) };
+        unsafe {
+            self.device_copy
+                .cmd_pipeline_barrier2(self.cmd_buf, &dep_info)
+        };
     }
 
     pub fn wait_for_fences(&self) {
@@ -167,7 +168,7 @@ impl FrameData {
     }
 
     /// draw_image must be in [`vk::ImageLayout::GENERAL`] and ends in [`vk::ImageLayout::TRANSFER_SRC_OPTIMAL`]
-    /// swapchain_image ends in [`vk::ImageLayout::PRESENT_SRC_KHR`]
+    /// swapchain_image ends in [`vk::ImageLayout::TRANSFER_DST_OPTIMAL`]
     pub fn copy_img_swapchain(
         &self,
         draw_image: vk::Image,
@@ -176,24 +177,16 @@ impl FrameData {
         swapchain_extent: vk::Extent2D,
     ) {
         self.transition_image(
-            &self.device_copy,
             draw_image,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
         );
         self.transition_image(
-            &self.device_copy,
             swapchain_image,
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         );
         self.copy_img(draw_image, swapchain_image, draw_extent, swapchain_extent);
-        self.transition_image(
-            &self.device_copy,
-            swapchain_image,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            vk::ImageLayout::PRESENT_SRC_KHR,
-        );
     }
 
     // pub fn draw_background_simple(&self, image: vk::Image, frame_number: usize) {

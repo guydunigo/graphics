@@ -22,12 +22,12 @@ pub struct VulkanSwapchain {
     pub swapchain_loader: swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
     swapchain_images: Vec<(vk::Image, vk::ImageView, vk::Semaphore)>,
+    pub swapchain_img_format: vk::Format,
     pub swapchain_extent: vk::Extent2D,
 
     draw_img: AllocatedImage,
     /// TODO: need to recreate on resize along swapchain because we use draw_img ?
     pub descriptors: VulkanDescriptors,
-    // TODO: draw_extent: vk::Extent2D,
 }
 
 impl VulkanSwapchain {
@@ -45,6 +45,7 @@ impl VulkanSwapchain {
                 .get_physical_device_surface_formats(base.chosen_gpu, base.surface)
                 .unwrap()[0]
         };
+        let swapchain_img_format = surface_format.format;
 
         let surface_capabilities = unsafe {
             base.surface_loader
@@ -77,8 +78,7 @@ impl VulkanSwapchain {
         let swapchain_loader = swapchain::Device::new(&base.instance, &base.device);
         let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(base.surface)
-            // TODO: should image format and color_space be checked ?
-            .image_format(surface_format.format)
+            .image_format(swapchain_img_format)
             .image_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
             .present_mode(present_mode)
             .image_extent(swapchain_extent)
@@ -99,7 +99,7 @@ impl VulkanSwapchain {
             .drain(..)
             .map(|image| {
                 let create_view_info = image_view_create_info(
-                    surface_format.format,
+                    swapchain_img_format,
                     image,
                     vk::ImageAspectFlags::COLOR,
                 );
@@ -131,6 +131,7 @@ impl VulkanSwapchain {
             swapchain_loader,
             swapchain,
             swapchain_images,
+            swapchain_img_format,
             swapchain_extent,
             draw_img,
             descriptors,
@@ -154,7 +155,7 @@ impl VulkanSwapchain {
     pub fn acquire_next_image(
         &self,
         current_frame: &FrameData,
-    ) -> (u32, &vk::Image, &vk::Semaphore) {
+    ) -> (u32, &vk::Image, &vk::Semaphore, &vk::ImageView) {
         let (swapchain_img_index, is_suboptimal) = unsafe {
             self.swapchain_loader
                 .acquire_next_image(
@@ -167,8 +168,8 @@ impl VulkanSwapchain {
         };
         self.set_suboptimal(is_suboptimal);
 
-        let (i, _, s) = &self.swapchain_images[swapchain_img_index as usize];
-        (swapchain_img_index, i, s)
+        let (i, v, s) = &self.swapchain_images[swapchain_img_index as usize];
+        (swapchain_img_index, i, s, v)
     }
 
     pub fn present(&self, swapchain_img_index: u32, sem_render: &vk::Semaphore, queue: vk::Queue) {
@@ -189,6 +190,10 @@ impl VulkanSwapchain {
 
     pub fn draw_img(&self) -> &vk::Image {
         &self.draw_img.img
+    }
+
+    pub fn draw_format(&self) -> &vk::Format {
+        &self.draw_img.format
     }
 
     pub fn draw_extent(&self) -> vk::Extent2D {

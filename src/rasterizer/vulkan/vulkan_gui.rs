@@ -1,16 +1,16 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Arc};
 
-use ash::{Device, vk};
-use egui::TextureId;
+use ash::vk;
+use egui::{FontData, FontDefinitions, FontFamily, Id, TextureId, panel::Side};
 use egui_ash_renderer::{DynamicRendering, Options, Renderer};
 use winit::{event::WindowEvent, window::Window};
 
-use super::{vulkan_base::VulkanBase, vulkan_swapchain::DRAW_IMG_FORMAT};
+use crate::font::{FONT, FONT_NAME};
+
+use super::vulkan_base::VulkanBase;
 
 pub struct VulkanGui {
-    device_copy: Rc<Device>,
     window: Rc<Window>,
-    pool: vk::DescriptorPool,
     state: egui_winit::State,
     info: egui::ViewportInfo,
     renderer: Renderer,
@@ -18,47 +18,9 @@ pub struct VulkanGui {
 }
 
 impl VulkanGui {
-    pub fn new(base: &VulkanBase) -> Self {
-        let pool = {
-            // 1: create descriptor pool for egui
-            //  the size of the pool is very oversize, but it's copied from imgui demo
-            //  itself.
-            let pool_sizes: Vec<vk::DescriptorPoolSize> = vec![
-                vk::DescriptorType::SAMPLER,
-                vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                vk::DescriptorType::SAMPLED_IMAGE,
-                vk::DescriptorType::STORAGE_IMAGE,
-                vk::DescriptorType::UNIFORM_TEXEL_BUFFER,
-                vk::DescriptorType::STORAGE_TEXEL_BUFFER,
-                vk::DescriptorType::UNIFORM_BUFFER,
-                vk::DescriptorType::STORAGE_BUFFER,
-                vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC,
-                vk::DescriptorType::STORAGE_BUFFER_DYNAMIC,
-                vk::DescriptorType::INPUT_ATTACHMENT,
-            ]
-            .drain(..)
-            .map(|ty| vk::DescriptorPoolSize {
-                ty,
-                descriptor_count: 1000,
-            })
-            .collect();
-
-            let pool_info = vk::DescriptorPoolCreateInfo::default()
-                .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
-                .max_sets(1000)
-                .pool_sizes(&pool_sizes[..]);
-
-            unsafe {
-                base.device
-                    .create_descriptor_pool(&pool_info, None)
-                    .unwrap()
-            }
-        };
-
+    pub fn new(base: &VulkanBase, format: vk::Format) -> Self {
         let dyn_render = DynamicRendering {
-            // TODO: dynamic from swapchain.draw_img.format ?
-            color_attachment_format: DRAW_IMG_FORMAT,
-            // TODO: None ?
+            color_attachment_format: format,
             depth_attachment_format: None,
         };
 
@@ -77,6 +39,7 @@ impl VulkanGui {
         // this initializes the core structures of egui
 
         let ctx = egui::Context::default();
+        load_fonts(&ctx);
         let info = egui::ViewportInfo::default();
         let viewport_id = ctx.viewport_id();
         let state = egui_winit::State::new(
@@ -87,13 +50,9 @@ impl VulkanGui {
             None,
             None,
         );
-        // TODO: initialize for vulkan ?
-        // base.window
 
         Self {
-            device_copy: base.device.clone(),
             window: base.window.clone(),
-            pool,
             state,
             info,
             renderer,
@@ -135,11 +94,19 @@ impl VulkanGui {
             pixels_per_point,
             ..
         } = self.state.egui_ctx().run(raw_input, |ctx| {
-            egui::CentralPanel::default().show(&ctx, |ui| {
+            egui::Window::new("test").show(&ctx, |ui| {
                 ui.label("Hello world!");
                 if ui.button("Click me").clicked() {
                     println!("Click");
                 }
+                ui.heading("My Heading is big !!!");
+                ui.menu_button("My menu", |ui| {
+                    ui.menu_button("My sub-menu", |ui| {
+                        if ui.button("Close the menu").clicked() {
+                            ui.close_menu();
+                        }
+                    });
+                });
             });
         });
 
@@ -173,11 +140,26 @@ impl VulkanGui {
     }
 }
 
-impl Drop for VulkanGui {
-    fn drop(&mut self) {
-        println!("drop VulkanGui");
-        unsafe {
-            self.device_copy.destroy_descriptor_pool(self.pool, None);
-        }
-    }
+// impl Drop for VulkanGui {
+//     fn drop(&mut self) {
+//         println!("drop VulkanGui");
+//     }
+// }
+
+fn load_fonts(ctx: &egui::Context) {
+    let mut fonts = FontDefinitions::default();
+    fonts
+        .font_data
+        .insert(FONT_NAME.into(), Arc::new(FontData::from_static(FONT)));
+    fonts
+        .families
+        .get_mut(&FontFamily::Proportional)
+        .unwrap()
+        .insert(0, FONT_NAME.into());
+    fonts
+        .families
+        .get_mut(&FontFamily::Monospace)
+        .unwrap()
+        .insert(0, FONT_NAME.into());
+    ctx.set_fonts(fonts);
 }

@@ -113,7 +113,7 @@ pub struct App {
     window: Option<InitializedWindow>,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
-    mouse_left_held: bool,
+    cursor_grabbed: bool,
     last_full_render_loop_micros: u128,
     last_frame_start_time: Instant,
     last_frame_micros: u128,
@@ -130,7 +130,7 @@ impl Default for App {
             window: Default::default(),
             world: Default::default(),
             cursor: Default::default(),
-            mouse_left_held: Default::default(),
+            cursor_grabbed: Default::default(),
             last_full_render_loop_micros: Default::default(),
             last_frame_start_time: Instant::now(),
             last_frame_micros: Default::default(),
@@ -220,6 +220,34 @@ impl ApplicationHandler for App {
             } => {
                 let w = self.window.as_mut().unwrap();
                 match key {
+                    KeyCode::Space => {
+                        if !self.cursor_grabbed {
+                            w.window
+                                .set_cursor_grab(CursorGrabMode::Confined)
+                                .expect("Can't grab cursor.");
+                            w.window.set_cursor_visible(false);
+                            // Not all platforms support Confined or Locked
+                            // X11 doesn't support Locked and Wayland doesn't support setting cursor position without locking
+                            // .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
+
+                            if event_loop.is_x11() {
+                                let size = w.window.inner_size();
+                                w.window
+                                    .set_cursor_position(PhysicalPosition::new(
+                                        size.width / 2,
+                                        size.height / 2,
+                                    ))
+                                    .expect("Could not center cursor");
+                                self.cursor_grabbed = true;
+                            }
+                        } else {
+                            w.window
+                                .set_cursor_grab(CursorGrabMode::None)
+                                .expect("Can't release grab on cursor.");
+                            w.window.set_cursor_visible(true);
+                            self.cursor_grabbed = false;
+                        }
+                    }
                     KeyCode::ControlLeft => self.world.camera.move_sight(0., 1., 0.),
                     KeyCode::ShiftLeft => self.world.camera.move_sight(0., -1., 0.),
                     KeyCode::KeyW => self.world.camera.move_sight(0., 0., 1.),
@@ -275,42 +303,6 @@ impl ApplicationHandler for App {
                 state: ElementState::Pressed,
                 ..
             } => self.world.camera.reset_rot(),
-            WindowEvent::MouseInput {
-                state,
-                button: MouseButton::Left,
-                ..
-            } => {
-                let w = self.window.as_ref().unwrap();
-                match state {
-                    ElementState::Pressed => {
-                        w.window
-                            .set_cursor_grab(CursorGrabMode::Confined)
-                            .expect("Can't grab cursor.");
-                        w.window.set_cursor_visible(false);
-                        // Not all platforms support Confined or Locked
-                        // X11 doesn't support Locked and Wayland doesn't support setting cursor position without locking
-                        // .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
-
-                        if event_loop.is_x11() {
-                            let size = w.window.inner_size();
-                            w.window
-                                .set_cursor_position(PhysicalPosition::new(
-                                    size.width / 2,
-                                    size.height / 2,
-                                ))
-                                .expect("Could not center cursor");
-                            self.mouse_left_held = true;
-                        }
-                    }
-                    ElementState::Released => {
-                        w.window
-                            .set_cursor_grab(CursorGrabMode::None)
-                            .expect("Can't release grab on cursor.");
-                        w.window.set_cursor_visible(true);
-                        self.mouse_left_held = false;
-                    }
-                }
-            }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = Some(position);
             }
@@ -362,7 +354,7 @@ impl ApplicationHandler for App {
     ) {
         if let DeviceEvent::MouseMotion { delta } = event {
             self.window.as_mut().unwrap().engine.on_mouse_motion(delta);
-            if self.mouse_left_held {
+            if self.cursor_grabbed {
                 self.world
                     .camera
                     .rotate_from_mouse(delta.0 as f32, delta.1 as f32);
