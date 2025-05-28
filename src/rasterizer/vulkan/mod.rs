@@ -14,6 +14,8 @@ use vulkan_swapchain::VulkanSwapchain;
 mod vulkan_commands;
 use vulkan_commands::VulkanCommands;
 mod vulkan_descriptors;
+mod vulkan_gui;
+use vulkan_gui::VulkanGui;
 
 #[cfg(feature = "stats")]
 use super::Stats;
@@ -21,6 +23,7 @@ use super::Stats;
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine {
     // Elements are placed in the order they should be dropped, so inverse order of creation.
+    gui: VulkanGui,
     commands: VulkanCommands,
     swapchain: VulkanSwapchain,
     base: VulkanBase,
@@ -76,34 +79,10 @@ impl VulkanEngine {
         let base = VulkanBase::new(window);
 
         Self {
+            gui: VulkanGui::new(&base),
             commands: VulkanCommands::new(&base),
             swapchain: VulkanSwapchain::new(&base),
             base,
         }
     }
-}
-
-fn egui() {
-    // set dpi and all
-    let mut ctx = egui::Context::default();
-
-    // TODO: What has happened (cursor pos and keys ?)
-    // https://docs.rs/egui/latest/egui/struct.RawInput.html
-    // or use egui-winit
-    let raw_input: egui::RawInput = egui::RawInput::default();
-
-    let full_output = ctx.run(raw_input, |ctx| {
-        egui::CentralPanel::default().show(&ctx, |ui| {
-            ui.label("Hello world!");
-            if ui.button("Click me").clicked() {
-                println!("Click");
-            }
-        });
-    });
-
-    // TODO: handle cursor change, copy events, ...
-    // https://docs.rs/egui/latest/egui/struct.FullOutput.html
-    // handle_platform_output(full_output.platform_output);
-    let clipped_primitives = ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
-    paint(full_output.textures_delta, clipped_primitives);
 }

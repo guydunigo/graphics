@@ -36,18 +36,7 @@ impl FrameData {
         sem_create_info: &vk::SemaphoreCreateInfo,
     ) -> Self {
         let cmd_pool = unsafe { device.create_command_pool(pool_create_info, None).unwrap() };
-
-        let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
-            .command_buffer_count(1)
-            .command_pool(cmd_pool)
-            .level(vk::CommandBufferLevel::PRIMARY);
-
-        // TODO: always take index 0 ?
-        let cmd_buf = unsafe {
-            device
-                .allocate_command_buffers(&command_buffer_allocate_info)
-                .unwrap()
-        }[0];
+        let cmd_buf = cmd_buffer(&device, cmd_pool);
 
         let fence_render = unsafe { device.create_fence(fence_create_info, None).unwrap() };
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
@@ -75,7 +64,7 @@ impl FrameData {
             vk::ImageAspectFlags::COLOR
         };
 
-        let sub_image = VulkanCommands::image_subresource_range(aspect_mask);
+        let sub_image = image_subresource_range(aspect_mask);
 
         // TODO: replace ALL_COMMANDS by more accurate masks to not stop whole GPU pipeline
         // https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples
@@ -105,20 +94,11 @@ impl FrameData {
     }
 
     pub fn begin_cmd_buf(&self) {
-        let cmd_buf_begin_info = vk::CommandBufferBeginInfo::default()
-            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        unsafe {
-            self.device_copy
-                .reset_command_buffer(self.cmd_buf, vk::CommandBufferResetFlags::empty())
-                .unwrap();
-            self.device_copy
-                .begin_command_buffer(self.cmd_buf, &cmd_buf_begin_info)
-                .unwrap();
-        }
+        begin_cmd_buf(&self.device_copy, self.cmd_buf);
     }
 
     pub fn end_cmd_buf(&self) {
-        unsafe { self.device_copy.end_command_buffer(self.cmd_buf).unwrap() };
+        end_cmd_buf(&self.device_copy, self.cmd_buf);
     }
 
     pub fn submit(&self, sem_render: &vk::Semaphore, queue: vk::Queue) {
@@ -261,20 +241,23 @@ impl FrameData {
 }
 
 pub struct VulkanCommands {
+    device_copy: Rc<Device>,
+
     pub queue: vk::Queue,
     frames: Vec<FrameData>,
     pub frame_number: usize,
+
+    imm_fence: vk::Fence,
+    imm_cmd_pool: vk::CommandPool,
+    imm_cmd_buf: vk::CommandBuffer,
 }
 
 impl VulkanCommands {
     pub fn new(base: &VulkanBase) -> Self {
         let queue = unsafe { base.device.get_device_queue(base.queue_family_index, 0) };
 
-        let pool_create_info = vk::CommandPoolCreateInfo::default()
-            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-            .queue_family_index(base.queue_family_index);
-        let fence_create_info =
-            vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
+        let pool_create_info = pool_create_info(base.queue_family_index);
+        let fence_create_info = fence_create_info();
         let sem_create_info = vk::SemaphoreCreateInfo::default();
 
         let frames: Vec<FrameData> = (0..FRAME_OVERLAP)
@@ -288,10 +271,24 @@ impl VulkanCommands {
             })
             .collect();
 
+        let imm_fence = unsafe { base.device.create_fence(&fence_create_info, None).unwrap() };
+        let imm_cmd_pool = unsafe {
+            base.device
+                .create_command_pool(&pool_create_info, None)
+                .unwrap()
+        };
+        let imm_cmd_buf = cmd_buffer(&base.device, imm_cmd_pool);
+
         Self {
+            device_copy: base.device.clone(),
+
             queue,
             frames,
             frame_number: 0,
+
+            imm_fence,
+            imm_cmd_pool,
+            imm_cmd_buf,
         }
     }
 
@@ -300,12 +297,89 @@ impl VulkanCommands {
         &self.frames[self.frame_number % FRAME_OVERLAP]
     }
 
-    pub fn image_subresource_range(aspect_mask: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
-        vk::ImageSubresourceRange::default()
-            .aspect_mask(aspect_mask)
-            .base_mip_level(0)
-            .level_count(vk::REMAINING_MIP_LEVELS)
-            .base_array_layer(0)
-            .layer_count(vk::REMAINING_ARRAY_LAYERS)
+    pub fn immediate_submit<F: FnOnce(&Device, vk::CommandBuffer)>(&self, f: F) {
+        let fences = [self.imm_fence];
+
+        unsafe {
+            self.device_copy.reset_fences(&fences[..]).unwrap();
+        }
+        begin_cmd_buf(&self.device_copy, self.imm_cmd_buf);
+
+        f(&self.device_copy, self.imm_cmd_buf);
+
+        end_cmd_buf(&self.device_copy, self.imm_cmd_buf);
+
+        let cmd_buf_submit_info =
+            [vk::CommandBufferSubmitInfo::default().command_buffer(self.imm_cmd_buf)];
+        let submit_info = vk::SubmitInfo2::default().command_buffer_infos(&cmd_buf_submit_info);
+
+        unsafe {
+            self.device_copy
+                .queue_submit2(self.queue, &[submit_info], self.imm_fence)
+                .unwrap();
+            self.device_copy
+                .wait_for_fences(&fences[..], true, 9999999999)
+                .unwrap();
+        }
     }
+}
+
+impl Drop for VulkanCommands {
+    fn drop(&mut self) {
+        println!("drop VulkanCommands");
+        unsafe {
+            self.device_copy.destroy_fence(self.imm_fence, None);
+            self.device_copy
+                .destroy_command_pool(self.imm_cmd_pool, None);
+        }
+    }
+}
+
+fn fence_create_info<'a>() -> vk::FenceCreateInfo<'a> {
+    vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED)
+}
+
+fn pool_create_info<'a>(queue_family_index: u32) -> vk::CommandPoolCreateInfo<'a> {
+    vk::CommandPoolCreateInfo::default()
+        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+        .queue_family_index(queue_family_index)
+}
+
+fn cmd_buffer(device: &Device, cmd_pool: vk::CommandPool) -> vk::CommandBuffer {
+    let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
+        .command_buffer_count(1)
+        .command_pool(cmd_pool)
+        .level(vk::CommandBufferLevel::PRIMARY);
+    // TODO: always take index 0 ?
+    unsafe {
+        device
+            .allocate_command_buffers(&command_buffer_allocate_info)
+            .unwrap()[0]
+    }
+}
+
+fn begin_cmd_buf(device: &Device, cmd_buf: vk::CommandBuffer) {
+    let cmd_buf_begin_info =
+        vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+    unsafe {
+        device
+            .reset_command_buffer(cmd_buf, vk::CommandBufferResetFlags::empty())
+            .unwrap();
+        device
+            .begin_command_buffer(cmd_buf, &cmd_buf_begin_info)
+            .unwrap();
+    }
+}
+
+fn end_cmd_buf(device: &Device, cmd_buf: vk::CommandBuffer) {
+    unsafe { device.end_command_buffer(cmd_buf).unwrap() };
+}
+
+fn image_subresource_range(aspect_mask: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
+    vk::ImageSubresourceRange::default()
+        .aspect_mask(aspect_mask)
+        .base_mip_level(0)
+        .level_count(vk::REMAINING_MIP_LEVELS)
+        .base_array_layer(0)
+        .layer_count(vk::REMAINING_ARRAY_LAYERS)
 }
