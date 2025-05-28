@@ -59,7 +59,12 @@ impl VulkanEngine {
 
         current_frame.draw_background(&self.swapchain);
 
-        self.gui.draw();
+        self.gui.draw(
+            self.commands.queue,
+            self.swapchain.draw_extent(),
+            current_frame.cmd_pool,
+            current_frame.cmd_buf,
+        );
 
         let (swapchain_img_index, swapchain_image, sem_render) =
             self.swapchain.acquire_next_image(current_frame);

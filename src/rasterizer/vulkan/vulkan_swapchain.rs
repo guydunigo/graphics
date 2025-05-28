@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use ash::{Device, khr::swapchain, vk};
 use vk_mem::Alloc;
@@ -7,6 +11,8 @@ use winit::dpi::PhysicalSize;
 use super::{
     vulkan_base::VulkanBase, vulkan_commands::FrameData, vulkan_descriptors::VulkanDescriptors,
 };
+
+pub const DRAW_IMG_FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
 
 pub struct VulkanSwapchain {
     device_copy: Rc<Device>,
@@ -253,7 +259,7 @@ fn image_view_create_info<'a>(
 
 struct AllocatedImage {
     device_copy: Rc<Device>,
-    allocator_copy: Rc<vk_mem::Allocator>,
+    allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
 
     img: vk::Image,
     img_view: vk::ImageView,
@@ -264,13 +270,13 @@ struct AllocatedImage {
 
 impl AllocatedImage {
     pub fn new(base: &VulkanBase, window_size: PhysicalSize<u32>) -> Self {
+        let format = DRAW_IMG_FORMAT;
+
         let extent = vk::Extent3D {
             width: window_size.width,
             height: window_size.height,
             depth: 1,
         };
-        // TODO: both to draw img
-        let format = vk::Format::R16G16B16A16_SFLOAT;
 
         let draw_img_usages = vk::ImageUsageFlags::TRANSFER_SRC
             | vk::ImageUsageFlags::TRANSFER_DST
@@ -288,6 +294,8 @@ impl AllocatedImage {
 
         let (img, allocation) = unsafe {
             base.allocator
+                .lock()
+                .unwrap()
                 .create_image(&rimg_info, &rimg_allocinfo)
                 .unwrap()
         };
@@ -319,6 +327,8 @@ impl Drop for AllocatedImage {
             self.device_copy.device_wait_idle().unwrap();
             self.device_copy.destroy_image_view(self.img_view, None);
             self.allocator_copy
+                .lock()
+                .unwrap()
                 .destroy_image(self.img, &mut self.allocation);
         }
     }

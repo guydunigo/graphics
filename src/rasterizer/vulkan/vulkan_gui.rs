@@ -1,9 +1,11 @@
 use std::rc::Rc;
 
 use ash::{Device, vk};
+use egui::TextureId;
+use egui_ash_renderer::{DynamicRendering, Options, Renderer};
 use winit::{event::WindowEvent, window::Window};
 
-use super::vulkan_base::VulkanBase;
+use super::{vulkan_base::VulkanBase, vulkan_swapchain::DRAW_IMG_FORMAT};
 
 pub struct VulkanGui {
     device_copy: Rc<Device>,
@@ -11,6 +13,8 @@ pub struct VulkanGui {
     pool: vk::DescriptorPool,
     state: egui_winit::State,
     info: egui::ViewportInfo,
+    renderer: Renderer,
+    textures_to_free: Option<Vec<TextureId>>,
 }
 
 impl VulkanGui {
@@ -51,6 +55,24 @@ impl VulkanGui {
             }
         };
 
+        let dyn_render = DynamicRendering {
+            // TODO: dynamic from swapchain.draw_img.format ?
+            color_attachment_format: DRAW_IMG_FORMAT,
+            // TODO: None ?
+            depth_attachment_format: None,
+        };
+
+        let renderer = Renderer::with_vk_mem_allocator(
+            base.allocator.clone(),
+            base.device.as_ref().clone(),
+            dyn_render,
+            Options {
+                srgb_framebuffer: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
         // 2: initialize egui library
         // this initializes the core structures of egui
 
@@ -63,7 +85,7 @@ impl VulkanGui {
             &base.window,
             Some(base.window.scale_factor() as f32),
             None,
-            None, // TODO: max_texture_side, useful ?
+            None,
         );
         // TODO: initialize for vulkan ?
         // base.window
@@ -74,11 +96,18 @@ impl VulkanGui {
             pool,
             state,
             info,
+            renderer,
+            textures_to_free: None,
         }
     }
 
-    pub fn draw(&mut self) {
-        // TODO: call on_window_event + on_mouse_motion ?
+    pub fn draw(
+        &mut self,
+        queue: vk::Queue,
+        extent: vk::Extent2D,
+        cmd_pool: vk::CommandPool,
+        cmd_buf: vk::CommandBuffer,
+    ) {
         egui_winit::update_viewport_info(
             &mut self.info,
             self.state.egui_ctx(),
@@ -86,13 +115,26 @@ impl VulkanGui {
             false,
         );
 
+        // Free last frames textures after the previous frame is done rendering
+        if let Some(textures) = self.textures_to_free.take() {
+            self.renderer
+                .free_textures(&textures)
+                .expect("Failed to free textures");
+        }
+
         let raw_input = self.state.take_egui_input(&self.window);
         // Already filled, but in the docs it says it doesn't...
         // self.state
         //     .egui_ctx()
         //     .input(|i| raw_input.viewports = i.raw.viewports.clone());
 
-        let full_output = self.state.egui_ctx().run(raw_input, |ctx| {
+        let egui::FullOutput {
+            shapes,
+            textures_delta,
+            platform_output,
+            pixels_per_point,
+            ..
+        } = self.state.egui_ctx().run(raw_input, |ctx| {
             egui::CentralPanel::default().show(&ctx, |ui| {
                 ui.label("Hello world!");
                 if ui.button("Click me").clicked() {
@@ -102,12 +144,23 @@ impl VulkanGui {
         });
 
         self.state
-            .handle_platform_output(&self.window, full_output.platform_output);
-        let clipped_primitives = self
-            .state
-            .egui_ctx()
-            .tessellate(full_output.shapes, full_output.pixels_per_point);
-        // paint(full_output.textures_delta, clipped_primitives);
+            .handle_platform_output(&self.window, platform_output);
+
+        if !textures_delta.free.is_empty() {
+            self.textures_to_free = Some(textures_delta.free.clone());
+        }
+
+        if !textures_delta.set.is_empty() {
+            self.renderer
+                .set_textures(queue, cmd_pool, textures_delta.set.as_slice())
+                .expect("Failed to update texture");
+        }
+
+        let clipped_primitives = self.state.egui_ctx().tessellate(shapes, pixels_per_point);
+
+        self.renderer
+            .cmd_draw(cmd_buf, extent, pixels_per_point, &clipped_primitives[..])
+            .unwrap();
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {

@@ -9,7 +9,7 @@ const FRAME_OVERLAP: usize = 2;
 pub struct FrameData {
     device_copy: Rc<Device>,
 
-    cmd_pool: vk::CommandPool,
+    pub cmd_pool: vk::CommandPool,
     pub cmd_buf: vk::CommandBuffer,
 
     fence_render: vk::Fence,

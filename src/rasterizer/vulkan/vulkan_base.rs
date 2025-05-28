@@ -3,6 +3,7 @@ use std::{
     ffi::{self, CStr, c_char},
     ops::Deref,
     rc::Rc,
+    sync::{Arc, Mutex},
 };
 
 use ash::{
@@ -36,7 +37,7 @@ pub struct VulkanBase {
     pub surface: vk::SurfaceKHR,
     pub queue_family_index: u32,
 
-    pub allocator: Rc<vk_mem::Allocator>,
+    pub allocator: Arc<Mutex<vk_mem::Allocator>>,
 }
 
 impl VulkanBase {
@@ -87,7 +88,7 @@ impl VulkanBase {
 
             queue_family_index,
 
-            allocator: Rc::new(allocator),
+            allocator: Arc::new(Mutex::new(allocator)),
         }
     }
 }
