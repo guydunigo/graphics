@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use ash::vk;
-use winit::window::Window;
+use winit::{event::WindowEvent, window::Window};
 
 use crate::{scene::World, window::AppObserver};
 
@@ -59,6 +59,8 @@ impl VulkanEngine {
 
         current_frame.draw_background(&self.swapchain);
 
+        self.gui.draw();
+
         let (swapchain_img_index, swapchain_image, sem_render) =
             self.swapchain.acquire_next_image(current_frame);
         current_frame.copy_img_swapchain(
@@ -84,5 +86,13 @@ impl VulkanEngine {
             swapchain: VulkanSwapchain::new(&base),
             base,
         }
+    }
+
+    pub fn on_window_event(&mut self, event: &WindowEvent) {
+        self.gui.on_window_event(event);
+    }
+
+    pub fn on_mouse_motion(&mut self, delta: (f64, f64)) {
+        self.gui.on_mouse_motion(delta);
     }
 }

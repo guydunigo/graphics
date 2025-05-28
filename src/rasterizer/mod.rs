@@ -8,6 +8,7 @@ use std::rc::Rc;
 use vulkan::VulkanEngine;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
+    event::WindowEvent,
     window::Window,
 };
 
@@ -18,7 +19,8 @@ use crate::{
 };
 
 use cpu_engine::CPUEngine;
-use settings::{EngineType, Settings};
+use settings::EngineType;
+pub use settings::Settings;
 
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
@@ -36,36 +38,70 @@ pub struct Stats {
     // pub misc: String,
 }
 
-#[derive(Default)]
-pub struct Rasterizer {
-    engine: Option<Engine>,
-    pub settings: Settings,
+pub enum Engine {
+    Cpu(CPUEngine),
+    Vulkan(Box<VulkanEngine>),
 }
 
-impl Rasterizer {
-    pub fn init_window(&mut self, window: Rc<Window>) {
-        self.engine = Some(Engine::new(window));
+impl Engine {
+    pub fn new(window: Rc<Window>) -> Self {
+        Self::Vulkan(Box::new(VulkanEngine::new(window)))
+    }
+
+    pub fn set_next(&mut self) {
+        match self {
+            Engine::Cpu(e) => {
+                if e.set_next() {
+                    *self = Engine::Vulkan(Box::new(VulkanEngine::new(e.window().clone())));
+                }
+            }
+            Engine::Vulkan(e) => *self = Engine::Cpu(CPUEngine::new(e.window().clone())),
+        }
+    }
+
+    pub fn as_engine_type(&self) -> EngineType {
+        match self {
+            Self::Cpu(e) => e.as_engine_type(),
+            Self::Vulkan(_) => EngineType::Vulkan,
+        }
     }
 
     pub fn rasterize(
         &mut self,
+        settings: &Settings,
         world: &World,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        self.engine.as_mut().unwrap().rasterize(
-            &self.settings,
-            world,
-            app,
-            #[cfg(feature = "stats")]
-            stats,
-        );
+        match self {
+            Self::Cpu(e) => e.rasterize(
+                settings,
+                world,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            Self::Vulkan(e) => e.rasterize(
+                settings,
+                world,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+        }
     }
 
-    pub fn set_next_engine(&mut self) {
-        if let Some(engine) = &mut self.engine {
-            engine.set_next();
-            self.settings.engine_type = engine.as_engine_type();
+    pub fn on_window_event(&mut self, event: &WindowEvent) {
+        match self {
+            Self::Cpu(_) => (),
+            Self::Vulkan(e) => e.on_window_event(event),
+        }
+    }
+
+    pub fn on_mouse_motion(&mut self, delta: (f64, f64)) {
+        match self {
+            Self::Cpu(_) => (),
+            Self::Vulkan(e) => e.on_mouse_motion(delta),
         }
     }
 }
@@ -204,58 +240,4 @@ fn format_debug(
         settings,
         stats
     )
-}
-
-enum Engine {
-    Cpu(CPUEngine),
-    Vulkan(Box<VulkanEngine>),
-}
-
-impl Engine {
-    pub fn new(window: Rc<Window>) -> Self {
-        Self::Vulkan(Box::new(VulkanEngine::new(window)))
-    }
-
-    pub fn set_next(&mut self) {
-        match self {
-            Engine::Cpu(e) => {
-                if e.set_next() {
-                    *self = Engine::Vulkan(Box::new(VulkanEngine::new(e.window().clone())));
-                }
-            }
-            Engine::Vulkan(e) => *self = Engine::Cpu(CPUEngine::new(e.window().clone())),
-        }
-    }
-
-    pub fn as_engine_type(&self) -> EngineType {
-        match self {
-            Self::Cpu(e) => e.as_engine_type(),
-            Self::Vulkan(_) => EngineType::Vulkan,
-        }
-    }
-
-    pub fn rasterize(
-        &mut self,
-        settings: &Settings,
-        world: &World,
-        app: &mut AppObserver,
-        #[cfg(feature = "stats")] stats: &mut Stats,
-    ) {
-        match self {
-            Self::Cpu(e) => e.rasterize(
-                settings,
-                world,
-                app,
-                #[cfg(feature = "stats")]
-                stats,
-            ),
-            Self::Vulkan(e) => e.rasterize(
-                settings,
-                world,
-                app,
-                #[cfg(feature = "stats")]
-                stats,
-            ),
-        }
-    }
 }

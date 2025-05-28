@@ -12,7 +12,11 @@ use winit::{
 
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
-use crate::{maths::Rotation, rasterizer::Rasterizer, scene::World};
+use crate::{
+    maths::Rotation,
+    rasterizer::{Engine, Settings},
+    scene::World,
+};
 
 const BLENDING_RATIO: f32 = 0.01;
 
@@ -75,9 +79,38 @@ impl AppObserver {
     }
 }
 
+pub struct InitializedWindow {
+    window: Rc<Window>,
+    settings: Settings,
+    engine: Engine,
+}
+
+impl InitializedWindow {
+    pub fn new(window: Rc<Window>) -> Self {
+        Self {
+            window: window.clone(),
+            settings: Default::default(),
+            engine: Engine::new(window),
+        }
+    }
+
+    pub fn rasterize(
+        &mut self,
+        world: &World,
+        app: &mut AppObserver,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    ) {
+        self.engine.rasterize(&self.settings, world, app);
+    }
+
+    pub fn set_next_engine(&mut self) {
+        self.engine.set_next();
+        self.settings.engine_type = self.engine.as_engine_type();
+    }
+}
+
 pub struct App {
-    window: Option<Rc<Window>>,
-    rasterizer: Rasterizer,
+    window: Option<InitializedWindow>,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     mouse_left_held: bool,
@@ -95,7 +128,6 @@ impl Default for App {
     fn default() -> Self {
         Self {
             window: Default::default(),
-            rasterizer: Default::default(),
             world: Default::default(),
             cursor: Default::default(),
             mouse_left_held: Default::default(),
@@ -145,11 +177,11 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
 
-        self.rasterizer.init_window(window.clone());
-        self.window = Some(window);
+        self.window = Some(InitializedWindow::new(window));
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        self.window.as_mut().unwrap().engine.on_window_event(&event);
         match event {
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
@@ -186,6 +218,7 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
+                let w = self.window.as_mut().unwrap();
                 match key {
                     KeyCode::ControlLeft => self.world.camera.move_sight(0., 1., 0.),
                     KeyCode::ShiftLeft => self.world.camera.move_sight(0., -1., 0.),
@@ -226,17 +259,11 @@ impl ApplicationHandler for App {
                     // KeyCode::ArrowDown => self.world.meshes().iter().for_each(|m| {
                     //     m.write().unwrap().rot *= &Rotation::from_angles(0.1, 0., 0.)
                     // }),
-                    KeyCode::Backquote => {
-                        self.rasterizer.settings.show_vertices =
-                            !self.rasterizer.settings.show_vertices
-                    }
-                    KeyCode::Digit1 => self.rasterizer.set_next_engine(),
-                    KeyCode::Digit2 => self.rasterizer.settings.sort_triangles.next(),
-                    KeyCode::Digit3 => {
-                        self.rasterizer.settings.parallel_text =
-                            !self.rasterizer.settings.parallel_text
-                    }
-                    KeyCode::Digit4 => self.rasterizer.settings.next_oversampling(),
+                    KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,
+                    KeyCode::Digit1 => w.set_next_engine(),
+                    KeyCode::Digit2 => w.settings.sort_triangles.next(),
+                    KeyCode::Digit3 => w.settings.parallel_text = !w.settings.parallel_text,
+                    KeyCode::Digit4 => w.settings.next_oversampling(),
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
@@ -253,21 +280,20 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
-                let window = self.window.as_ref().unwrap();
-
+                let w = self.window.as_ref().unwrap();
                 match state {
                     ElementState::Pressed => {
-                        window
+                        w.window
                             .set_cursor_grab(CursorGrabMode::Confined)
                             .expect("Can't grab cursor.");
-                        window.set_cursor_visible(false);
+                        w.window.set_cursor_visible(false);
                         // Not all platforms support Confined or Locked
                         // X11 doesn't support Locked and Wayland doesn't support setting cursor position without locking
                         // .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
 
                         if event_loop.is_x11() {
-                            let size = window.inner_size();
-                            window
+                            let size = w.window.inner_size();
+                            w.window
                                 .set_cursor_position(PhysicalPosition::new(
                                     size.width / 2,
                                     size.height / 2,
@@ -277,10 +303,10 @@ impl ApplicationHandler for App {
                         }
                     }
                     ElementState::Released => {
-                        window
+                        w.window
                             .set_cursor_grab(CursorGrabMode::None)
                             .expect("Can't release grab on cursor.");
-                        window.set_cursor_visible(true);
+                        w.window.set_cursor_visible(true);
                         self.mouse_left_held = false;
                     }
                 }
@@ -302,7 +328,9 @@ impl ApplicationHandler for App {
 
                 let mut obs = AppObserver::from(self);
 
-                self.rasterizer.rasterize(
+                let w = self.window.as_mut().unwrap();
+
+                w.rasterize(
                     &self.world,
                     &mut obs,
                     #[cfg(feature = "stats")]
@@ -314,7 +342,7 @@ impl ApplicationHandler for App {
                 // You only need to call this if you've determined that you need to redraw in
                 // applications which do not always need to. Applications that redraw continuously
                 // can render here instead.
-                self.window.as_ref().unwrap().request_redraw();
+                w.window.request_redraw();
 
                 obs.update_app(self);
 
@@ -332,10 +360,13 @@ impl ApplicationHandler for App {
         _device_id: DeviceId,
         event: DeviceEvent,
     ) {
-        if let DeviceEvent::MouseMotion { delta: (x, y) } = event
-            && self.mouse_left_held
-        {
-            self.world.camera.rotate_from_mouse(x as f32, y as f32);
+        if let DeviceEvent::MouseMotion { delta } = event {
+            self.window.as_mut().unwrap().engine.on_mouse_motion(delta);
+            if self.mouse_left_held {
+                self.world
+                    .camera
+                    .rotate_from_mouse(delta.0 as f32, delta.1 as f32);
+            }
         }
     }
 }
