@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 ash = "0.38.0"
 ash-window = "0.13.0"
+egui = { version = "0.31.1", default-features = false }
+egui-winit = { version = "0.31.1", default-features = false }
 fontdue = { version = "0.9.3", features = ["std"] }
 naga = { version = "25.0.1", features = ["glsl-in", "spv-out"] }
 obj-rs = "0.7.4"

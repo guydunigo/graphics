@@ -187,7 +187,8 @@ impl ApplicationHandler for App {
                 ..
             } => {
                 match key {
-                    KeyCode::Space => self.world.camera.move_sight(0., 1., 0.),
+                    KeyCode::Space => todo!("Toggle mouse grab + hiwe cursor"),
+                    KeyCode::ControlLeft => self.world.camera.move_sight(0., 1., 0.),
                     KeyCode::ShiftLeft => self.world.camera.move_sight(0., -1., 0.),
                     KeyCode::KeyW => self.world.camera.move_sight(0., 0., 1.),
                     KeyCode::KeyS => self.world.camera.move_sight(0., 0., -1.),

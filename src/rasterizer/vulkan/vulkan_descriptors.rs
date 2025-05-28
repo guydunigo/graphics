@@ -262,7 +262,6 @@ fn load_shader_module<P: AsRef<Path>>(device: Rc<Device>, path: P) -> MyShaderMo
     let spirv = compile_glsl_to_spirv(&glsl);
 
     let create_info = vk::ShaderModuleCreateInfo::default().code(&spirv[..]);
-
     let module = unsafe { device.create_shader_module(&create_info, None).unwrap() };
 
     MyShaderModule {
