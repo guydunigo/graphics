@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 
 use ash::vk;
-use egui::{FontData, FontDefinitions, FontFamily, Id, TextureId, panel::Side};
+use egui::{FontData, FontDefinitions, FontFamily, TextureId};
 use egui_ash_renderer::{DynamicRendering, Options, Renderer};
 use winit::{event::WindowEvent, window::Window};
 
@@ -18,14 +18,18 @@ pub struct VulkanGui {
 }
 
 impl VulkanGui {
-    pub fn new(base: &VulkanBase, format: vk::Format) -> Self {
+    pub fn new(
+        base: &VulkanBase,
+        allocator: Arc<std::sync::Mutex<vk_mem::Allocator>>,
+        format: vk::Format,
+    ) -> Self {
         let dyn_render = DynamicRendering {
             color_attachment_format: format,
             depth_attachment_format: None,
         };
 
         let renderer = Renderer::with_vk_mem_allocator(
-            base.allocator.clone(),
+            allocator,
             base.device.as_ref().clone(),
             dyn_render,
             Options {
@@ -140,11 +144,13 @@ impl VulkanGui {
     }
 }
 
-// impl Drop for VulkanGui {
-//     fn drop(&mut self) {
-//         println!("drop VulkanGui");
-//     }
-// }
+impl Drop for VulkanGui {
+    fn drop(&mut self) {
+        println!("drop VulkanGui");
+        // unsafe {
+        // }
+    }
+}
 
 fn load_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();

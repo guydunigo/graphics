@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use ash::vk;
 use winit::{event::WindowEvent, window::Window};
@@ -23,9 +26,9 @@ use super::Stats;
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine {
     // Elements are placed in the order they should be dropped, so inverse order of creation.
+    swapchain: VulkanSwapchain,
     gui: VulkanGui,
     commands: VulkanCommands,
-    swapchain: VulkanSwapchain,
     base: VulkanBase,
     // TODO: window_extent: vk::Extent2D,
 }
@@ -42,7 +45,8 @@ impl VulkanEngine {
         _app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
-        self.swapchain.resize_if_necessary(&self.base);
+        self.swapchain
+            .resize_if_necessary(&self.base, self.commands.allocator.clone());
 
         let current_frame = self.commands.current_frame();
         let image = self.swapchain.draw_img();
@@ -96,11 +100,19 @@ impl VulkanEngine {
 
     pub fn new(window: Rc<Window>) -> Self {
         let base = VulkanBase::new(window);
-        let swapchain = VulkanSwapchain::new(&base);
 
+        let allocator = {
+            let mut create_info =
+                vk_mem::AllocatorCreateInfo::new(&base.instance, &base.device, base.chosen_gpu);
+            create_info.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
+            let allocator = unsafe { vk_mem::Allocator::new(create_info).unwrap() };
+            Arc::new(Mutex::new(allocator))
+        };
+
+        let swapchain = VulkanSwapchain::new(&base, allocator.clone());
         Self {
-            gui: VulkanGui::new(&base, swapchain.swapchain_img_format),
-            commands: VulkanCommands::new(&base),
+            gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
+            commands: VulkanCommands::new(&base, allocator),
             swapchain,
             base,
         }

@@ -3,7 +3,6 @@ use std::{
     ffi::{self, CStr, c_char},
     ops::Deref,
     rc::Rc,
-    sync::{Arc, Mutex},
 };
 
 use ash::{
@@ -36,8 +35,6 @@ pub struct VulkanBase {
     pub device: Rc<Device>,
     pub surface: vk::SurfaceKHR,
     pub queue_family_index: u32,
-
-    pub allocator: Arc<Mutex<vk_mem::Allocator>>,
 }
 
 impl VulkanBase {
@@ -67,12 +64,6 @@ impl VulkanBase {
 
         let device = device(&instance, chosen_gpu, queue_family_index);
 
-        let allocator = {
-            let mut create_info = vk_mem::AllocatorCreateInfo::new(&instance, &device, chosen_gpu);
-            create_info.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
-            unsafe { vk_mem::Allocator::new(create_info).unwrap() }
-        };
-
         VulkanBase {
             _entry: entry,
 
@@ -87,8 +78,6 @@ impl VulkanBase {
             surface,
 
             queue_family_index,
-
-            allocator: Arc::new(Mutex::new(allocator)),
         }
     }
 }
@@ -98,7 +87,6 @@ impl Drop for VulkanBase {
         println!("drop VulkanBase");
         unsafe {
             self.device.device_wait_idle().unwrap();
-            // TODO: ideally, i'd wrap this device into a droppable type...
             assert!(
                 Rc::strong_count(&self.device) == 1,
                 "About to destroy device but it is referenced elsewhere !"

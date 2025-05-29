@@ -31,7 +31,7 @@ pub struct VulkanSwapchain {
 }
 
 impl VulkanSwapchain {
-    pub fn new(base: &VulkanBase) -> Self {
+    pub fn new(base: &VulkanBase, allocator: Arc<Mutex<vk_mem::Allocator>>) -> Self {
         let present_mode = vk::PresentModeKHR::FIFO;
         // TODO: when implemented : MAILBOX : https://vkguide.dev/docs/new_chapter_1/vulkan_init_flow/
         // let present_mode = present_modes
@@ -119,7 +119,7 @@ impl VulkanSwapchain {
             })
             .collect();
 
-        let draw_img = AllocatedImage::new(base, window_size);
+        let draw_img = AllocatedImage::new(base, allocator, window_size);
         let descriptors = VulkanDescriptors::new(base.device.clone(), draw_img.img_view);
 
         Self {
@@ -145,10 +145,14 @@ impl VulkanSwapchain {
     }
 
     /// If window is resized, we need to recreate the whole swapchain.
-    pub fn resize_if_necessary(&mut self, base: &VulkanBase) {
+    pub fn resize_if_necessary(
+        &mut self,
+        base: &VulkanBase,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+    ) {
         // TODO: need to compare window_size or is_suboptimal is enough ?
         if *self.is_suboptimal.borrow() || self.window_size != base.window.inner_size() {
-            *self = VulkanSwapchain::new(base);
+            *self = VulkanSwapchain::new(base, allocator);
         }
     }
 
@@ -274,7 +278,11 @@ struct AllocatedImage {
 }
 
 impl AllocatedImage {
-    pub fn new(base: &VulkanBase, window_size: PhysicalSize<u32>) -> Self {
+    pub fn new(
+        base: &VulkanBase,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        window_size: PhysicalSize<u32>,
+    ) -> Self {
         let format = DRAW_IMG_FORMAT;
 
         let extent = vk::Extent3D {
@@ -298,7 +306,7 @@ impl AllocatedImage {
         }
 
         let (img, allocation) = unsafe {
-            base.allocator
+            allocator
                 .lock()
                 .unwrap()
                 .create_image(&rimg_info, &rimg_allocinfo)
@@ -314,7 +322,7 @@ impl AllocatedImage {
 
         Self {
             device_copy: base.device.clone(),
-            allocator_copy: base.allocator.clone(),
+            allocator_copy: allocator,
 
             img,
             img_view,

@@ -1,4 +1,7 @@
-use std::rc::Rc;
+use std::{
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use ash::{Device, vk};
 
@@ -236,6 +239,8 @@ impl FrameData {
 pub struct VulkanCommands {
     device_copy: Rc<Device>,
 
+    pub allocator: Arc<Mutex<vk_mem::Allocator>>,
+
     pub queue: vk::Queue,
     frames: Vec<FrameData>,
     pub frame_number: usize,
@@ -246,7 +251,7 @@ pub struct VulkanCommands {
 }
 
 impl VulkanCommands {
-    pub fn new(base: &VulkanBase) -> Self {
+    pub fn new(base: &VulkanBase, allocator: Arc<Mutex<vk_mem::Allocator>>) -> Self {
         let queue = unsafe { base.device.get_device_queue(base.queue_family_index, 0) };
 
         let pool_create_info = pool_create_info(base.queue_family_index);
@@ -274,6 +279,8 @@ impl VulkanCommands {
 
         Self {
             device_copy: base.device.clone(),
+
+            allocator,
 
             queue,
             frames,
