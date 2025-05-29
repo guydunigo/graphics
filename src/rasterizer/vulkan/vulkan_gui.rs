@@ -64,12 +64,31 @@ impl VulkanGui {
         }
     }
 
+    fn ui(&self, ctx: &egui::Context, debug: String) {
+        egui::Window::new("debug").show(&ctx, |ui| ui.label(debug));
+        egui::Window::new("test").show(&ctx, |ui| {
+            ui.label("Hello world!");
+            if ui.button("Click me").clicked() {
+                println!("Click");
+            }
+            ui.heading("My Heading is big !!!");
+            ui.menu_button("My menu", |ui| {
+                ui.menu_button("My sub-menu", |ui| {
+                    if ui.button("Close the menu").clicked() {
+                        ui.close_menu();
+                    }
+                });
+            });
+        });
+    }
+
     pub fn draw(
         &mut self,
         queue: vk::Queue,
         extent: vk::Extent2D,
         cmd_pool: vk::CommandPool,
         cmd_buf: vk::CommandBuffer,
+        debug: String,
     ) {
         egui_winit::update_viewport_info(
             &mut self.info,
@@ -97,22 +116,10 @@ impl VulkanGui {
             platform_output,
             pixels_per_point,
             ..
-        } = self.state.egui_ctx().run(raw_input, |ctx| {
-            egui::Window::new("test").show(&ctx, |ui| {
-                ui.label("Hello world!");
-                if ui.button("Click me").clicked() {
-                    println!("Click");
-                }
-                ui.heading("My Heading is big !!!");
-                ui.menu_button("My menu", |ui| {
-                    ui.menu_button("My sub-menu", |ui| {
-                        if ui.button("Close the menu").clicked() {
-                            ui.close_menu();
-                        }
-                    });
-                });
-            });
-        });
+        } = self
+            .state
+            .egui_ctx()
+            .run(raw_input, |ctx| self.ui(ctx, debug.clone()));
 
         self.state
             .handle_platform_output(&self.window, platform_output);

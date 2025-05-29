@@ -292,7 +292,6 @@ impl VulkanCommands {
         }
     }
 
-    // TODO: to infinite iter ? .cycle() + self.frames.next().unwrap()
     pub fn current_frame(&self) -> &FrameData {
         &self.frames[self.frame_number % FRAME_OVERLAP]
     }

@@ -8,7 +8,7 @@ use winit::{event::WindowEvent, window::Window};
 
 use crate::{scene::World, window::AppObserver};
 
-use super::settings::Settings;
+use super::{format_debug, settings::Settings};
 
 mod vulkan_base;
 use vulkan_base::VulkanBase;
@@ -40,9 +40,9 @@ impl VulkanEngine {
 
     pub fn rasterize(
         &mut self,
-        _settings: &Settings,
-        _world: &World,
-        _app: &mut AppObserver,
+        settings: &Settings,
+        world: &World,
+        app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
         self.swapchain
@@ -75,14 +75,17 @@ impl VulkanEngine {
             vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
-        // Conflict with draw_imgui that needs mut, but we already have many on self...
+
+        // Releasing `current_frame` and other references on self, to get a mut for egui.
         let sem_render = *sem_render;
         let swapchain_image = *swapchain_image;
         {
             let cmd_pool = current_frame.cmd_pool;
             let cmd_buf = current_frame.cmd_buf;
-            self.draw_imgui(cmd_pool, cmd_buf, *swapchain_image_view);
+            let debug = format_debug(settings, world, app, self.base.window.inner_size(), None);
+            self.draw_imgui(cmd_pool, cmd_buf, *swapchain_image_view, debug);
         }
+
         let current_frame = self.commands.current_frame();
 
         current_frame.transition_image(
@@ -131,6 +134,7 @@ impl VulkanEngine {
         cmd_pool: vk::CommandPool,
         cmd_buf: vk::CommandBuffer,
         target_img_view: vk::ImageView,
+        debug: String,
     ) {
         let color_attachments = [attachment_info(
             target_img_view,
@@ -152,6 +156,7 @@ impl VulkanEngine {
             self.swapchain.draw_extent(),
             cmd_pool,
             cmd_buf,
+            debug,
         );
 
         unsafe {
