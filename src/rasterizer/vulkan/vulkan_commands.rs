@@ -7,7 +7,7 @@ use ash::{Device, vk};
 
 use super::{vulkan_base::VulkanBase, vulkan_swapchain::VulkanSwapchain};
 
-const FRAME_OVERLAP: usize = 2;
+pub const FRAME_OVERLAP: usize = 2;
 
 pub struct FrameData {
     device_copy: Rc<Device>,

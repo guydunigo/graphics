@@ -7,7 +7,7 @@ use winit::{event::WindowEvent, window::Window};
 
 use crate::font::{FONT, FONT_NAME};
 
-use super::vulkan_base::VulkanBase;
+use super::{vulkan_base::VulkanBase, vulkan_commands::FRAME_OVERLAP};
 
 fn ui(ctx: &egui::Context, debug: String) {
     egui::Window::new("debug").show(&ctx, |ui| ui.label(debug));
@@ -91,6 +91,7 @@ impl VulkanGuiMutable {
             dyn_render,
             Options {
                 srgb_framebuffer: true,
+                in_flight_frames: FRAME_OVERLAP,
                 ..Default::default()
             },
         )
