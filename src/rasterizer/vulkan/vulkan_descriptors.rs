@@ -37,18 +37,22 @@ impl VulkanDescriptors {
 
         unsafe { device.update_descriptor_sets(&draw_img_writes[..], &[]) };
 
-        // TODO: extract ?
+        let push_constants = [vk::PushConstantRange::default()
+            .size(size_of::<ComputePushConstants>() as u32)
+            .stage_flags(vk::ShaderStageFlags::COMPUTE)];
+
         let gradient_pipeline_layout = {
             let draw_img_desc_layouts = [draw_img_desc_layout];
-            let create_info =
-                vk::PipelineLayoutCreateInfo::default().set_layouts(&draw_img_desc_layouts[..]);
+            let create_info = vk::PipelineLayoutCreateInfo::default()
+                .set_layouts(&draw_img_desc_layouts[..])
+                .push_constant_ranges(&push_constants[..]);
             unsafe { device.create_pipeline_layout(&create_info, None).unwrap() }
         };
 
         let gradient_pipeline = {
             let stage_info = vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::COMPUTE)
-                .module(shaders.get(ShaderName::Gradient))
+                .module(shaders.get(ShaderName::ParametrableGradient))
                 .name(c"main");
             let compute_pipeline_create_infos = [vk::ComputePipelineCreateInfo::default()
                 .layout(gradient_pipeline_layout)
@@ -212,5 +216,23 @@ impl Drop for DescriptorAllocator {
     fn drop(&mut self) {
         println!("drop DescriptorAllocator");
         unsafe { self.device_copy.destroy_descriptor_pool(self.pool, None) };
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+#[repr(C)]
+pub struct ComputePushConstants {
+    pub data0: [f32; 4],
+    pub data1: [f32; 4],
+    pub data2: [f32; 4],
+    pub data3: [f32; 4],
+}
+
+impl ComputePushConstants {
+    pub fn as_u8_slice(&self) -> &[u8] {
+        unsafe {
+            let ptr = std::mem::transmute::<&Self, *const u8>(self);
+            std::slice::from_raw_parts(ptr, size_of::<Self>())
+        }
     }
 }

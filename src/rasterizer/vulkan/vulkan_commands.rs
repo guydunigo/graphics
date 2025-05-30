@@ -5,7 +5,10 @@ use std::{
 
 use ash::{Device, vk};
 
-use super::{vulkan_base::VulkanBase, vulkan_swapchain::VulkanSwapchain};
+use super::{
+    vulkan_base::VulkanBase, vulkan_descriptors::ComputePushConstants,
+    vulkan_swapchain::VulkanSwapchain,
+};
 
 pub const FRAME_OVERLAP: usize = 2;
 
@@ -223,6 +226,19 @@ impl FrameData {
                 0,
                 &[swapchain.descriptors.draw_img_descs],
                 &[],
+            );
+
+            let pc = ComputePushConstants {
+                data0: [1., 0., 0., 1.],
+                data1: [0., 0., 1., 1.],
+                ..Default::default()
+            };
+            self.device_copy.cmd_push_constants(
+                self.cmd_buf,
+                swapchain.descriptors.gradient_pipeline_layout,
+                vk::ShaderStageFlags::COMPUTE,
+                0,
+                pc.as_u8_slice(),
             );
 
             let draw_extent = swapchain.draw_extent();
