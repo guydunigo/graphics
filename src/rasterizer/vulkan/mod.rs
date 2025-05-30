@@ -19,6 +19,8 @@ use vulkan_commands::VulkanCommands;
 mod vulkan_descriptors;
 mod vulkan_gui;
 use vulkan_gui::VulkanGui;
+mod vulkan_shaders;
+use vulkan_shaders::VulkanShaders;
 
 #[cfg(feature = "stats")]
 use super::Stats;
@@ -29,6 +31,7 @@ pub struct VulkanEngine {
     swapchain: VulkanSwapchain,
     gui: VulkanGui,
     commands: VulkanCommands,
+    shaders: VulkanShaders,
     base: VulkanBase,
     // TODO: window_extent: vk::Extent2D,
 }
@@ -45,8 +48,11 @@ impl VulkanEngine {
         app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
-        self.swapchain
-            .resize_if_necessary(&self.base, self.commands.allocator.clone());
+        self.swapchain.resize_if_necessary(
+            &self.base,
+            &self.shaders,
+            self.commands.allocator.clone(),
+        );
 
         let current_frame = self.commands.current_frame();
         let image = self.swapchain.draw_img();
@@ -83,6 +89,7 @@ impl VulkanEngine {
             let cmd_pool = current_frame.cmd_pool;
             let cmd_buf = current_frame.cmd_buf;
             let debug = format_debug(settings, world, app, self.base.window.inner_size(), None);
+            todo!("refcell to clean this mess");
             self.draw_imgui(cmd_pool, cmd_buf, *swapchain_image_view, debug);
         }
 
@@ -112,11 +119,13 @@ impl VulkanEngine {
             Arc::new(Mutex::new(allocator))
         };
 
-        let swapchain = VulkanSwapchain::new(&base, allocator.clone());
+        let shaders = VulkanShaders::new(base.device.clone());
+        let swapchain = VulkanSwapchain::new(&base, &shaders, allocator.clone());
         Self {
             gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
             commands: VulkanCommands::new(&base, allocator),
             swapchain,
+            shaders,
             base,
         }
     }

@@ -1,10 +1,13 @@
-use std::{fs::File, io::Read, path::Path, rc::Rc};
-
 use ash::{Device, vk};
-use naga::{ShaderStage, back::spv, front::glsl};
+use std::rc::Rc;
+
+use crate::rasterizer::vulkan::vulkan_shaders::ShaderName;
+
+use super::vulkan_shaders::VulkanShaders;
 
 pub struct VulkanDescriptors {
     device_copy: Rc<Device>,
+
     descriptor: DescriptorAllocator,
     pub draw_img_descs: vk::DescriptorSet,
     draw_img_desc_layout: vk::DescriptorSetLayout,
@@ -14,7 +17,7 @@ pub struct VulkanDescriptors {
 }
 
 impl VulkanDescriptors {
-    pub fn new(device: Rc<Device>, draw_img: vk::ImageView) -> Self {
+    pub fn new(device: Rc<Device>, shaders: &VulkanShaders, draw_img: vk::ImageView) -> Self {
         let descriptor = DescriptorAllocator::new_global(device.clone());
         let draw_img_desc_layout = DescriptorLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
@@ -43,10 +46,9 @@ impl VulkanDescriptors {
         };
 
         let gradient_pipeline = {
-            let gradient_shader = load_shader_module(device.clone(), "resources/gradient.glsl");
             let stage_info = vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::COMPUTE)
-                .module(gradient_shader.module)
+                .module(shaders.get(ShaderName::Gradient))
                 .name(c"main");
             let compute_pipeline_create_infos = [vk::ComputePipelineCreateInfo::default()
                 .layout(gradient_pipeline_layout)
@@ -210,62 +212,5 @@ impl Drop for DescriptorAllocator {
     fn drop(&mut self) {
         println!("drop DescriptorAllocator");
         unsafe { self.device_copy.destroy_descriptor_pool(self.pool, None) };
-    }
-}
-
-// TODO: move ?
-// TODO: static glsl::Frontend and writer ?
-fn compile_glsl_to_spirv(glsl: &str) -> Vec<u32> {
-    let module = {
-        let options = glsl::Options::from(ShaderStage::Compute);
-        glsl::Frontend::default().parse(&options, &glsl).unwrap()
-    };
-
-    let module_info: naga::valid::ModuleInfo = naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::all(),
-    )
-    .subgroup_stages(naga::valid::ShaderStages::all())
-    .subgroup_operations(naga::valid::SubgroupOperationSet::all())
-    .validate(&module)
-    .unwrap();
-
-    let options = spv::Options::default();
-    // TODO
-    // let pipeline_options = spv::PipelineOptions {
-    //     shader_stage: ShaderStage::Compute,
-    //     entry_point: "main".into(),
-    // };
-
-    // spv::write_vec(&module, &module_info, &options, Some(&pipeline_options)).unwrap()
-    spv::write_vec(&module, &module_info, &options, None).unwrap()
-}
-
-struct MyShaderModule {
-    device_copy: Rc<Device>,
-    pub module: vk::ShaderModule,
-}
-
-impl Drop for MyShaderModule {
-    fn drop(&mut self) {
-        unsafe {
-            self.device_copy.destroy_shader_module(self.module, None);
-        }
-    }
-}
-
-// TODO: cache
-// TODO: static COMPILED_SHADER_CACHE: HashMap<String, Vec<u32>> = LazyCell...
-fn load_shader_module<P: AsRef<Path>>(device: Rc<Device>, path: P) -> MyShaderModule {
-    let mut glsl = String::new();
-    File::open(path).unwrap().read_to_string(&mut glsl).unwrap();
-    let spirv = compile_glsl_to_spirv(&glsl);
-
-    let create_info = vk::ShaderModuleCreateInfo::default().code(&spirv[..]);
-    let module = unsafe { device.create_shader_module(&create_info, None).unwrap() };
-
-    MyShaderModule {
-        device_copy: device,
-        module,
     }
 }

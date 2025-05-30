@@ -10,6 +10,7 @@ use winit::dpi::PhysicalSize;
 
 use super::{
     vulkan_base::VulkanBase, vulkan_commands::FrameData, vulkan_descriptors::VulkanDescriptors,
+    vulkan_shaders::VulkanShaders,
 };
 
 pub const DRAW_IMG_FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
@@ -31,7 +32,11 @@ pub struct VulkanSwapchain {
 }
 
 impl VulkanSwapchain {
-    pub fn new(base: &VulkanBase, allocator: Arc<Mutex<vk_mem::Allocator>>) -> Self {
+    pub fn new(
+        base: &VulkanBase,
+        shaders: &VulkanShaders,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+    ) -> Self {
         let present_mode = vk::PresentModeKHR::FIFO;
         // TODO: when implemented : MAILBOX : https://vkguide.dev/docs/new_chapter_1/vulkan_init_flow/
         // let present_mode = present_modes
@@ -120,7 +125,7 @@ impl VulkanSwapchain {
             .collect();
 
         let draw_img = AllocatedImage::new(base, allocator, window_size);
-        let descriptors = VulkanDescriptors::new(base.device.clone(), draw_img.img_view);
+        let descriptors = VulkanDescriptors::new(base.device.clone(), shaders, draw_img.img_view);
 
         Self {
             // I hope it's okay to clone the device...
@@ -148,11 +153,12 @@ impl VulkanSwapchain {
     pub fn resize_if_necessary(
         &mut self,
         base: &VulkanBase,
+        shaders: &VulkanShaders,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
     ) {
         // TODO: need to compare window_size or is_suboptimal is enough ?
         if *self.is_suboptimal.borrow() || self.window_size != base.window.inner_size() {
-            *self = VulkanSwapchain::new(base, allocator);
+            *self = VulkanSwapchain::new(base, shaders, allocator);
         }
     }
 
