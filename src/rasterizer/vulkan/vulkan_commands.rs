@@ -212,7 +212,7 @@ impl FrameData {
     //     };
     // }
 
-    pub fn draw_background(&self, swapchain: &VulkanSwapchain) {
+    pub fn draw_background(&self, swapchain: &VulkanSwapchain, data: &ComputePushConstants) {
         unsafe {
             self.device_copy.cmd_bind_pipeline(
                 self.cmd_buf,
@@ -228,17 +228,12 @@ impl FrameData {
                 &[],
             );
 
-            let pc = ComputePushConstants {
-                data0: [1., 0., 0., 1.],
-                data1: [0., 0., 1., 1.],
-                ..Default::default()
-            };
             self.device_copy.cmd_push_constants(
                 self.cmd_buf,
                 swapchain.descriptors.gradient_pipeline_layout,
                 vk::ShaderStageFlags::COMPUTE,
                 0,
-                pc.as_u8_slice(),
+                data.as_u8_slice(),
             );
 
             let draw_extent = swapchain.draw_extent();

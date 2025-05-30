@@ -4,6 +4,8 @@ use std::{
 };
 
 use ash::vk;
+use egui::Color32;
+use vulkan_descriptors::ComputePushConstants;
 use winit::{event::WindowEvent, window::Window};
 
 use crate::{scene::World, window::AppObserver};
@@ -33,7 +35,9 @@ pub struct VulkanEngine {
     commands: VulkanCommands,
     shaders: VulkanShaders,
     base: VulkanBase,
-    // TODO: window_extent: vk::Extent2D,
+
+    color_top: Color32,
+    color_bot: Color32,
 }
 
 impl VulkanEngine {
@@ -65,7 +69,14 @@ impl VulkanEngine {
             vk::ImageLayout::GENERAL,
         );
 
-        current_frame.draw_background(&self.swapchain);
+        {
+            let constants = ComputePushConstants {
+                data0: egui::Rgba::from(self.color_top).to_array(),
+                data1: egui::Rgba::from(self.color_bot).to_array(),
+                ..Default::default()
+            };
+            current_frame.draw_background(&self.swapchain, &constants);
+        }
 
         let (swapchain_img_index, swapchain_image, sem_render, swapchain_image_view) =
             self.swapchain.acquire_next_image(current_frame);
@@ -82,13 +93,21 @@ impl VulkanEngine {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
 
-        let debug = format_debug(settings, world, app, self.base.window.inner_size(), None);
-        self.draw_imgui(
-            current_frame.cmd_pool,
-            current_frame.cmd_buf,
-            *swapchain_image_view,
-            debug,
-        );
+        {
+            let debug = format_debug(settings, world, app, self.base.window.inner_size(), None);
+            let mut color_top = self.color_top;
+            let color_top_ref = &mut color_top;
+            let mut color_bot = self.color_bot;
+            let color_bot_ref = &mut color_bot;
+            self.draw_imgui(
+                current_frame.cmd_pool,
+                current_frame.cmd_buf,
+                *swapchain_image_view,
+                move |ctx| ui(ctx, debug.as_str(), color_top_ref, color_bot_ref),
+            );
+            self.color_top = color_top;
+            self.color_bot = color_bot;
+        };
 
         current_frame.transition_image(
             *swapchain_image,
@@ -122,6 +141,9 @@ impl VulkanEngine {
             swapchain,
             shaders,
             base,
+
+            color_top: Color32::from_rgba_unmultiplied(255, 0, 0, 255),
+            color_bot: Color32::from_rgba_unmultiplied(0, 0, 255, 125),
         }
     }
 
@@ -138,7 +160,7 @@ impl VulkanEngine {
         cmd_pool: vk::CommandPool,
         cmd_buf: vk::CommandBuffer,
         target_img_view: vk::ImageView,
-        debug: String,
+        ui: impl FnMut(&egui::Context),
     ) {
         let color_attachments = [attachment_info(
             target_img_view,
@@ -160,7 +182,7 @@ impl VulkanEngine {
             self.swapchain.draw_extent(),
             cmd_pool,
             cmd_buf,
-            debug,
+            ui,
         );
 
         unsafe {
@@ -208,4 +230,36 @@ fn rendering_info<'a>(
     } else {
         res
     }
+}
+
+fn ui(ctx: &egui::Context, debug: &str, color_top: &mut Color32, color_bot: &mut Color32) {
+    egui::Window::new("debug").show(&ctx, |ui| ui.label(debug));
+    egui::Window::new("test").show(&ctx, |ui| {
+        ui.label("Hello world!");
+        if ui.button("Click me").clicked() {
+            println!("Click");
+        }
+        ui.heading("My Heading is big !!!");
+        ui.menu_button("My menu", |ui| {
+            ui.menu_button("My sub-menu", |ui| {
+                if ui.button("Close the menu").clicked() {
+                    ui.close_menu();
+                }
+            });
+        });
+    });
+    egui::Window::new("Color pickers").show(&ctx, |ui| {
+        // ui.columns_const(|[c0, c1]| {
+        //     c0.label("Top color :");
+        //     c1.color_edit_button_srgba(color_top);
+        // });
+        // ui.columns_const(|[c0, c1]| {
+        //     c0.label("Bottom color :");
+        //     c1.color_edit_button_srgba(color_bot);
+        // });
+        ui.label("Top color :");
+        ui.color_edit_button_srgba(color_top);
+        ui.label("Bottom color :");
+        ui.color_edit_button_srgba(color_bot);
+    });
 }

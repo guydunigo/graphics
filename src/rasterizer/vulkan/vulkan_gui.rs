@@ -9,24 +9,6 @@ use crate::font::{FONT, FONT_NAME};
 
 use super::{vulkan_base::VulkanBase, vulkan_commands::FRAME_OVERLAP};
 
-fn ui(ctx: &egui::Context, debug: String) {
-    egui::Window::new("debug").show(&ctx, |ui| ui.label(debug));
-    egui::Window::new("test").show(&ctx, |ui| {
-        ui.label("Hello world!");
-        if ui.button("Click me").clicked() {
-            println!("Click");
-        }
-        ui.heading("My Heading is big !!!");
-        ui.menu_button("My menu", |ui| {
-            ui.menu_button("My sub-menu", |ui| {
-                if ui.button("Close the menu").clicked() {
-                    ui.close_menu();
-                }
-            });
-        });
-    });
-}
-
 pub struct VulkanGui {
     inner: RefCell<VulkanGuiMutable>,
 }
@@ -56,10 +38,10 @@ impl VulkanGui {
         extent: vk::Extent2D,
         cmd_pool: vk::CommandPool,
         cmd_buf: vk::CommandBuffer,
-        debug: String,
+        ui: impl FnMut(&egui::Context),
     ) {
         let mut inner = self.inner.borrow_mut();
-        inner.draw(queue, extent, cmd_pool, cmd_buf, debug);
+        inner.draw(queue, extent, cmd_pool, cmd_buf, ui);
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
@@ -128,7 +110,7 @@ impl VulkanGuiMutable {
         extent: vk::Extent2D,
         cmd_pool: vk::CommandPool,
         cmd_buf: vk::CommandBuffer,
-        debug: String,
+        ui: impl FnMut(&egui::Context),
     ) {
         egui_winit::update_viewport_info(
             &mut self.info,
@@ -156,10 +138,7 @@ impl VulkanGuiMutable {
             platform_output,
             pixels_per_point,
             ..
-        } = self
-            .state
-            .egui_ctx()
-            .run(raw_input, |ctx| ui(ctx, debug.clone()));
+        } = self.state.egui_ctx().run(raw_input, ui);
 
         self.state
             .handle_platform_output(&self.window, platform_output);
