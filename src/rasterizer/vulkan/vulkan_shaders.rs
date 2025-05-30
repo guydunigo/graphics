@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fs::File, io::Read, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fs::File, io::Read, path::PathBuf, rc::Rc};
 
 use ash::{Device, vk};
 use naga::{ShaderStage, back::spv, front::glsl, valid::Validator};
@@ -20,6 +20,17 @@ impl Into<&str> for ShaderName {
             Gradient => "gradient",
             ParametrableGradient => "parametrable_gradient",
         }
+    }
+}
+
+impl Into<PathBuf> for ShaderName {
+    fn into(self) -> PathBuf {
+        let name: &str = self.into();
+        let mut path = PathBuf::from(SHADER_FOLDER);
+        path.push(name);
+        path.set_extension(SHADER_EXT);
+
+        path
     }
 }
 
@@ -67,9 +78,7 @@ impl VulkanShadersMutable {
     }
 
     fn load_shader_module(&mut self, name: ShaderName) -> vk::ShaderModule {
-        let name: &str = name.into();
-        let mut path = Path::new(SHADER_FOLDER).with_file_name(name);
-        path.set_extension("glsl");
+        let path: PathBuf = name.into();
 
         let mut glsl = String::new();
         File::open(path).unwrap().read_to_string(&mut glsl).unwrap();

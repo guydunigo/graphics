@@ -82,21 +82,16 @@ impl VulkanEngine {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
 
-        // Releasing `current_frame` and other references on self, to get a mut for egui.
-        let sem_render = *sem_render;
-        let swapchain_image = *swapchain_image;
-        {
-            let cmd_pool = current_frame.cmd_pool;
-            let cmd_buf = current_frame.cmd_buf;
-            let debug = format_debug(settings, world, app, self.base.window.inner_size(), None);
-            todo!("refcell to clean this mess");
-            self.draw_imgui(cmd_pool, cmd_buf, *swapchain_image_view, debug);
-        }
-
-        let current_frame = self.commands.current_frame();
+        let debug = format_debug(settings, world, app, self.base.window.inner_size(), None);
+        self.draw_imgui(
+            current_frame.cmd_pool,
+            current_frame.cmd_buf,
+            *swapchain_image_view,
+            debug,
+        );
 
         current_frame.transition_image(
-            swapchain_image,
+            *swapchain_image,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             vk::ImageLayout::PRESENT_SRC_KHR,
         );
@@ -139,7 +134,7 @@ impl VulkanEngine {
     }
 
     fn draw_imgui(
-        &mut self,
+        &self,
         cmd_pool: vk::CommandPool,
         cmd_buf: vk::CommandBuffer,
         target_img_view: vk::ImageView,
