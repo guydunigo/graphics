@@ -10,6 +10,13 @@ const SHADER_EXT: &str = "glsl";
 pub enum ShaderName {
     Gradient,
     ParametrableGradient,
+    Sky,
+}
+
+impl ShaderName {
+    pub fn into_str(self) -> &'static str {
+        self.into()
+    }
 }
 
 impl Into<&str> for ShaderName {
@@ -19,6 +26,7 @@ impl Into<&str> for ShaderName {
         match self {
             Gradient => "gradient",
             ParametrableGradient => "parametrable_gradient",
+            Sky => "sky",
         }
     }
 }

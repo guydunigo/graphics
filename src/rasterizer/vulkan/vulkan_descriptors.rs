@@ -12,8 +12,9 @@ pub struct VulkanDescriptors {
     pub draw_img_descs: vk::DescriptorSet,
     draw_img_desc_layout: vk::DescriptorSetLayout,
 
-    pub gradient_pipeline: vk::Pipeline,
-    pub gradient_pipeline_layout: vk::PipelineLayout,
+    pub pipeline_layout: vk::PipelineLayout,
+
+    pub bg_effects: Vec<ComputeEffect>,
 }
 
 impl VulkanDescriptors {
@@ -40,41 +41,27 @@ impl VulkanDescriptors {
         let push_constants = [vk::PushConstantRange::default()
             .size(size_of::<ComputePushConstants>() as u32)
             .stage_flags(vk::ShaderStageFlags::COMPUTE)];
+        let draw_img_desc_layouts = [draw_img_desc_layout];
 
-        let gradient_pipeline_layout = {
-            let draw_img_desc_layouts = [draw_img_desc_layout];
+        let pipeline_layout = {
             let create_info = vk::PipelineLayoutCreateInfo::default()
                 .set_layouts(&draw_img_desc_layouts[..])
                 .push_constant_ranges(&push_constants[..]);
             unsafe { device.create_pipeline_layout(&create_info, None).unwrap() }
         };
 
-        let gradient_pipeline = {
-            let stage_info = vk::PipelineShaderStageCreateInfo::default()
-                .stage(vk::ShaderStageFlags::COMPUTE)
-                .module(shaders.get(ShaderName::ParametrableGradient))
-                .name(c"main");
-            let compute_pipeline_create_infos = [vk::ComputePipelineCreateInfo::default()
-                .layout(gradient_pipeline_layout)
-                .stage(stage_info)];
-            unsafe {
-                device
-                    .create_compute_pipelines(
-                        vk::PipelineCache::null(),
-                        &compute_pipeline_create_infos[..],
-                        None,
-                    )
-                    .unwrap()[0]
-            }
-        };
+        let gradient = ComputeEffect::gradient(device.clone(), shaders, pipeline_layout);
+        let sky = ComputeEffect::sky(device.clone(), shaders, pipeline_layout);
+
+        // TODO: shader could be destroyed
 
         Self {
             device_copy: device,
             descriptor,
             draw_img_descs,
             draw_img_desc_layout,
-            gradient_pipeline,
-            gradient_pipeline_layout,
+            pipeline_layout,
+            bg_effects: vec![gradient, sky],
         }
     }
 }
@@ -86,9 +73,7 @@ impl Drop for VulkanDescriptors {
             self.device_copy
                 .destroy_descriptor_set_layout(self.draw_img_desc_layout, None);
             self.device_copy
-                .destroy_pipeline(self.gradient_pipeline, None);
-            self.device_copy
-                .destroy_pipeline_layout(self.gradient_pipeline_layout, None);
+                .destroy_pipeline_layout(self.pipeline_layout, None);
         }
     }
 }
@@ -128,24 +113,24 @@ impl<'a> DescriptorLayoutBuilder<'a> {
         unsafe { device.create_descriptor_set_layout(&info, None).unwrap() }
     }
 
-    fn build_2<T: vk::ExtendsDescriptorSetLayoutCreateInfo>(
-        mut self,
-        device: &Device,
-        shader_stages: vk::ShaderStageFlags,
-        p_next: &mut T,
-        flags: vk::DescriptorSetLayoutCreateFlags,
-    ) -> vk::DescriptorSetLayout {
-        self.bindings
-            .iter_mut()
-            .for_each(|b| b.stage_flags |= shader_stages);
+    // fn build_2<T: vk::ExtendsDescriptorSetLayoutCreateInfo>(
+    //     mut self,
+    //     device: &Device,
+    //     shader_stages: vk::ShaderStageFlags,
+    //     p_next: &mut T,
+    //     flags: vk::DescriptorSetLayoutCreateFlags,
+    // ) -> vk::DescriptorSetLayout {
+    //     self.bindings
+    //         .iter_mut()
+    //         .for_each(|b| b.stage_flags |= shader_stages);
 
-        let info = vk::DescriptorSetLayoutCreateInfo::default()
-            .bindings(&self.bindings[..])
-            .push_next(p_next)
-            .flags(flags);
+    //     let info = vk::DescriptorSetLayoutCreateInfo::default()
+    //         .bindings(&self.bindings[..])
+    //         .push_next(p_next)
+    //         .flags(flags);
 
-        unsafe { device.create_descriptor_set_layout(&info, None).unwrap() }
-    }
+    //     unsafe { device.create_descriptor_set_layout(&info, None).unwrap() }
+    // }
 }
 
 struct PoolSizeRatio {
@@ -189,13 +174,13 @@ impl DescriptorAllocator {
         }
     }
 
-    pub fn clear_descriptors(&self) {
-        unsafe {
-            self.device_copy
-                .reset_descriptor_pool(self.pool, vk::DescriptorPoolResetFlags::empty())
-                .unwrap()
-        };
-    }
+    // pub fn clear_descriptors(&self) {
+    //     unsafe {
+    //         self.device_copy
+    //             .reset_descriptor_pool(self.pool, vk::DescriptorPoolResetFlags::empty())
+    //             .unwrap()
+    //     };
+    // }
 
     pub fn allocate(&self, layout: vk::DescriptorSetLayout) -> vk::DescriptorSet {
         let layouts = [layout];
@@ -233,6 +218,95 @@ impl ComputePushConstants {
         unsafe {
             let ptr = std::mem::transmute::<&Self, *const u8>(self);
             std::slice::from_raw_parts(ptr, size_of::<Self>())
+        }
+    }
+}
+
+pub struct ComputeEffect {
+    device_copy: Rc<Device>,
+
+    pub name: ShaderName,
+    pub pipeline: vk::Pipeline,
+
+    pub data: ComputePushConstants,
+}
+
+impl ComputeEffect {
+    pub fn new(
+        device: Rc<Device>,
+        shaders: &VulkanShaders,
+        pipeline_layout: vk::PipelineLayout,
+        name: ShaderName,
+        data: ComputePushConstants,
+    ) -> Self {
+        let pipeline = {
+            let stage_info = vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::COMPUTE)
+                .module(shaders.get(name))
+                .name(c"main");
+            let compute_pipeline_create_infos = [vk::ComputePipelineCreateInfo::default()
+                .layout(pipeline_layout)
+                .stage(stage_info)];
+            unsafe {
+                device
+                    .create_compute_pipelines(
+                        vk::PipelineCache::null(),
+                        &compute_pipeline_create_infos[..],
+                        None,
+                    )
+                    .unwrap()[0]
+            }
+        };
+
+        ComputeEffect {
+            device_copy: device,
+            name,
+            pipeline,
+            data,
+        }
+    }
+
+    pub fn gradient(
+        device: Rc<Device>,
+        shaders: &VulkanShaders,
+        pipeline_layout: vk::PipelineLayout,
+    ) -> Self {
+        Self::new(
+            device,
+            shaders,
+            pipeline_layout,
+            ShaderName::ParametrableGradient,
+            ComputePushConstants {
+                data0: [1., 0., 0., 1.],
+                data1: [0., 0., 1., 1.],
+                ..Default::default()
+            },
+        )
+    }
+
+    pub fn sky(
+        device: Rc<Device>,
+        shaders: &VulkanShaders,
+        pipeline_layout: vk::PipelineLayout,
+    ) -> Self {
+        Self::new(
+            device,
+            shaders,
+            pipeline_layout,
+            ShaderName::Sky,
+            ComputePushConstants {
+                data0: [0.1, 0.2, 0.4, 0.97],
+                ..Default::default()
+            },
+        )
+    }
+}
+
+impl Drop for ComputeEffect {
+    fn drop(&mut self) {
+        println!("drop ComputeEffect");
+        unsafe {
+            self.device_copy.destroy_pipeline(self.pipeline, None);
         }
     }
 }
