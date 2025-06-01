@@ -5,7 +5,10 @@ use std::{
 
 use ash::{Device, vk};
 
-use super::{vulkan_base::VulkanBase, vulkan_swapchain::VulkanSwapchain};
+use super::{
+    vulkan_base::VulkanBase, vulkan_descriptors::ComputePushConstants,
+    vulkan_swapchain::VulkanSwapchain,
+};
 
 pub const FRAME_OVERLAP: usize = 2;
 
@@ -209,7 +212,12 @@ impl FrameData {
     //     };
     // }
 
-    pub fn draw_background(&self, swapchain: &VulkanSwapchain, current_bg_effect: usize) {
+    pub fn draw_background(
+        &self,
+        swapchain: &VulkanSwapchain,
+        current_bg_effect: usize,
+        current_bg_effect_data: &ComputePushConstants,
+    ) {
         unsafe {
             self.device_copy.cmd_bind_pipeline(
                 self.cmd_buf,
@@ -230,9 +238,7 @@ impl FrameData {
                 swapchain.descriptors.pipeline_layout,
                 vk::ShaderStageFlags::COMPUTE,
                 0,
-                swapchain.descriptors.bg_effects[current_bg_effect]
-                    .data
-                    .as_u8_slice(),
+                current_bg_effect_data.as_u8_slice(),
             );
 
             let draw_extent = swapchain.draw_extent();

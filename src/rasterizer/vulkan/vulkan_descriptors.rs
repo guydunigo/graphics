@@ -53,7 +53,7 @@ impl VulkanDescriptors {
         let gradient = ComputeEffect::gradient(device.clone(), shaders, pipeline_layout);
         let sky = ComputeEffect::sky(device.clone(), shaders, pipeline_layout);
 
-        // TODO: shader could be destroyed
+        // TODO: shaders could be destroyed
 
         Self {
             device_copy: device,
@@ -228,16 +228,16 @@ pub struct ComputeEffect {
     pub name: ShaderName,
     pub pipeline: vk::Pipeline,
 
-    pub data: ComputePushConstants,
+    default_data: ComputePushConstants,
 }
 
 impl ComputeEffect {
-    pub fn new(
+    fn new(
         device: Rc<Device>,
         shaders: &VulkanShaders,
         pipeline_layout: vk::PipelineLayout,
         name: ShaderName,
-        data: ComputePushConstants,
+        default_data: ComputePushConstants,
     ) -> Self {
         let pipeline = {
             let stage_info = vk::PipelineShaderStageCreateInfo::default()
@@ -262,7 +262,7 @@ impl ComputeEffect {
             device_copy: device,
             name,
             pipeline,
-            data,
+            default_data,
         }
     }
 
@@ -299,6 +299,10 @@ impl ComputeEffect {
                 ..Default::default()
             },
         )
+    }
+
+    pub fn default_data(&self) -> &ComputePushConstants {
+        &self.default_data
     }
 }
 

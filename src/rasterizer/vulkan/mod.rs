@@ -4,7 +4,7 @@ use std::{
 };
 
 use ash::vk;
-use vulkan_descriptors::ComputeEffect;
+use vulkan_descriptors::{ComputeEffect, ComputePushConstants};
 use winit::{event::WindowEvent, window::Window};
 
 use crate::{scene::World, window::AppObserver};
@@ -36,9 +36,43 @@ pub struct VulkanEngine {
     base: VulkanBase,
 
     current_bg_effect: usize,
+    bg_effects_data: Vec<ComputePushConstants>,
 }
 
 impl VulkanEngine {
+    pub fn new(window: Rc<Window>) -> Self {
+        let base = VulkanBase::new(window);
+
+        let allocator = {
+            let mut create_info =
+                vk_mem::AllocatorCreateInfo::new(&base.instance, &base.device, base.chosen_gpu);
+            create_info.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
+            let allocator = unsafe { vk_mem::Allocator::new(create_info).unwrap() };
+            Arc::new(Mutex::new(allocator))
+        };
+
+        let shaders = VulkanShaders::new(base.device.clone());
+        let swapchain = VulkanSwapchain::new(&base, &shaders, allocator.clone());
+
+        let bg_effects_data = swapchain
+            .descriptors
+            .bg_effects
+            .iter()
+            .map(|b| *b.default_data())
+            .collect();
+
+        Self {
+            gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
+            commands: VulkanCommands::new(&base, allocator),
+            swapchain,
+            shaders,
+            base,
+
+            current_bg_effect: 1,
+            bg_effects_data,
+        }
+    }
+
     pub fn window(&self) -> &Rc<Window> {
         &self.base.window
     }
@@ -55,7 +89,8 @@ impl VulkanEngine {
                 ctx,
                 format_debug(settings, world, app, self.base.window.inner_size(), None),
                 &mut self.current_bg_effect,
-                &mut self.swapchain.descriptors.bg_effects[..],
+                &self.swapchain.descriptors.bg_effects[..],
+                &mut self.bg_effects_data,
             )
         });
 
@@ -76,7 +111,11 @@ impl VulkanEngine {
             vk::ImageLayout::GENERAL,
         );
 
-        current_frame.draw_background(&self.swapchain, self.current_bg_effect);
+        current_frame.draw_background(
+            &self.swapchain,
+            self.current_bg_effect,
+            &self.bg_effects_data[self.current_bg_effect],
+        );
 
         let (swapchain_img_index, swapchain_image, sem_render, swapchain_image_view) =
             self.swapchain.acquire_next_image(current_frame);
@@ -111,32 +150,6 @@ impl VulkanEngine {
             .present(swapchain_img_index, &sem_render, self.commands.queue);
 
         self.commands.frame_number += 1;
-
-        // todo!("move bg_effects state out of swapchain (resize)");
-    }
-
-    pub fn new(window: Rc<Window>) -> Self {
-        let base = VulkanBase::new(window);
-
-        let allocator = {
-            let mut create_info =
-                vk_mem::AllocatorCreateInfo::new(&base.instance, &base.device, base.chosen_gpu);
-            create_info.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
-            let allocator = unsafe { vk_mem::Allocator::new(create_info).unwrap() };
-            Arc::new(Mutex::new(allocator))
-        };
-
-        let shaders = VulkanShaders::new(base.device.clone());
-        let swapchain = VulkanSwapchain::new(&base, &shaders, allocator.clone());
-        Self {
-            gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
-            commands: VulkanCommands::new(&base, allocator),
-            swapchain,
-            shaders,
-            base,
-
-            current_bg_effect: 0,
-        }
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
@@ -228,7 +241,8 @@ fn ui(
     ctx: &egui::Context,
     debug: String,
     current_bg_effect: &mut usize,
-    bg_effects: &mut [ComputeEffect],
+    bg_effects: &[ComputeEffect],
+    bg_effects_data: &mut [ComputePushConstants],
 ) {
     egui::Window::new("debug").show(&ctx, |ui| ui.label(debug));
     egui::Window::new("test").show(&ctx, |ui| {
@@ -252,7 +266,7 @@ fn ui(
                 ui.radio_value(current_bg_effect, i, n.name.into_str());
             });
 
-            let current_bg_effect_data = &mut bg_effects[*current_bg_effect].data;
+            let current_bg_effect_data = &mut bg_effects_data[*current_bg_effect];
             egui::Grid::new("data").num_columns(5).show(ui, |ui| {
                 ui.label("Data 0");
                 current_bg_effect_data.data0.iter_mut().for_each(|d| {
@@ -274,7 +288,7 @@ fn ui(
 
                 ui.label("Data 3");
                 current_bg_effect_data.data3.iter_mut().for_each(|d| {
-                    ui.add(egui::DragValue::new(d));
+                    ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
                 });
             });
         }
