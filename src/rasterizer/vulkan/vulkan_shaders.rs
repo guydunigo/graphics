@@ -6,11 +6,17 @@ use naga::{ShaderStage, back::spv, front::glsl, valid::Validator};
 const SHADER_FOLDER: &str = "./resources/";
 const SHADER_EXT: &str = "glsl";
 
+// TODO: shaders can be destroyed once pipeline is created, should we keep them ? or just keep
+// compiled code ?
+
+// #[allow(dead_code)]
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
 pub enum ShaderName {
     Gradient,
     ParametrableGradient,
     Sky,
+    ColoredTriangleVert,
+    ColoredTriangleFrag,
 }
 
 impl ShaderName {
@@ -27,6 +33,22 @@ impl Into<&str> for ShaderName {
             Gradient => "gradient",
             ParametrableGradient => "parametrable_gradient",
             Sky => "sky",
+            ColoredTriangleVert | ColoredTriangleFrag => "colored_triangle",
+        }
+    }
+}
+
+impl Into<ShaderStage> for ShaderName {
+    fn into(self) -> ShaderStage {
+        use ShaderName::*;
+        use ShaderStage::*;
+
+        match self {
+            Gradient => Compute,
+            ParametrableGradient => Compute,
+            Sky => Compute,
+            ColoredTriangleVert => Vertex,
+            ColoredTriangleFrag => Fragment,
         }
     }
 }
@@ -34,10 +56,14 @@ impl Into<&str> for ShaderName {
 impl Into<PathBuf> for ShaderName {
     fn into(self) -> PathBuf {
         let name: &str = self.into();
+        let stage = match self.into() {
+            ShaderStage::Compute => "comp",
+            ShaderStage::Vertex => "vert",
+            ShaderStage::Fragment => "frag",
+            _ => unimplemented!(),
+        };
         let mut path = PathBuf::from(SHADER_FOLDER);
-        path.push(name);
-        path.set_extension(SHADER_EXT);
-
+        path.push(format!("{}.{}.{}", name, stage, SHADER_EXT));
         path
     }
 }
@@ -90,7 +116,7 @@ impl VulkanShadersMutable {
 
         let mut glsl = String::new();
         File::open(path).unwrap().read_to_string(&mut glsl).unwrap();
-        let spirv = self.compile_glsl_to_spirv(&glsl);
+        let spirv = self.compile_glsl_to_spirv(&glsl, name.into());
 
         let create_info = vk::ShaderModuleCreateInfo::default().code(&spirv[..]);
         unsafe {
@@ -100,9 +126,9 @@ impl VulkanShadersMutable {
         }
     }
 
-    fn compile_glsl_to_spirv(&mut self, glsl: &str) -> Vec<u32> {
+    fn compile_glsl_to_spirv(&mut self, glsl: &str, stage: ShaderStage) -> Vec<u32> {
         let module = {
-            let options = glsl::Options::from(ShaderStage::Compute);
+            let options = glsl::Options::from(stage);
             self.glsl_parser.parse(&options, &glsl).unwrap()
         };
 

@@ -22,6 +22,8 @@ mod vulkan_gui;
 use vulkan_gui::{GeneratedUi, VulkanGui};
 mod vulkan_shaders;
 use vulkan_shaders::VulkanShaders;
+mod vk_graphics_pipeline;
+use vk_graphics_pipeline::VkGraphicsPipeline;
 
 #[cfg(feature = "stats")]
 use super::Stats;
@@ -29,6 +31,7 @@ use super::Stats;
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine {
     // Elements are placed in the order they should be dropped, so inverse order of creation.
+    graphics_pipeline: VkGraphicsPipeline,
     swapchain: VulkanSwapchain,
     gui: VulkanGui,
     commands: VulkanCommands,
@@ -62,6 +65,7 @@ impl VulkanEngine {
             .collect();
 
         Self {
+            graphics_pipeline: VkGraphicsPipeline::new(base.device.clone()),
             gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
             commands: VulkanCommands::new(&base, allocator),
             swapchain,
