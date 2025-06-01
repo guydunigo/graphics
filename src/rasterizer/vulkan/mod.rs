@@ -4,7 +4,7 @@ use std::{
 };
 
 use ash::vk;
-use vulkan_descriptors::ComputePushConstants;
+use vulkan_descriptors::ComputeEffect;
 use winit::{event::WindowEvent, window::Window};
 
 use crate::{scene::World, window::AppObserver};
@@ -19,7 +19,7 @@ mod vulkan_commands;
 use vulkan_commands::VulkanCommands;
 mod vulkan_descriptors;
 mod vulkan_gui;
-use vulkan_gui::VulkanGui;
+use vulkan_gui::{GeneratedUi, VulkanGui};
 mod vulkan_shaders;
 use vulkan_shaders::VulkanShaders;
 
@@ -50,6 +50,15 @@ impl VulkanEngine {
         app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
+        let generated_ui = self.gui.generate(|ctx| {
+            ui(
+                ctx,
+                format_debug(settings, world, app, self.base.window.inner_size(), None),
+                &mut self.current_bg_effect,
+                &mut self.swapchain.descriptors.bg_effects[..],
+            )
+        });
+
         self.swapchain.resize_if_necessary(
             &self.base,
             &self.shaders,
@@ -84,39 +93,12 @@ impl VulkanEngine {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
 
-        let (old_bg_effect, current_bg_effect_data) = {
-            let debug = format_debug(settings, world, app, self.base.window.inner_size(), None);
-            let bg_effects_names: Vec<&str> = self
-                .swapchain
-                .descriptors
-                .bg_effects
-                .iter()
-                .map(|e| e.name.into_str())
-                .collect();
-            let bg_effects_names_ref = &bg_effects_names[..];
-            let old_bg_effect = self.current_bg_effect;
-            let mut current_bg_effect = self.current_bg_effect;
-            let current_bg_effect_ref = &mut current_bg_effect;
-            let mut current_bg_effect_data =
-                self.swapchain.descriptors.bg_effects[self.current_bg_effect].data;
-            let current_bg_effect_data_ref = &mut current_bg_effect_data;
-            self.draw_imgui(
-                current_frame.cmd_pool,
-                current_frame.cmd_buf,
-                *swapchain_image_view,
-                move |ctx| {
-                    ui(
-                        ctx,
-                        debug.as_str(),
-                        bg_effects_names_ref,
-                        current_bg_effect_ref,
-                        current_bg_effect_data_ref,
-                    )
-                },
-            );
-            self.current_bg_effect = current_bg_effect;
-            (old_bg_effect, current_bg_effect_data)
-        };
+        self.draw_gui(
+            current_frame.cmd_pool,
+            current_frame.cmd_buf,
+            *swapchain_image_view,
+            generated_ui,
+        );
 
         current_frame.transition_image(
             *swapchain_image,
@@ -128,9 +110,9 @@ impl VulkanEngine {
         self.swapchain
             .present(swapchain_img_index, &sem_render, self.commands.queue);
 
-        self.swapchain.descriptors.bg_effects[old_bg_effect].data = current_bg_effect_data;
-
         self.commands.frame_number += 1;
+
+        // todo!("move bg_effects state out of swapchain (resize)");
     }
 
     pub fn new(window: Rc<Window>) -> Self {
@@ -165,12 +147,12 @@ impl VulkanEngine {
         self.gui.on_mouse_motion(delta);
     }
 
-    fn draw_imgui(
+    fn draw_gui(
         &self,
         cmd_pool: vk::CommandPool,
         cmd_buf: vk::CommandBuffer,
         target_img_view: vk::ImageView,
-        ui: impl FnMut(&egui::Context),
+        generated_ui: GeneratedUi,
     ) {
         let color_attachments = [attachment_info(
             target_img_view,
@@ -192,7 +174,7 @@ impl VulkanEngine {
             self.swapchain.draw_extent(),
             cmd_pool,
             cmd_buf,
-            ui,
+            generated_ui,
         );
 
         unsafe {
@@ -244,10 +226,9 @@ fn rendering_info<'a>(
 
 fn ui(
     ctx: &egui::Context,
-    debug: &str,
-    bg_effects_names: &[&str],
+    debug: String,
     current_bg_effect: &mut usize,
-    current_bg_effect_data: &mut ComputePushConstants,
+    bg_effects: &mut [ComputeEffect],
 ) {
     egui::Window::new("debug").show(&ctx, |ui| ui.label(debug));
     egui::Window::new("test").show(&ctx, |ui| {
@@ -265,12 +246,13 @@ fn ui(
         });
     });
     egui::Window::new("Background").show(&ctx, |ui| {
-        if bg_effects_names.len() > 0 {
+        if bg_effects.len() > 0 {
             ui.label("Selected effect :");
-            bg_effects_names.iter().enumerate().for_each(|(i, n)| {
-                ui.radio_value(current_bg_effect, i, *n);
+            bg_effects.iter().enumerate().for_each(|(i, n)| {
+                ui.radio_value(current_bg_effect, i, n.name.into_str());
             });
 
+            let current_bg_effect_data = &mut bg_effects[*current_bg_effect].data;
             egui::Grid::new("data").num_columns(5).show(ui, |ui| {
                 ui.label("Data 0");
                 current_bg_effect_data.data0.iter_mut().for_each(|d| {

@@ -1,13 +1,15 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use ash::vk;
-use egui::{FontData, FontDefinitions, FontFamily, TextureId};
+use egui::{FontData, FontDefinitions, FontFamily, TextureId, TexturesDelta, epaint::ClippedShape};
 use egui_ash_renderer::{DynamicRendering, Options, Renderer};
 use winit::{event::WindowEvent, window::Window};
 
 use crate::font::{FONT, FONT_NAME};
 
 use super::{vulkan_base::VulkanBase, vulkan_commands::FRAME_OVERLAP};
+
+pub struct GeneratedUi(Vec<ClippedShape>, TexturesDelta, f32);
 
 pub struct VulkanGui {
     inner: RefCell<VulkanGuiMutable>,
@@ -32,16 +34,21 @@ impl VulkanGui {
         }
     }
 
+    pub fn generate(&mut self, ui: impl FnMut(&egui::Context)) -> GeneratedUi {
+        let mut inner = self.inner.borrow_mut();
+        inner.generate(ui)
+    }
+
     pub fn draw(
         &self,
         queue: vk::Queue,
         extent: vk::Extent2D,
         cmd_pool: vk::CommandPool,
         cmd_buf: vk::CommandBuffer,
-        ui: impl FnMut(&egui::Context),
+        generated_ui: GeneratedUi,
     ) {
         let mut inner = self.inner.borrow_mut();
-        inner.draw(queue, extent, cmd_pool, cmd_buf, ui);
+        inner.draw(queue, extent, cmd_pool, cmd_buf, generated_ui);
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
@@ -104,14 +111,7 @@ impl VulkanGuiMutable {
         }
     }
 
-    pub fn draw(
-        &mut self,
-        queue: vk::Queue,
-        extent: vk::Extent2D,
-        cmd_pool: vk::CommandPool,
-        cmd_buf: vk::CommandBuffer,
-        ui: impl FnMut(&egui::Context),
-    ) {
+    pub fn generate(&mut self, ui: impl FnMut(&egui::Context)) -> GeneratedUi {
         egui_winit::update_viewport_info(
             &mut self.info,
             self.state.egui_ctx(),
@@ -143,6 +143,17 @@ impl VulkanGuiMutable {
         self.state
             .handle_platform_output(&self.window, platform_output);
 
+        GeneratedUi(shapes, textures_delta, pixels_per_point)
+    }
+
+    pub fn draw(
+        &mut self,
+        queue: vk::Queue,
+        extent: vk::Extent2D,
+        cmd_pool: vk::CommandPool,
+        cmd_buf: vk::CommandBuffer,
+        GeneratedUi(shapes, textures_delta, pixels_per_point): GeneratedUi,
+    ) {
         if !textures_delta.free.is_empty() {
             self.textures_to_free = Some(textures_delta.free.clone());
         }
