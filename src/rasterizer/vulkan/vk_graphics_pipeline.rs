@@ -2,6 +2,8 @@ use std::rc::Rc;
 
 use ash::{Device, vk};
 
+use super::vulkan_shaders::{ShaderName, VulkanShaders};
+
 #[derive(Default, Debug, Clone)]
 pub struct PipelineBuilder<'a> {
     shader_stages: Vec<vk::PipelineShaderStageCreateInfo<'a>>,
@@ -13,7 +15,7 @@ pub struct PipelineBuilder<'a> {
     pipeline_layout: vk::PipelineLayout,
     depth_stencil: vk::PipelineDepthStencilStateCreateInfo<'a>,
     render_info: vk::PipelineRenderingCreateInfo<'a>,
-    color_attachment_formats: [vk::Format; 1],
+    // color_attachment_formats: [vk::Format; 1],
 }
 
 impl<'a> PipelineBuilder<'a> {
@@ -106,11 +108,9 @@ impl<'a> PipelineBuilder<'a> {
             .blend_enable(false);
     }
 
-    pub fn set_color_attachment_format(&'a mut self, format: vk::Format) {
-        self.color_attachment_formats = [format];
-        self.render_info = self
-            .render_info
-            .color_attachment_formats(&self.color_attachment_formats[..]);
+    pub fn set_color_attachment_format(&mut self, formats: &'a [vk::Format; 1]) {
+        // self.color_attachment_formats = *formats;
+        self.render_info = self.render_info.color_attachment_formats(&formats[..]);
     }
 
     pub fn set_depth_format(&mut self, format: vk::Format) {
@@ -132,12 +132,38 @@ impl<'a> PipelineBuilder<'a> {
 
 pub struct VkGraphicsPipeline {
     device_copy: Rc<Device>,
+    pub pipeline: vk::Pipeline,
+    pipeline_layout: vk::PipelineLayout,
 }
 
 impl VkGraphicsPipeline {
-    pub fn new(device: Rc<Device>) -> Self {
+    pub fn new(shaders: &VulkanShaders, device: Rc<Device>, draw_format: vk::Format) -> Self {
+        let create_info = vk::PipelineLayoutCreateInfo::default();
+        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
+        let vertex_shader = shaders.get(ShaderName::ColoredTriangleVert);
+        let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
+
+        let mut builder = PipelineBuilder {
+            pipeline_layout,
+            ..Default::default()
+        };
+        builder.set_shaders(vertex_shader, fragment_shader);
+        builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+        builder.set_polygon_mode(vk::PolygonMode::FILL);
+        builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
+        builder.set_multisampling_none();
+        builder.disable_blending();
+        builder.disable_depthtest();
+        let formats = [draw_format];
+        builder.set_color_attachment_format(&formats);
+        builder.set_depth_format(vk::Format::UNDEFINED);
+
+        let pipeline = builder.clone().build(&device);
+
         Self {
             device_copy: device,
+            pipeline,
+            pipeline_layout,
         }
     }
 }
@@ -147,6 +173,9 @@ impl Drop for VkGraphicsPipeline {
         println!("drop VkGraphicsPipeline");
         unsafe {
             self.device_copy.device_wait_idle().unwrap();
+            self.device_copy.destroy_pipeline(self.pipeline, None);
+            self.device_copy
+                .destroy_pipeline_layout(self.pipeline_layout, None);
         }
     }
 }

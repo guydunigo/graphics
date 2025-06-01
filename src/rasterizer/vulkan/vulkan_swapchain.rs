@@ -202,6 +202,10 @@ impl VulkanSwapchain {
         &self.draw_img.img
     }
 
+    pub fn draw_img_view(&self) -> &vk::ImageView {
+        &self.draw_img.img_view
+    }
+
     pub fn draw_format(&self) -> &vk::Format {
         &self.draw_img.format
     }

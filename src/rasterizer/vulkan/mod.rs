@@ -19,7 +19,7 @@ mod vulkan_commands;
 use vulkan_commands::VulkanCommands;
 mod vulkan_descriptors;
 mod vulkan_gui;
-use vulkan_gui::{GeneratedUi, VulkanGui};
+use vulkan_gui::VulkanGui;
 mod vulkan_shaders;
 use vulkan_shaders::VulkanShaders;
 mod vk_graphics_pipeline;
@@ -65,7 +65,11 @@ impl VulkanEngine {
             .collect();
 
         Self {
-            graphics_pipeline: VkGraphicsPipeline::new(base.device.clone()),
+            graphics_pipeline: VkGraphicsPipeline::new(
+                &shaders,
+                base.device.clone(),
+                *swapchain.draw_format(),
+            ),
             gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
             commands: VulkanCommands::new(&base, allocator),
             swapchain,
@@ -109,6 +113,7 @@ impl VulkanEngine {
 
         current_frame.wait_for_fences();
         current_frame.begin_cmd_buf();
+
         current_frame.transition_image(
             *image,
             vk::ImageLayout::UNDEFINED,
@@ -121,12 +126,33 @@ impl VulkanEngine {
             &self.bg_effects_data[self.current_bg_effect],
         );
 
+        current_frame.transition_image(
+            *image,
+            vk::ImageLayout::GENERAL,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        );
+
+        // current_frame.draw_geometry(&self.swapchain, self.graphics_pipeline.pipeline);
+        current_frame.draw_geometry(&self.swapchain, self.graphics_pipeline.pipeline);
+
         let (swapchain_img_index, swapchain_image, sem_render, swapchain_image_view) =
             self.swapchain.acquire_next_image(current_frame);
-        current_frame.copy_img_swapchain(
+
+        current_frame.transition_image(
             *image,
-            self.swapchain.draw_extent(),
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        );
+        current_frame.transition_image(
             *swapchain_image,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        );
+
+        current_frame.copy_img(
+            *image,
+            *swapchain_image,
+            self.swapchain.draw_extent(),
             self.swapchain.swapchain_extent,
         );
 
@@ -136,9 +162,10 @@ impl VulkanEngine {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
 
-        self.draw_gui(
-            current_frame.cmd_pool,
-            current_frame.cmd_buf,
+        current_frame.draw_gui(
+            &self.swapchain,
+            &self.gui,
+            self.commands.queue,
             *swapchain_image_view,
             generated_ui,
         );
@@ -163,83 +190,12 @@ impl VulkanEngine {
     pub fn on_mouse_motion(&mut self, delta: (f64, f64)) {
         self.gui.on_mouse_motion(delta);
     }
-
-    fn draw_gui(
-        &self,
-        cmd_pool: vk::CommandPool,
-        cmd_buf: vk::CommandBuffer,
-        target_img_view: vk::ImageView,
-        generated_ui: GeneratedUi,
-    ) {
-        let color_attachments = [attachment_info(
-            target_img_view,
-            None,
-            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-        )];
-        let render_info = rendering_info(
-            self.swapchain.swapchain_extent,
-            &color_attachments[..],
-            None,
-        );
-
-        unsafe {
-            self.base.device.cmd_begin_rendering(cmd_buf, &render_info);
-        }
-
-        self.gui.draw(
-            self.commands.queue,
-            self.swapchain.draw_extent(),
-            cmd_pool,
-            cmd_buf,
-            generated_ui,
-        );
-
-        unsafe {
-            self.base.device.cmd_end_rendering(cmd_buf);
-        }
-    }
 }
 
-fn attachment_info<'a>(
-    view: vk::ImageView,
-    clear: Option<vk::ClearValue>,
-    layout: vk::ImageLayout,
-) -> vk::RenderingAttachmentInfo<'a> {
-    let load_op = clear
-        .map(|_| vk::AttachmentLoadOp::CLEAR)
-        .unwrap_or(vk::AttachmentLoadOp::LOAD);
-    let mut res = vk::RenderingAttachmentInfo::default()
-        .image_view(view)
-        .image_layout(layout)
-        .load_op(load_op)
-        .store_op(vk::AttachmentStoreOp::STORE);
-
-    if let Some(clear) = clear {
-        res.clear_value = clear;
-    }
-
-    res
-}
-
-fn rendering_info<'a>(
-    extent: vk::Extent2D,
-    color_attachments: &'a [vk::RenderingAttachmentInfo],
-    depth_attachment: Option<&'a vk::RenderingAttachmentInfo>,
-) -> vk::RenderingInfo<'a> {
-    let res = vk::RenderingInfo::default()
-        .render_area(vk::Rect2D {
-            offset: Default::default(),
-            extent,
-        })
-        .layer_count(1)
-        .color_attachments(color_attachments);
-
-    if let Some(depth_attachment) = depth_attachment {
-        res.depth_attachment(depth_attachment)
-    } else {
-        res
-    }
-}
+// Converts rgba a u32 (4*[0,255]) to (4*[0.,1.])
+// fn rgba_u32_to_f32(color: egui::Color32) -> [f32; 4] {
+//     egui::Rgba::from(color).to_array()
+// }
 
 fn ui(
     ctx: &egui::Context,
@@ -298,8 +254,3 @@ fn ui(
         }
     });
 }
-
-// Converts rgba a u32 (4*[0,255]) to (4*[0.,1.])
-// fn rgba_u32_to_f32(color: egui::Color32) -> [f32; 4] {
-//     egui::Rgba::from(color).to_array()
-// }

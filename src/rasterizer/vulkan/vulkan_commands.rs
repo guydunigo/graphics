@@ -6,7 +6,9 @@ use std::{
 use ash::{Device, vk};
 
 use super::{
-    vulkan_base::VulkanBase, vulkan_descriptors::ComputePushConstants,
+    vulkan_base::VulkanBase,
+    vulkan_descriptors::ComputePushConstants,
+    vulkan_gui::{GeneratedUi, VulkanGui},
     vulkan_swapchain::VulkanSwapchain,
 };
 
@@ -134,7 +136,7 @@ impl FrameData {
         };
     }
 
-    fn copy_img(
+    pub fn copy_img(
         &self,
         src: vk::Image,
         dst: vk::Image,
@@ -171,28 +173,6 @@ impl FrameData {
             .regions(&blit_regions);
 
         unsafe { self.device_copy.cmd_blit_image2(self.cmd_buf, &blit_info) };
-    }
-
-    /// draw_image must be in [`vk::ImageLayout::GENERAL`] and ends in [`vk::ImageLayout::TRANSFER_SRC_OPTIMAL`]
-    /// swapchain_image ends in [`vk::ImageLayout::TRANSFER_DST_OPTIMAL`]
-    pub fn copy_img_swapchain(
-        &self,
-        draw_image: vk::Image,
-        draw_extent: vk::Extent2D,
-        swapchain_image: vk::Image,
-        swapchain_extent: vk::Extent2D,
-    ) {
-        self.transition_image(
-            draw_image,
-            vk::ImageLayout::GENERAL,
-            vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-        );
-        self.transition_image(
-            swapchain_image,
-            vk::ImageLayout::UNDEFINED,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        );
-        self.copy_img(draw_image, swapchain_image, draw_extent, swapchain_extent);
     }
 
     // pub fn draw_background_simple(&self, image: vk::Image, frame_number: usize) {
@@ -248,6 +228,79 @@ impl FrameData {
                 (draw_extent.width as f32 / 16.).ceil() as u32,
                 1,
             );
+        }
+    }
+
+    pub fn draw_gui(
+        &self,
+        swapchain: &VulkanSwapchain,
+        gui: &VulkanGui,
+        commands_queue: vk::Queue,
+        target_img_view: vk::ImageView,
+        generated_ui: GeneratedUi,
+    ) {
+        // todo!("To vulkan_commands ?");
+        let color_attachments = [attachment_info(
+            target_img_view,
+            None,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        )];
+        let render_info = rendering_info(swapchain.swapchain_extent, &color_attachments[..], None);
+
+        unsafe {
+            self.device_copy
+                .cmd_begin_rendering(self.cmd_buf, &render_info);
+        }
+
+        gui.draw(
+            commands_queue,
+            swapchain.draw_extent(),
+            self.cmd_pool,
+            self.cmd_buf,
+            generated_ui,
+        );
+
+        unsafe {
+            self.device_copy.cmd_end_rendering(self.cmd_buf);
+        }
+    }
+
+    pub fn draw_geometry(&self, swapchain: &VulkanSwapchain, triangle_pipeline: vk::Pipeline) {
+        let color_attachments = [attachment_info(
+            *swapchain.draw_img_view(),
+            None,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        )];
+        let render_info = rendering_info(swapchain.swapchain_extent, &color_attachments[..], None);
+
+        unsafe {
+            self.device_copy
+                .cmd_begin_rendering(self.cmd_buf, &render_info);
+            self.device_copy.cmd_bind_pipeline(
+                self.cmd_buf,
+                vk::PipelineBindPoint::GRAPHICS,
+                triangle_pipeline,
+            );
+        }
+
+        let draw_extent = swapchain.draw_extent();
+        let viewports = [vk::Viewport::default()
+            .width(draw_extent.width as f32)
+            .height(draw_extent.height as f32)
+            .min_depth(0.)
+            .max_depth(1.)];
+
+        unsafe {
+            self.device_copy
+                .cmd_set_viewport(self.cmd_buf, 0, &viewports[..]);
+        }
+
+        let scissors = [vk::Rect2D::default().extent(draw_extent)];
+        unsafe {
+            self.device_copy
+                .cmd_set_scissor(self.cmd_buf, 0, &scissors[..]);
+            self.device_copy.cmd_draw(self.cmd_buf, 3, 1, 0, 0);
+            self.device_copy.cmd_end_rendering(self.cmd_buf);
         }
     }
 }
@@ -398,4 +451,45 @@ fn image_subresource_range(aspect_mask: vk::ImageAspectFlags) -> vk::ImageSubres
         .level_count(vk::REMAINING_MIP_LEVELS)
         .base_array_layer(0)
         .layer_count(vk::REMAINING_ARRAY_LAYERS)
+}
+
+fn attachment_info<'a>(
+    view: vk::ImageView,
+    clear: Option<vk::ClearValue>,
+    layout: vk::ImageLayout,
+) -> vk::RenderingAttachmentInfo<'a> {
+    let load_op = clear
+        .map(|_| vk::AttachmentLoadOp::CLEAR)
+        .unwrap_or(vk::AttachmentLoadOp::LOAD);
+    let mut res = vk::RenderingAttachmentInfo::default()
+        .image_view(view)
+        .image_layout(layout)
+        .load_op(load_op)
+        .store_op(vk::AttachmentStoreOp::STORE);
+
+    if let Some(clear) = clear {
+        res.clear_value = clear;
+    }
+
+    res
+}
+
+fn rendering_info<'a>(
+    extent: vk::Extent2D,
+    color_attachments: &'a [vk::RenderingAttachmentInfo],
+    depth_attachment: Option<&'a vk::RenderingAttachmentInfo>,
+) -> vk::RenderingInfo<'a> {
+    let res = vk::RenderingInfo::default()
+        .render_area(vk::Rect2D {
+            offset: Default::default(),
+            extent,
+        })
+        .layer_count(1)
+        .color_attachments(color_attachments);
+
+    if let Some(depth_attachment) = depth_attachment {
+        res.depth_attachment(depth_attachment)
+    } else {
+        res
+    }
 }
