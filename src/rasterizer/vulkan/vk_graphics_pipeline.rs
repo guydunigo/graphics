@@ -1,6 +1,12 @@
-use std::rc::Rc;
+use std::{
+    mem,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
-use ash::{Device, vk};
+use ash::{Device, util, vk};
+use glam::{Mat4, Vec3, Vec4};
+use vk_mem::Alloc;
 
 use super::vulkan_shaders::{ShaderName, VulkanShaders};
 
@@ -181,36 +187,165 @@ impl Drop for VkGraphicsPipeline {
 }
 
 struct AllocatedBuffer {
-    device_copy: Rc<Device>,
+    allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
     buffer: vk::Buffer,
     allocation: vk_mem::Allocation,
     info: vk_mem::AllocationInfo,
 }
 
-impl Drop for AllocatedBuffer {
-    fn drop(&mut self) {
-        println!("drop VkGraphicsPipeline");
-        unsafe {
-            // TODO: useful or cause perf problems if used everywhere :
-            self.device_copy.device_wait_idle().unwrap();
-            self.device_copy.destroy_buffer(self.buffer, None);
-            todo!("allocation + info ?");
-        }
-    }
+pub enum MyMemoryUsage {
+    GpuOnly,
+    StagingUpload,
 }
 
 impl AllocatedBuffer {
     pub fn new(
-        device: Rc<Device>,
-        alloc_size: usize,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        alloc_size: u64,
         usage: vk::BufferUsageFlags,
-        memory_usage: vk_mem::MemoryUsage,
+        memory_usage: MyMemoryUsage,
     ) -> Self {
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(alloc_size)
+            .usage(usage);
+
+        // TODO: check https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
+
+        let mut alloc_info = vk_mem::AllocationCreateInfo::default();
+        // GPU_ONLY deprecated
+        alloc_info.usage = vk_mem::MemoryUsage::Auto;
+        // When using MemoryUsage::Auto + MAPPED, needs one of :
+        // #VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+        // or #VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
+        // TODO: used if only GPU ?
+        alloc_info.flags = vk_mem::AllocationCreateFlags::MAPPED;
+
+        match memory_usage {
+            MyMemoryUsage::GpuOnly => {
+                // TODO: or usage : AutoPreferDevice ?
+                alloc_info.required_flags = vk::MemoryPropertyFlags::DEVICE_LOCAL;
+                // TODO: Consider using vk_mem::AllocationCreateFlags::DEDICATED_MEMORY, especially if
+                // large
+            }
+            MyMemoryUsage::StagingUpload => {
+                alloc_info.flags |= vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE;
+                // TODO: requires memcpy and no random access (no mapped_data[i] = ...) !
+            }
+        }
+
+        let (buffer, allocation, info) = {
+            let allocator = allocator.lock().unwrap();
+            unsafe {
+                let (buffer, allocation) =
+                    allocator.create_buffer(&buffer_info, &alloc_info).unwrap();
+                let info = allocator.get_allocation_info(&allocation);
+                (buffer, allocation, dbg!(info))
+            }
+        };
+
         Self {
-            device_copy: device,
-            buffer: todo!(),
-            allocation: todo!(),
-            info: todo!(),
+            allocator_copy: allocator,
+            buffer,
+            allocation,
+            info,
+        }
+    }
+}
+
+impl Drop for AllocatedBuffer {
+    fn drop(&mut self) {
+        println!("drop AllocatedBuffer");
+        unsafe {
+            self.allocator_copy
+                .lock()
+                .unwrap()
+                .destroy_buffer(self.buffer, &mut self.allocation);
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy)]
+struct Vertex {
+    position: Vec3,
+    uv_x: f32,
+    normal: Vec3,
+    uv_y: f32,
+    color: Vec4,
+}
+
+impl Vertex {}
+
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy)]
+struct GpuDrawPushConstants {
+    world_mat: Mat4,
+    vertex_buffer: vk::DeviceAddress,
+}
+
+struct GpuMeshBuffers {
+    index_buffer: AllocatedBuffer,
+    vertex_buffer: AllocatedBuffer,
+    vertex_buffer_address: vk::DeviceAddress,
+}
+
+impl GpuMeshBuffers {
+    fn new(
+        device: Rc<Device>,
+        allocator: Arc<std::sync::Mutex<vk_mem::Allocator>>,
+        indices: &[u32],
+        vertices: &[Vertex],
+    ) -> Self {
+        dbg!(size_of::<Vertex>());
+        dbg!(size_of::<u32>());
+        assert_eq!(size_of_val(vertices), vertices.len() * size_of::<Vertex>());
+        assert_eq!(size_of_val(indices), indices.len() * size_of::<u32>());
+
+        let vertex_buffer_size = dbg!(size_of_val(vertices) as u64);
+        let index_buffer_size = dbg!(size_of_val(indices) as u64);
+
+        let vertex_buffer = AllocatedBuffer::new(
+            allocator.clone(),
+            vertex_buffer_size,
+            vk::BufferUsageFlags::STORAGE_BUFFER
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | vk::BufferUsageFlags::SHADER_DEVICE_ADDRESS,
+            MyMemoryUsage::GpuOnly,
+        );
+
+        let device_address_info =
+            vk::BufferDeviceAddressInfo::default().buffer(vertex_buffer.buffer);
+        let vertex_buffer_address =
+            unsafe { device.get_buffer_device_address(&device_address_info) };
+
+        let index_buffer = AllocatedBuffer::new(
+            allocator.clone(),
+            index_buffer_size,
+            vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+            MyMemoryUsage::GpuOnly,
+        );
+
+        // TODO: check https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
+        // esp Advanced data uploading for APU without staging and stuff...
+
+        let staging = AllocatedBuffer::new(
+            allocator.clone(),
+            vertex_buffer_size + index_buffer_size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            MyMemoryUsage::StagingUpload,
+        );
+
+        // TODO: use Align like in egui ?
+        // file:///home/gguy/trash/build_dirs/graphics/doc/ash/util/struct.Align.html#method.copy_from_slice ?
+        // let data = staging.info.mapped_data;
+        // unsafe {
+        //     let data_ptr = util::Align::new(staging.info.mapped_data, alignment, size)
+        // }
+
+        Self {
+            index_buffer,
+            vertex_buffer,
+            vertex_buffer_address,
         }
     }
 }

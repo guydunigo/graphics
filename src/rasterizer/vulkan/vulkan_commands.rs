@@ -28,6 +28,7 @@ impl Drop for FrameData {
     fn drop(&mut self) {
         println!("drop FrameData");
         unsafe {
+            // TODO: useful or cause perf problems if used everywhere :
             self.device_copy.device_wait_idle().unwrap();
             self.device_copy.destroy_command_pool(self.cmd_pool, None);
             self.device_copy.destroy_fence(self.fence_render, None);

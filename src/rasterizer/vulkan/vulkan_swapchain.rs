@@ -308,6 +308,7 @@ impl AllocatedImage {
         let rimg_info = image_create_info(format, draw_img_usages, extent);
         let mut rimg_allocinfo = vk_mem::AllocationCreateInfo::default();
         {
+            // Example : https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
             // Prefered to GpuOnly (deprecated)
             rimg_allocinfo.usage = vk_mem::MemoryUsage::Auto;
             rimg_allocinfo.flags = vk_mem::AllocationCreateFlags::DEDICATED_MEMORY;

@@ -1,4 +1,8 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use ash::vk;
 use egui::{FontData, FontDefinitions, FontFamily, TextureId, TexturesDelta, epaint::ClippedShape};
@@ -26,7 +30,7 @@ struct VulkanGuiMutable {
 impl VulkanGui {
     pub fn new(
         base: &VulkanBase,
-        allocator: Arc<std::sync::Mutex<vk_mem::Allocator>>,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
         format: vk::Format,
     ) -> Self {
         Self {
