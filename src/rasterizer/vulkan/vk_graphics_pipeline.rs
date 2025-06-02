@@ -179,3 +179,38 @@ impl Drop for VkGraphicsPipeline {
         }
     }
 }
+
+struct AllocatedBuffer {
+    device_copy: Rc<Device>,
+    buffer: vk::Buffer,
+    allocation: vk_mem::Allocation,
+    info: vk_mem::AllocationInfo,
+}
+
+impl Drop for AllocatedBuffer {
+    fn drop(&mut self) {
+        println!("drop VkGraphicsPipeline");
+        unsafe {
+            // TODO: useful or cause perf problems if used everywhere :
+            self.device_copy.device_wait_idle().unwrap();
+            self.device_copy.destroy_buffer(self.buffer, None);
+            todo!("allocation + info ?");
+        }
+    }
+}
+
+impl AllocatedBuffer {
+    pub fn new(
+        device: Rc<Device>,
+        alloc_size: usize,
+        usage: vk::BufferUsageFlags,
+        memory_usage: vk_mem::MemoryUsage,
+    ) -> Self {
+        Self {
+            device_copy: device,
+            buffer: todo!(),
+            allocation: todo!(),
+            info: todo!(),
+        }
+    }
+}
