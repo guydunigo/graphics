@@ -1,50 +1,13 @@
-use std::{cell::RefCell, collections::HashMap, fs::File, io::Read, path::PathBuf, rc::Rc};
+use std::{fs::File, io::Read, path::PathBuf, rc::Rc};
 
 use ash::{Device, vk};
-
-#[cfg(feature = "naga")]
-use naga::{back::spv, front::glsl, valid::Validator};
+use shaderc::{CompilationArtifact, CompileOptions, Compiler, ShaderKind};
 
 const SHADER_FOLDER: &str = "./resources/";
 const SHADER_EXT: &str = "glsl";
 
 // TODO: shaders can be destroyed once pipeline is created, should we keep them ? or just keep
 // compiled code ?
-
-#[allow(dead_code)]
-enum ShaderStage {
-    Task,
-    Mesh,
-    Vertex,
-    Compute,
-    Fragment,
-}
-
-#[cfg(feature = "naga")]
-impl Into<naga::ShaderStage> for ShaderStage {
-    fn into(self) -> naga::ShaderStage {
-        match self {
-            ShaderStage::Task => naga::ShaderStage::Task,
-            ShaderStage::Mesh => naga::ShaderStage::Mesh,
-            ShaderStage::Vertex => naga::ShaderStage::Vertex,
-            ShaderStage::Compute => naga::ShaderStage::Compute,
-            ShaderStage::Fragment => naga::ShaderStage::Fragment,
-        }
-    }
-}
-
-#[cfg(not(feature = "naga"))]
-impl Into<shaderc::ShaderKind> for ShaderStage {
-    fn into(self) -> shaderc::ShaderKind {
-        match self {
-            ShaderStage::Task => shaderc::ShaderKind::Task,
-            ShaderStage::Mesh => shaderc::ShaderKind::Mesh,
-            ShaderStage::Vertex => shaderc::ShaderKind::Vertex,
-            ShaderStage::Compute => shaderc::ShaderKind::Compute,
-            ShaderStage::Fragment => shaderc::ShaderKind::Fragment,
-        }
-    }
-}
 
 #[allow(dead_code)]
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
@@ -77,10 +40,10 @@ impl Into<&str> for ShaderName {
     }
 }
 
-impl Into<ShaderStage> for ShaderName {
-    fn into(self) -> ShaderStage {
+impl Into<ShaderKind> for ShaderName {
+    fn into(self) -> ShaderKind {
+        use ShaderKind::*;
         use ShaderName::*;
-        use ShaderStage::*;
 
         match self {
             Gradient | ParametrableGradient | Sky => Compute,
@@ -95,9 +58,9 @@ impl Into<PathBuf> for ShaderName {
     fn into(self) -> PathBuf {
         let name: &str = self.into();
         let stage = match self.into() {
-            ShaderStage::Compute => "comp",
-            ShaderStage::Vertex => "vert",
-            ShaderStage::Fragment => "frag",
+            ShaderKind::Compute => "comp",
+            ShaderKind::Vertex => "vert",
+            ShaderKind::Fragment => "frag",
             _ => unimplemented!(),
         };
         let mut path = PathBuf::from(SHADER_FOLDER);
@@ -106,118 +69,99 @@ impl Into<PathBuf> for ShaderName {
     }
 }
 
-pub struct VulkanShaders {
-    inner: RefCell<VulkanShadersMutable>,
-}
-
-impl VulkanShaders {
-    pub fn new(device: Rc<Device>) -> Self {
-        Self {
-            inner: RefCell::new(VulkanShadersMutable {
-                device_copy: device,
-                #[cfg(feature = "naga")]
-                glsl_parser: glsl::Frontend::default(),
-                #[cfg(feature = "naga")]
-                validator: naga::valid::Validator::new(
-                    naga::valid::ValidationFlags::all(),
-                    naga::valid::Capabilities::all(),
-                ),
-                #[cfg(not(feature = "naga"))]
-                compiler: shaderc::Compiler::new().unwrap(),
-
-                shaders: Default::default(),
-            }),
-        }
-    }
-
-    pub fn get(&self, name: ShaderName) -> vk::ShaderModule {
-        let mut inner = self.inner.borrow_mut();
-        *inner.get(name)
-    }
-}
-
-struct VulkanShadersMutable {
+pub struct ShaderModule {
     device_copy: Rc<Device>,
-
-    #[cfg(feature = "naga")]
-    glsl_parser: glsl::Frontend,
-    #[cfg(feature = "naga")]
-    validator: Validator,
-    #[cfg(not(feature = "naga"))]
-    compiler: shaderc::Compiler,
-
-    shaders: HashMap<ShaderName, vk::ShaderModule>,
+    name: ShaderName,
+    module: vk::ShaderModule,
 }
 
-impl VulkanShadersMutable {
-    pub fn get(&mut self, name: ShaderName) -> &vk::ShaderModule {
-        if self.shaders.contains_key(&name) {
-            self.shaders.get(&name).unwrap()
-        } else {
-            let module = self.load_shader_module(name);
-            self.shaders.entry(name).or_insert(module)
-        }
+impl ShaderModule {
+    /// ShaderModule takes care of destroying the vk::ShaderModule on drop.
+    /// So it **must** outlive this object, even if you copy it.
+    pub fn module_copy(&self) -> vk::ShaderModule {
+        self.module
     }
 
-    fn load_shader_module(&mut self, name: ShaderName) -> vk::ShaderModule {
+    pub fn load(device: Rc<Device>, compiler: &Compiler, name: ShaderName) -> Self {
         let path: PathBuf = name.into();
 
         let mut glsl = String::new();
         File::open(path).unwrap().read_to_string(&mut glsl).unwrap();
 
-        #[cfg(feature = "naga")]
-        let spirv = self.compile_glsl_to_spirv(&glsl, name.into());
-        #[cfg(feature = "naga")]
-        let create_info = vk::ShaderModuleCreateInfo::default().code(&spirv[..]);
-        #[cfg(not(feature = "naga"))]
-        let spirv = self.compile_glsl_to_spirv(name, &glsl);
-        #[cfg(not(feature = "naga"))]
+        let spirv = Self::compile_glsl_to_spirv(compiler, name, &glsl);
         let create_info = vk::ShaderModuleCreateInfo::default().code(spirv.as_binary());
 
-        unsafe {
-            self.device_copy
-                .create_shader_module(&create_info, None)
-                .unwrap()
+        let module = unsafe { device.create_shader_module(&create_info, None).unwrap() };
+
+        Self {
+            device_copy: device,
+            name,
+            module,
         }
     }
 
-    #[cfg(feature = "naga")]
-    fn compile_glsl_to_spirv(&mut self, glsl: &str, stage: ShaderStage) -> Vec<u32> {
-        let module = {
-            let stage: naga::ShaderStage = stage.into();
-            let options = glsl::Options::from(stage);
-            self.glsl_parser.parse(&options, &glsl).unwrap()
-        };
-
-        let module_info: naga::valid::ModuleInfo = self
-            .validator
-            .subgroup_stages(naga::valid::ShaderStages::all())
-            .subgroup_operations(naga::valid::SubgroupOperationSet::all())
-            .validate(&module)
-            .unwrap();
-
-        let options = spv::Options::default();
-        spv::write_vec(&module, &module_info, &options, None).unwrap()
-    }
-
-    #[cfg(not(feature = "naga"))]
-    fn compile_glsl_to_spirv(&self, name: ShaderName, glsl: &str) -> shaderc::CompilationArtifact {
-        let mut options = shaderc::CompileOptions::new().unwrap();
-        options.add_macro_definition("EP", Some("main"));
-        let stage: ShaderStage = name.into();
-        self.compiler
-            .compile_into_spirv(glsl, stage.into(), name.into_str(), "main", Some(&options))
+    fn compile_glsl_to_spirv(
+        compiler: &Compiler,
+        name: ShaderName,
+        glsl: &str,
+    ) -> CompilationArtifact {
+        let options = CompileOptions::new().unwrap();
+        compiler
+            .compile_into_spirv(glsl, name.into(), name.into_str(), "main", Some(&options))
             .unwrap()
     }
 }
 
-impl Drop for VulkanShadersMutable {
+impl Drop for ShaderModule {
     fn drop(&mut self) {
-        println!("drop VulkanShaders : {} shaders", self.shaders.len());
+        let kind: ShaderKind = self.name.into();
+        println!("drop ShaderModule {:?}, kind {:?}", self.name, kind);
         unsafe {
-            self.shaders
-                .drain()
-                .for_each(|(_, module)| self.device_copy.destroy_shader_module(module, None));
+            self.device_copy.destroy_shader_module(self.module, None);
         }
     }
 }
+
+impl AsRef<vk::ShaderModule> for ShaderModule {
+    fn as_ref(&self) -> &vk::ShaderModule {
+        &self.module
+    }
+}
+
+pub struct VulkanShaders {
+    device_copy: Rc<Device>,
+    compiler: Compiler,
+    // shaders: RefCell<HashMap<ShaderName, vk::ShaderModule>>,
+}
+
+impl VulkanShaders {
+    pub fn new(device: Rc<Device>) -> Self {
+        Self {
+            device_copy: device,
+            compiler: Compiler::new().unwrap(),
+            // shaders: Default::default(),
+        }
+    }
+
+    pub fn get(&self, name: ShaderName) -> ShaderModule {
+        // let mut shaders = self.shaders.borrow_mut();
+        // if shaders.contains_key(&name) {
+        //     shaders.get(&name).unwrap()
+        // } else {
+        //     let module = self.load_shader_module(name);
+        //     shaders.entry(name).or_insert(module)
+        // }
+        ShaderModule::load(self.device_copy.clone(), &self.compiler, name)
+    }
+}
+
+// impl Drop for VulkanShaders {
+//     fn drop(&mut self) {
+//         println!("drop VulkanShaders : {} shaders", shaders.len());
+//         unsafe {
+//             shaders
+//                 .drain()
+//                 .for_each(|(_, module)| self.device_copy.destroy_shader_module(module, None));
+//         }
+//     }
+// }

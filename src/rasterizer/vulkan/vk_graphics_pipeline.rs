@@ -44,8 +44,6 @@ impl<'a> PipelineBuilder<'a> {
         let state = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
         let dynamic_info = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&state[..]);
 
-        dbg!(self.render_info);
-
         let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
             .push_next(&mut self.render_info)
             .stages(&self.shader_stages[..])
@@ -163,7 +161,7 @@ impl VkGraphicsPipeline {
             pipeline_layout,
             ..Default::default()
         };
-        builder.set_shaders(vertex_shader, fragment_shader);
+        builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
         builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
         builder.set_polygon_mode(vk::PolygonMode::FILL);
         builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
@@ -199,7 +197,7 @@ impl VkGraphicsPipeline {
             pipeline_layout,
             ..Default::default()
         };
-        builder.set_shaders(vertex_shader, fragment_shader);
+        builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
         builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
         builder.set_polygon_mode(vk::PolygonMode::FILL);
         builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
@@ -285,7 +283,7 @@ impl AllocatedBuffer {
                 let (buffer, allocation) =
                     allocator.create_buffer(&buffer_info, &alloc_info).unwrap();
                 let info = allocator.get_allocation_info(&allocation);
-                (buffer, allocation, dbg!(info))
+                (buffer, allocation, info)
             }
         };
 

@@ -8,18 +8,16 @@ ash = "0.38.0"
 ash-window = "0.13.0"
 egui = { version = "0.31.1" }
 egui-ash-renderer = { version = "0.8.0", features = ["vk-mem", "dynamic-rendering"] }
-# egui-ash-renderer = { path = "../egui-ash-renderer", features = ["vk-mem", "dynamic-rendering"] }
 egui-winit = { version = "0.31.1", default-features = false }
 fontdue = { version = "0.9.3", features = ["std"] }
 glam = "0.30.3"
-naga = { version = "25.0.1", features = ["glsl-in", "spv-out"], optional = true }
 obj-rs = "0.7.4"
 rand = "0.9.1"
 rayon = "1.10.0"
 softbuffer = "0.4.6"
 vk-mem = "0.4.0"
 winit = "0.30.11"
-shaderc = { version = "0.9.1", optional = true }
+shaderc = "0.9.1"
 
 [profile.dev.package."*"]
 opt-level = 3
@@ -29,7 +27,5 @@ debug = true
 
 [features]
 stats = []
-vulkan_linked = ["ash/linked"]
-# "vulkan_linked"
-# "naga" / "shaderc"
-default = ["naga"]
+vulkan_linked = ["ash/linked", "shaderc/prefer-static-linking", "vk-mem/linked"]
+# default = ["vulkan_linked"]

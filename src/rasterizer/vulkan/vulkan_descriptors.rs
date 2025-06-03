@@ -239,10 +239,11 @@ impl ComputeEffect {
         name: ShaderName,
         default_data: ComputePushConstants,
     ) -> Self {
+        let shader = shaders.get(name);
         let pipeline = {
             let stage_info = vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::COMPUTE)
-                .module(shaders.get(name))
+                .module(shader.module_copy())
                 .name(c"main");
             let compute_pipeline_create_infos = [vk::ComputePipelineCreateInfo::default()
                 .layout(pipeline_layout)

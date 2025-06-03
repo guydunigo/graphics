@@ -135,7 +135,7 @@ impl Default for App {
             last_frame_start_time: Instant::now(),
             last_frame_micros: Default::default(),
             frame_avg_micros: Default::default(),
-            fps_avg: Default::default(),
+            fps_avg: 60.,
             last_buffer_fill_micros: Default::default(),
             last_rendering_micros: Default::default(),
             last_buffer_copy_micros: Default::default(),
