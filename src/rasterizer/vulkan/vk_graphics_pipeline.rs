@@ -44,6 +44,8 @@ impl<'a> PipelineBuilder<'a> {
         let state = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
         let dynamic_info = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&state[..]);
 
+        dbg!(self.render_info);
+
         let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
             .push_next(&mut self.render_info)
             .stages(&self.shader_stages[..])

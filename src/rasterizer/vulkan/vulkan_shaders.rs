@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, fs::File, io::Read, path::PathBuf
 use ash::{Device, vk};
 
 #[cfg(feature = "naga")]
-use naga::{ShaderStage, back::spv, front::glsl, valid::Validator};
+use naga::{back::spv, front::glsl, valid::Validator};
 
 const SHADER_FOLDER: &str = "./resources/";
 const SHADER_EXT: &str = "glsl";
@@ -166,14 +166,13 @@ impl VulkanShadersMutable {
         File::open(path).unwrap().read_to_string(&mut glsl).unwrap();
 
         #[cfg(feature = "naga")]
-        let create_info = {
-            let spirv = self.compile_glsl_to_spirv(&glsl, name.into());
-            vk::ShaderModuleCreateInfo::default().code(&spirv[..])
-        };
+        let spirv = self.compile_glsl_to_spirv(&glsl, name.into());
+        #[cfg(feature = "naga")]
+        let create_info = vk::ShaderModuleCreateInfo::default().code(&spirv[..]);
         #[cfg(not(feature = "naga"))]
         let spirv = self.compile_glsl_to_spirv(name, &glsl);
         #[cfg(not(feature = "naga"))]
-        let create_info = { vk::ShaderModuleCreateInfo::default().code(spirv.as_binary()) };
+        let create_info = vk::ShaderModuleCreateInfo::default().code(spirv.as_binary());
 
         unsafe {
             self.device_copy
@@ -185,6 +184,7 @@ impl VulkanShadersMutable {
     #[cfg(feature = "naga")]
     fn compile_glsl_to_spirv(&mut self, glsl: &str, stage: ShaderStage) -> Vec<u32> {
         let module = {
+            let stage: naga::ShaderStage = stage.into();
             let options = glsl::Options::from(stage);
             self.glsl_parser.parse(&options, &glsl).unwrap()
         };

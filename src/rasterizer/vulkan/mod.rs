@@ -71,7 +71,7 @@ impl VulkanEngine {
                 base.device.clone(),
                 *swapchain.draw_format(),
             ),
-            mesh_pipeline: VkGraphicsPipeline::new(
+            mesh_pipeline: VkGraphicsPipeline::new_hardcoded_mesh(
                 &shaders,
                 base.device.clone(),
                 *swapchain.draw_format(),
