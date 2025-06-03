@@ -31,7 +31,8 @@ use super::Stats;
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine {
     // Elements are placed in the order they should be dropped, so inverse order of creation.
-    graphics_pipeline: VkGraphicsPipeline,
+    mesh_pipeline: VkGraphicsPipeline,
+    triangle_pipeline: VkGraphicsPipeline,
     swapchain: VulkanSwapchain,
     gui: VulkanGui,
     commands: VulkanCommands,
@@ -65,7 +66,12 @@ impl VulkanEngine {
             .collect();
 
         Self {
-            graphics_pipeline: VkGraphicsPipeline::new(
+            triangle_pipeline: VkGraphicsPipeline::new_hardcoded_mesh(
+                &shaders,
+                base.device.clone(),
+                *swapchain.draw_format(),
+            ),
+            mesh_pipeline: VkGraphicsPipeline::new(
                 &shaders,
                 base.device.clone(),
                 *swapchain.draw_format(),
@@ -133,7 +139,7 @@ impl VulkanEngine {
         );
 
         // current_frame.draw_geometry(&self.swapchain, self.graphics_pipeline.pipeline);
-        current_frame.draw_geometry(&self.swapchain, self.graphics_pipeline.pipeline);
+        current_frame.draw_geometry(&self.swapchain, self.triangle_pipeline.pipeline);
 
         let (swapchain_img_index, swapchain_image, sem_render, swapchain_image_view) =
             self.swapchain.acquire_next_image(current_frame);

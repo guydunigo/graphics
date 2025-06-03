@@ -8,7 +8,10 @@ use ash::{Device, util, vk};
 use glam::{Mat4, Vec3, Vec4};
 use vk_mem::Alloc;
 
-use super::vulkan_shaders::{ShaderName, VulkanShaders};
+use super::{
+    vulkan_commands::VulkanCommands,
+    vulkan_shaders::{ShaderName, VulkanShaders},
+};
 
 #[derive(Default, Debug, Clone)]
 pub struct PipelineBuilder<'a> {
@@ -143,10 +146,51 @@ pub struct VkGraphicsPipeline {
 }
 
 impl VkGraphicsPipeline {
-    pub fn new(shaders: &VulkanShaders, device: Rc<Device>, draw_format: vk::Format) -> Self {
+    /// Triangle is hardcoded in vertex shader
+    pub fn new_hardcoded_mesh(
+        shaders: &VulkanShaders,
+        device: Rc<Device>,
+        draw_format: vk::Format,
+    ) -> Self {
         let create_info = vk::PipelineLayoutCreateInfo::default();
         let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
         let vertex_shader = shaders.get(ShaderName::ColoredTriangleVert);
+        let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
+
+        let mut builder = PipelineBuilder {
+            pipeline_layout,
+            ..Default::default()
+        };
+        builder.set_shaders(vertex_shader, fragment_shader);
+        builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+        builder.set_polygon_mode(vk::PolygonMode::FILL);
+        builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
+        builder.set_multisampling_none();
+        builder.disable_blending();
+        builder.disable_depthtest();
+        let formats = [draw_format];
+        builder.set_color_attachment_format(&formats);
+        builder.set_depth_format(vk::Format::UNDEFINED);
+
+        let pipeline = builder.clone().build(&device);
+
+        Self {
+            device_copy: device,
+            pipeline,
+            pipeline_layout,
+        }
+    }
+
+    pub fn new(shaders: &VulkanShaders, device: Rc<Device>, draw_format: vk::Format) -> Self {
+        let buffer_ranges = [vk::PushConstantRange::default()
+            .offset(0)
+            .size(size_of::<GpuDrawPushConstants>() as u32)
+            .stage_flags(vk::ShaderStageFlags::VERTEX)];
+
+        let create_info =
+            vk::PipelineLayoutCreateInfo::default().push_constant_ranges(&buffer_ranges[..]);
+        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
+        let vertex_shader = shaders.get(ShaderName::ColoredTriangleMeshVert);
         let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
 
         let mut builder = PipelineBuilder {
@@ -224,8 +268,8 @@ impl AllocatedBuffer {
             MyMemoryUsage::GpuOnly => {
                 // TODO: or usage : AutoPreferDevice ?
                 alloc_info.required_flags = vk::MemoryPropertyFlags::DEVICE_LOCAL;
-                // TODO: Consider using vk_mem::AllocationCreateFlags::DEDICATED_MEMORY, especially if
-                // large
+                // TODO: Consider using vk_mem::AllocationCreateFlags::DEDICATED_MEMORY,
+                // especially if large
             }
             MyMemoryUsage::StagingUpload => {
                 alloc_info.flags |= vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE;
@@ -292,7 +336,7 @@ struct GpuMeshBuffers {
 impl GpuMeshBuffers {
     fn new(
         device: Rc<Device>,
-        allocator: Arc<std::sync::Mutex<vk_mem::Allocator>>,
+        commands: &VulkanCommands,
         indices: &[u32],
         vertices: &[Vertex],
     ) -> Self {
@@ -305,7 +349,7 @@ impl GpuMeshBuffers {
         let index_buffer_size = dbg!(size_of_val(indices) as u64);
 
         let vertex_buffer = AllocatedBuffer::new(
-            allocator.clone(),
+            commands.allocator.clone(),
             vertex_buffer_size,
             vk::BufferUsageFlags::STORAGE_BUFFER
                 | vk::BufferUsageFlags::TRANSFER_DST
@@ -319,7 +363,7 @@ impl GpuMeshBuffers {
             unsafe { device.get_buffer_device_address(&device_address_info) };
 
         let index_buffer = AllocatedBuffer::new(
-            allocator.clone(),
+            commands.allocator.clone(),
             index_buffer_size,
             vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
             MyMemoryUsage::GpuOnly,
@@ -329,18 +373,50 @@ impl GpuMeshBuffers {
         // esp Advanced data uploading for APU without staging and stuff...
 
         let staging = AllocatedBuffer::new(
-            allocator.clone(),
+            commands.allocator.clone(),
             vertex_buffer_size + index_buffer_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MyMemoryUsage::StagingUpload,
         );
 
-        // TODO: use Align like in egui ?
-        // file:///home/gguy/trash/build_dirs/graphics/doc/ash/util/struct.Align.html#method.copy_from_slice ?
-        // let data = staging.info.mapped_data;
-        // unsafe {
-        //     let data_ptr = util::Align::new(staging.info.mapped_data, alignment, size)
-        // }
+        // TODO: okay to copy twice ? Does it become random access ?
+        // TODO: can alignment break sizes ?
+        let data = staging.info.mapped_data;
+        let mut align =
+            unsafe { util::Align::new(data, mem::align_of::<Vertex>() as _, vertex_buffer_size) };
+        align.copy_from_slice(vertices);
+        let mut align = unsafe {
+            util::Align::new(
+                data.add(index_buffer_size as usize),
+                mem::align_of::<u32>() as _,
+                index_buffer_size,
+            )
+        };
+        align.copy_from_slice(vertices);
+
+        // TODO: can be sent to background thread to avoid blocking
+        commands.immediate_submit(|device, cmd| {
+            let vertex_copies = [vk::BufferCopy::default()
+                .dst_offset(0)
+                .src_offset(0)
+                .size(vertex_buffer_size)];
+            unsafe {
+                device.cmd_copy_buffer(
+                    cmd,
+                    staging.buffer,
+                    vertex_buffer.buffer,
+                    &vertex_copies[..],
+                );
+            }
+
+            let index_copies = [vk::BufferCopy::default()
+                .dst_offset(0)
+                .src_offset(vertex_buffer_size)
+                .size(index_buffer_size)];
+            unsafe {
+                device.cmd_copy_buffer(cmd, staging.buffer, index_buffer.buffer, &index_copies[..]);
+            }
+        });
 
         Self {
             index_buffer,

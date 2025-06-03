@@ -366,7 +366,7 @@ impl VulkanCommands {
         &self.frames[self.frame_number % FRAME_OVERLAP]
     }
 
-    pub fn immediate_submit<F: FnOnce(&Device, vk::CommandBuffer)>(&self, f: F) {
+    pub fn immediate_submit(&self, f: impl FnOnce(&Device, vk::CommandBuffer)) {
         let fences = [self.imm_fence];
 
         unsafe {

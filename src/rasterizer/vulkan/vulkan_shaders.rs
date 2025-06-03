@@ -17,6 +17,7 @@ pub enum ShaderName {
     Sky,
     ColoredTriangleVert,
     ColoredTriangleFrag,
+    ColoredTriangleMeshVert,
 }
 
 impl ShaderName {
@@ -34,6 +35,7 @@ impl Into<&str> for ShaderName {
             ParametrableGradient => "parametrable_gradient",
             Sky => "sky",
             ColoredTriangleVert | ColoredTriangleFrag => "colored_triangle",
+            ColoredTriangleMeshVert => "colored_triangle_mesh",
         }
     }
 }
@@ -44,11 +46,10 @@ impl Into<ShaderStage> for ShaderName {
         use ShaderStage::*;
 
         match self {
-            Gradient => Compute,
-            ParametrableGradient => Compute,
-            Sky => Compute,
+            Gradient | ParametrableGradient | Sky => Compute,
             ColoredTriangleVert => Vertex,
             ColoredTriangleFrag => Fragment,
+            ColoredTriangleMeshVert => Vertex,
         }
     }
 }
