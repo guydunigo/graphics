@@ -139,100 +139,10 @@ impl<'a> PipelineBuilder<'a> {
     }
 }
 
-pub struct VkGraphicsPipeline {
-    device_copy: Rc<Device>,
-    pub pipeline: vk::Pipeline,
-    pipeline_layout: vk::PipelineLayout,
-}
-
-impl VkGraphicsPipeline {
-    /// Triangle is hardcoded in vertex shader
-    pub fn new_hardcoded_mesh(
-        shaders: &VulkanShaders,
-        device: Rc<Device>,
-        draw_format: vk::Format,
-    ) -> Self {
-        let create_info = vk::PipelineLayoutCreateInfo::default();
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
-        let vertex_shader = shaders.get(ShaderName::ColoredTriangleVert);
-        let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
-
-        let mut builder = PipelineBuilder {
-            pipeline_layout,
-            ..Default::default()
-        };
-        builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
-        builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
-        builder.set_polygon_mode(vk::PolygonMode::FILL);
-        builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
-        builder.set_multisampling_none();
-        builder.disable_blending();
-        builder.disable_depthtest();
-        let formats = [draw_format];
-        builder.set_color_attachment_format(&formats);
-        builder.set_depth_format(vk::Format::UNDEFINED);
-
-        let pipeline = builder.clone().build(&device);
-
-        Self {
-            device_copy: device,
-            pipeline,
-            pipeline_layout,
-        }
-    }
-
-    pub fn new(shaders: &VulkanShaders, device: Rc<Device>, draw_format: vk::Format) -> Self {
-        let buffer_ranges = [vk::PushConstantRange::default()
-            .offset(0)
-            .size(size_of::<GpuDrawPushConstants>() as u32)
-            .stage_flags(vk::ShaderStageFlags::VERTEX)];
-
-        let create_info =
-            vk::PipelineLayoutCreateInfo::default().push_constant_ranges(&buffer_ranges[..]);
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
-        let vertex_shader = shaders.get(ShaderName::ColoredTriangleMeshVert);
-        let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
-
-        let mut builder = PipelineBuilder {
-            pipeline_layout,
-            ..Default::default()
-        };
-        builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
-        builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
-        builder.set_polygon_mode(vk::PolygonMode::FILL);
-        builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
-        builder.set_multisampling_none();
-        builder.disable_blending();
-        builder.disable_depthtest();
-        let formats = [draw_format];
-        builder.set_color_attachment_format(&formats);
-        builder.set_depth_format(vk::Format::UNDEFINED);
-
-        let pipeline = builder.clone().build(&device);
-
-        Self {
-            device_copy: device,
-            pipeline,
-            pipeline_layout,
-        }
-    }
-}
-
-impl Drop for VkGraphicsPipeline {
-    fn drop(&mut self) {
-        println!("drop VkGraphicsPipeline");
-        unsafe {
-            self.device_copy.device_wait_idle().unwrap();
-            self.device_copy.destroy_pipeline(self.pipeline, None);
-            self.device_copy
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-        }
-    }
-}
-
+// TODO: move to grouped memory types ?
 struct AllocatedBuffer {
     allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
-    buffer: vk::Buffer,
+    pub buffer: vk::Buffer,
     allocation: vk_mem::Allocation,
     info: vk_mem::AllocationInfo,
 }
@@ -258,11 +168,6 @@ impl AllocatedBuffer {
         let mut alloc_info = vk_mem::AllocationCreateInfo::default();
         // GPU_ONLY deprecated
         alloc_info.usage = vk_mem::MemoryUsage::Auto;
-        // When using MemoryUsage::Auto + MAPPED, needs one of :
-        // #VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-        // or #VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
-        // TODO: used if only GPU ?
-        alloc_info.flags = vk_mem::AllocationCreateFlags::MAPPED;
 
         match memory_usage {
             MyMemoryUsage::GpuOnly => {
@@ -272,6 +177,11 @@ impl AllocatedBuffer {
                 // especially if large
             }
             MyMemoryUsage::StagingUpload => {
+                // When using MemoryUsage::Auto + MAPPED, needs one of :
+                // #VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                // or #VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
+                // TODO: used if only GPU ?
+                alloc_info.flags = vk_mem::AllocationCreateFlags::MAPPED;
                 alloc_info.flags |= vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE;
                 // TODO: requires memcpy and no random access (no mapped_data[i] = ...) !
             }
@@ -283,6 +193,7 @@ impl AllocatedBuffer {
                 let (buffer, allocation) =
                     allocator.create_buffer(&buffer_info, &alloc_info).unwrap();
                 let info = allocator.get_allocation_info(&allocation);
+                println!("{:?}", info);
                 (buffer, allocation, info)
             }
         };
@@ -318,35 +229,45 @@ struct Vertex {
     color: Vec4,
 }
 
-impl Vertex {}
+impl Vertex {
+    pub fn from_position(x: f32, y: f32, z: f32) -> Self {
+        Self {
+            position: Vec3 { x, y, z },
+            ..Default::default()
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
-struct GpuDrawPushConstants {
-    world_mat: Mat4,
-    vertex_buffer: vk::DeviceAddress,
+pub struct GpuDrawPushConstants {
+    pub world_mat: Mat4,
+    pub vertex_buffer: vk::DeviceAddress,
+}
+impl GpuDrawPushConstants {
+    pub fn as_u8_slice(&self) -> &[u8] {
+        unsafe {
+            let ptr = std::mem::transmute::<&Self, *const u8>(self);
+            std::slice::from_raw_parts(ptr, size_of::<Self>())
+        }
+    }
 }
 
-struct GpuMeshBuffers {
+pub struct GpuMeshBuffers {
     index_buffer: AllocatedBuffer,
-    vertex_buffer: AllocatedBuffer,
-    vertex_buffer_address: vk::DeviceAddress,
+    _vertex_buffer: AllocatedBuffer,
+    pub vertex_buffer_address: vk::DeviceAddress,
 }
 
 impl GpuMeshBuffers {
     fn new(
-        device: Rc<Device>,
+        device: &Device,
         commands: &VulkanCommands,
         indices: &[u32],
         vertices: &[Vertex],
     ) -> Self {
-        dbg!(size_of::<Vertex>());
-        dbg!(size_of::<u32>());
-        assert_eq!(size_of_val(vertices), vertices.len() * size_of::<Vertex>());
-        assert_eq!(size_of_val(indices), indices.len() * size_of::<u32>());
-
-        let vertex_buffer_size = dbg!(size_of_val(vertices) as u64);
-        let index_buffer_size = dbg!(size_of_val(indices) as u64);
+        let vertex_buffer_size = size_of_val(vertices) as u64;
+        let index_buffer_size = size_of_val(indices) as u64;
 
         let vertex_buffer = AllocatedBuffer::new(
             commands.allocator.clone(),
@@ -379,15 +300,15 @@ impl GpuMeshBuffers {
             MyMemoryUsage::StagingUpload,
         );
 
-        // TODO: okay to copy twice ? Does it become random access ?
-        // TODO: can alignment break sizes ?
         let data = staging.info.mapped_data;
         let mut align =
             unsafe { util::Align::new(data, mem::align_of::<Vertex>() as _, vertex_buffer_size) };
         align.copy_from_slice(vertices);
+        // TODO: okay to copy twice ? Does it become random access ?
+        // TODO: can alignment break sizes ?
         let mut align = unsafe {
             util::Align::new(
-                data.add(index_buffer_size as usize),
+                data.add(vertex_buffer_size as usize),
                 mem::align_of::<u32>() as _,
                 index_buffer_size,
             )
@@ -420,8 +341,126 @@ impl GpuMeshBuffers {
 
         Self {
             index_buffer,
-            vertex_buffer,
+            _vertex_buffer: vertex_buffer,
             vertex_buffer_address,
         }
     }
+
+    pub fn index_buffer(&self) -> &vk::Buffer {
+        &self.index_buffer.buffer
+    }
+}
+
+pub struct VkGraphicsPipeline {
+    device_copy: Rc<Device>,
+    pub pipeline: vk::Pipeline,
+    pub pipeline_layout: vk::PipelineLayout,
+    // TODO: ugly Option !
+    pub mesh_buffers: Option<GpuMeshBuffers>,
+}
+
+impl VkGraphicsPipeline {
+    /// Triangle is hardcoded in vertex shader
+    pub fn new_hardcoded_mesh(
+        shaders: &VulkanShaders,
+        device: Rc<Device>,
+        draw_format: vk::Format,
+    ) -> Self {
+        let create_info = vk::PipelineLayoutCreateInfo::default();
+        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
+        let vertex_shader = shaders.get(ShaderName::ColoredTriangleVert);
+        let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
+
+        let mut builder = PipelineBuilder {
+            pipeline_layout,
+            ..Default::default()
+        };
+        builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
+        builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+        builder.set_polygon_mode(vk::PolygonMode::FILL);
+        builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
+        builder.set_multisampling_none();
+        builder.disable_blending();
+        builder.disable_depthtest();
+        let formats = [draw_format];
+        builder.set_color_attachment_format(&formats);
+        builder.set_depth_format(vk::Format::UNDEFINED);
+
+        let pipeline = builder.clone().build(&device);
+
+        Self {
+            device_copy: device,
+            pipeline,
+            pipeline_layout,
+            mesh_buffers: None,
+        }
+    }
+
+    pub fn new(
+        commands: &VulkanCommands,
+        shaders: &VulkanShaders,
+        device: Rc<Device>,
+        draw_format: vk::Format,
+    ) -> Self {
+        let buffer_ranges = [vk::PushConstantRange::default()
+            .offset(0)
+            .size(size_of::<GpuDrawPushConstants>() as u32)
+            .stage_flags(vk::ShaderStageFlags::VERTEX)];
+
+        let create_info =
+            vk::PipelineLayoutCreateInfo::default().push_constant_ranges(&buffer_ranges[..]);
+        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
+        let vertex_shader = shaders.get(ShaderName::ColoredTriangleMeshVert);
+        let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
+
+        let mut builder = PipelineBuilder {
+            pipeline_layout,
+            ..Default::default()
+        };
+        builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
+        builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+        builder.set_polygon_mode(vk::PolygonMode::FILL);
+        builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
+        builder.set_multisampling_none();
+        builder.disable_blending();
+        builder.disable_depthtest();
+        let formats = [draw_format];
+        builder.set_color_attachment_format(&formats);
+        builder.set_depth_format(vk::Format::UNDEFINED);
+
+        let pipeline = builder.clone().build(&device);
+
+        let (vertices, indices) = default_buffer_data();
+        let mesh_buffers = GpuMeshBuffers::new(&device, commands, &indices[..], &vertices[..]);
+
+        Self {
+            device_copy: device,
+            pipeline,
+            pipeline_layout,
+            mesh_buffers: Some(mesh_buffers),
+        }
+    }
+}
+
+impl Drop for VkGraphicsPipeline {
+    fn drop(&mut self) {
+        println!("drop VkGraphicsPipeline");
+        unsafe {
+            self.device_copy.device_wait_idle().unwrap();
+            self.device_copy.destroy_pipeline(self.pipeline, None);
+            self.device_copy
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+        }
+    }
+}
+
+fn default_buffer_data() -> ([Vertex; 4], [u32; 6]) {
+    let rect_vertices = [
+        Vertex::from_position(0.5, -0.5, 0.),
+        Vertex::from_position(0.5, 0.5, 0.),
+        Vertex::from_position(-0.5, -0.5, 0.),
+        Vertex::from_position(-0.5, 0.5, 0.),
+    ];
+    let rect_indices = [0, 1, 2, 2, 1, 3];
+    (rect_vertices, rect_indices)
 }

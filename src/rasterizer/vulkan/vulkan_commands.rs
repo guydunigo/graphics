@@ -6,6 +6,7 @@ use std::{
 use ash::{Device, vk};
 
 use super::{
+    vk_graphics_pipeline::{GpuDrawPushConstants, VkGraphicsPipeline},
     vulkan_base::VulkanBase,
     vulkan_descriptors::ComputePushConstants,
     vulkan_gui::{GeneratedUi, VulkanGui},
@@ -266,7 +267,12 @@ impl FrameData {
         }
     }
 
-    pub fn draw_geometry(&self, swapchain: &VulkanSwapchain, triangle_pipeline: vk::Pipeline) {
+    pub fn draw_geometry(
+        &self,
+        swapchain: &VulkanSwapchain,
+        triangle_pipeline: vk::Pipeline,
+        mesh_gfx: &VkGraphicsPipeline,
+    ) {
         let color_attachments = [attachment_info(
             *swapchain.draw_img_view(),
             None,
@@ -301,7 +307,48 @@ impl FrameData {
             self.device_copy
                 .cmd_set_scissor(self.cmd_buf, 0, &scissors[..]);
             self.device_copy.cmd_draw(self.cmd_buf, 3, 1, 0, 0);
+            self.draw_geometry_meshes(mesh_gfx);
             self.device_copy.cmd_end_rendering(self.cmd_buf);
+        }
+    }
+
+    pub fn draw_geometry_meshes(&self, mesh_gfx: &VkGraphicsPipeline) {
+        unsafe {
+            self.device_copy.cmd_bind_pipeline(
+                self.cmd_buf,
+                vk::PipelineBindPoint::GRAPHICS,
+                mesh_gfx.pipeline,
+            );
+        }
+
+        // TODO: 1. ?
+        let world_mat = glam::Mat4::default();
+
+        let constants = GpuDrawPushConstants {
+            world_mat,
+            vertex_buffer: mesh_gfx
+                .mesh_buffers
+                .as_ref()
+                .unwrap()
+                .vertex_buffer_address,
+        };
+
+        unsafe {
+            self.device_copy.cmd_push_constants(
+                self.cmd_buf,
+                mesh_gfx.pipeline_layout,
+                vk::ShaderStageFlags::VERTEX,
+                0,
+                constants.as_u8_slice(),
+            );
+            self.device_copy.cmd_bind_index_buffer(
+                self.cmd_buf,
+                *mesh_gfx.mesh_buffers.as_ref().unwrap().index_buffer(),
+                0,
+                vk::IndexType::UINT32,
+            );
+            self.device_copy
+                .cmd_draw_indexed(self.cmd_buf, 6, 1, 0, 0, 0);
         }
     }
 }

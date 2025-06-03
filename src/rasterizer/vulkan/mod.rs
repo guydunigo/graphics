@@ -65,6 +65,8 @@ impl VulkanEngine {
             .map(|b| *b.default_data())
             .collect();
 
+        let commands = VulkanCommands::new(&base, allocator.clone());
+
         Self {
             triangle_pipeline: VkGraphicsPipeline::new_hardcoded_mesh(
                 &shaders,
@@ -72,12 +74,13 @@ impl VulkanEngine {
                 *swapchain.draw_format(),
             ),
             mesh_pipeline: VkGraphicsPipeline::new(
+                &commands,
                 &shaders,
                 base.device.clone(),
                 *swapchain.draw_format(),
             ),
             gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
-            commands: VulkanCommands::new(&base, allocator),
+            commands,
             swapchain,
             shaders,
             base,
@@ -139,7 +142,11 @@ impl VulkanEngine {
         );
 
         // current_frame.draw_geometry(&self.swapchain, self.graphics_pipeline.pipeline);
-        current_frame.draw_geometry(&self.swapchain, self.triangle_pipeline.pipeline);
+        current_frame.draw_geometry(
+            &self.swapchain,
+            self.triangle_pipeline.pipeline,
+            &self.mesh_pipeline,
+        );
 
         let (swapchain_img_index, swapchain_image, sem_render, swapchain_image_view) =
             self.swapchain.acquire_next_image(current_frame);
