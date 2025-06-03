@@ -19,9 +19,7 @@ rayon = "1.10.0"
 softbuffer = "0.4.6"
 vk-mem = "0.4.0"
 winit = "0.30.11"
-
-['cfg(not(feature = "naga"))'.depndencies]
-shaderc = "0.9.1"
+shaderc = { version = "0.9.1", optional = true }
 
 [profile.dev.package."*"]
 opt-level = 3
@@ -32,5 +30,6 @@ debug = true
 [features]
 stats = []
 vulkan_linked = ["ash/linked"]
-# default = ["vulkan_linked"]
+# "vulkan_linked"
+# "naga" / "shaderc"
 default = ["naga"]
