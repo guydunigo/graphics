@@ -53,7 +53,7 @@ impl VkGraphicsPipeline {
         builder.set_polygon_mode(vk::PolygonMode::FILL);
         builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
         builder.set_multisampling_none();
-        builder.disable_blending();
+        builder.enable_blending_additive();
         builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
         let draw_formats = [draw_format];
         builder.set_color_attachment_format(&draw_formats);
@@ -215,13 +215,6 @@ impl<'a> PipelineBuilder<'a> {
             .alpha_to_one_enable(false);
     }
 
-    pub fn disable_blending(&mut self) {
-        self.color_blend_attachment = self
-            .color_blend_attachment
-            .color_write_mask(vk::ColorComponentFlags::RGBA)
-            .blend_enable(false);
-    }
-
     pub fn set_color_attachment_format(&mut self, formats: &'a [vk::Format; 1]) {
         // self.color_attachment_formats = *formats;
         self.render_info = self.render_info.color_attachment_formats(&formats[..]);
@@ -253,5 +246,33 @@ impl<'a> PipelineBuilder<'a> {
             .stencil_test_enable(false)
             .min_depth_bounds(0.)
             .max_depth_bounds(1.);
+    }
+
+    pub fn disable_blending(&mut self) {
+        self.color_blend_attachment = self
+            .color_blend_attachment
+            .color_write_mask(vk::ColorComponentFlags::RGBA)
+            .blend_enable(false);
+    }
+
+    fn enable_blending_base(&mut self, dst_color_blend_factor: vk::BlendFactor) {
+        self.color_blend_attachment = self
+            .color_blend_attachment
+            .color_write_mask(vk::ColorComponentFlags::RGBA)
+            .blend_enable(true)
+            .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+            .dst_color_blend_factor(dst_color_blend_factor)
+            .color_blend_op(vk::BlendOp::ADD)
+            .src_alpha_blend_factor(vk::BlendFactor::ONE)
+            .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
+            .alpha_blend_op(vk::BlendOp::ADD);
+    }
+
+    pub fn enable_blending_additive(&mut self) {
+        self.enable_blending_base(vk::BlendFactor::ONE);
+    }
+
+    pub fn enable_blending_alphablend(&mut self) {
+        self.enable_blending_base(vk::BlendFactor::ONE_MINUS_SRC_ALPHA);
     }
 }
