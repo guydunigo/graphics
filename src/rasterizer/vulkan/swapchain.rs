@@ -161,6 +161,7 @@ impl VulkanSwapchain {
         if *self.is_suboptimal.borrow() || self.window_size != base.window.inner_size() {
             println!("--- Resize ---");
             *self = VulkanSwapchain::new(base, shaders, allocator);
+            println!("--- End of resize ---");
         }
     }
 

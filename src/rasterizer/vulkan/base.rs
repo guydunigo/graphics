@@ -335,6 +335,16 @@ fn find_physical_device(
                 })
         })
         .expect("Couldn't find suitable device.");
+    {
+        let properties = unsafe { instance.get_physical_device_memory_properties(pdevice) };
+        println!("    Memory types :");
+        properties
+            .memory_types
+            .iter()
+            .take(properties.memory_type_count as usize)
+            .enumerate()
+            .for_each(|(i, mt)| println!("    - {i:2} {:?}", mt.property_flags));
+    }
 
     (surface_loader, pdevice, queue_family_index as u32)
 }
