@@ -39,6 +39,7 @@ impl Drop for FrameData {
     }
 }
 
+// TODO: move all this code to separate rendering pipeline file
 impl FrameData {
     pub fn new(
         device: Rc<Device>,
@@ -268,7 +269,7 @@ impl FrameData {
         }
     }
 
-    pub fn draw_geometry(&self, swapchain: &VulkanSwapchain, gfx: &VkGraphicsPipeline) {
+    pub fn draw_geometries(&self, swapchain: &VulkanSwapchain, gfx: &VkGraphicsPipeline) {
         let color_attachments = [attachment_info(
             *swapchain.draw_img_view(),
             None,
@@ -287,36 +288,8 @@ impl FrameData {
         unsafe {
             self.device_copy
                 .cmd_begin_rendering(self.cmd_buf, &render_info);
-            self.device_copy.cmd_bind_pipeline(
-                self.cmd_buf,
-                vk::PipelineBindPoint::GRAPHICS,
-                gfx.triangle_pipeline,
-            );
         }
 
-        let draw_extent = swapchain.draw_extent();
-        let viewports = [vk::Viewport::default()
-            .width(draw_extent.width as f32)
-            .height(draw_extent.height as f32)
-            .min_depth(0.)
-            .max_depth(1.)];
-
-        unsafe {
-            self.device_copy
-                .cmd_set_viewport(self.cmd_buf, 0, &viewports[..]);
-        }
-
-        let scissors = [vk::Rect2D::default().extent(draw_extent)];
-        unsafe {
-            self.device_copy
-                .cmd_set_scissor(self.cmd_buf, 0, &scissors[..]);
-            self.device_copy.cmd_draw(self.cmd_buf, 3, 1, 0, 0);
-            self.draw_geometry_meshes(gfx, draw_extent);
-            self.device_copy.cmd_end_rendering(self.cmd_buf);
-        }
-    }
-
-    pub fn draw_geometry_meshes(&self, gfx: &VkGraphicsPipeline, draw_extent: vk::Extent2D) {
         unsafe {
             self.device_copy.cmd_bind_pipeline(
                 self.cmd_buf,
@@ -325,34 +298,36 @@ impl FrameData {
             );
         }
 
-        let constants = GpuDrawPushConstants {
-            world_mat: glam::Mat4::IDENTITY,
-            vertex_buffer: gfx.mesh_buffers.vertex_buffer_address,
-        };
-
-        unsafe {
-            self.device_copy.cmd_push_constants(
-                self.cmd_buf,
-                gfx.pipeline_layout,
-                vk::ShaderStageFlags::VERTEX,
-                0,
-                as_u8_slice(&constants),
-            );
-            self.device_copy.cmd_bind_index_buffer(
-                self.cmd_buf,
-                *gfx.mesh_buffers.index_buffer(),
-                0,
-                vk::IndexType::UINT32,
-            );
-            self.device_copy
-                .cmd_draw_indexed(self.cmd_buf, 6, 1, 0, 0, 0);
+        let draw_extent = swapchain.draw_extent();
+        {
+            let viewports = [vk::Viewport::default()
+                .width(draw_extent.width as f32)
+                .height(draw_extent.height as f32)
+                .min_depth(0.)
+                .max_depth(1.)];
+            unsafe {
+                self.device_copy
+                    .cmd_set_viewport(self.cmd_buf, 0, &viewports[..]);
+            }
         }
 
-        self.draw_test_mesh(gfx, draw_extent);
+        {
+            let scissors = [vk::Rect2D::default().extent(draw_extent)];
+            unsafe {
+                self.device_copy
+                    .cmd_set_scissor(self.cmd_buf, 0, &scissors[..]);
+            }
+        }
+
+        self.draw_mesh(gfx, draw_extent);
+
+        unsafe {
+            self.device_copy.cmd_end_rendering(self.cmd_buf);
+        }
     }
 
-    fn draw_test_mesh(&self, gfx: &VkGraphicsPipeline, draw_extent: vk::Extent2D) {
-        let mesh = &gfx.test_meshes[2];
+    fn draw_mesh(&self, gfx: &VkGraphicsPipeline, draw_extent: vk::Extent2D) {
+        let mesh = &gfx.meshes[2];
 
         let view = Mat4::from_translation(vec3(0., 0., -5.));
         // Camera position
@@ -368,7 +343,7 @@ impl FrameData {
 
         let constants = GpuDrawPushConstants {
             world_mat: projection * view,
-            vertex_buffer: mesh.mesh_buffers.vertex_buffer_address,
+            vertex_buffer: mesh.vertex_buffer_address(),
         };
         unsafe {
             self.device_copy.cmd_push_constants(
@@ -380,7 +355,7 @@ impl FrameData {
             );
             self.device_copy.cmd_bind_index_buffer(
                 self.cmd_buf,
-                *mesh.mesh_buffers.index_buffer(),
+                *mesh.index_buffer(),
                 0,
                 vk::IndexType::UINT32,
             );

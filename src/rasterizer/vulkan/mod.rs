@@ -23,6 +23,7 @@ mod shaders_loader;
 use shaders_loader::ShadersLoader;
 mod gfx_pipeline;
 use gfx_pipeline::VkGraphicsPipeline;
+mod gltf_loader;
 
 #[cfg(feature = "stats")]
 use super::Stats;
@@ -88,6 +89,7 @@ impl VulkanEngine {
         &self.base.window
     }
 
+    // TODO: move all this code to separate rendering pipeline file
     pub fn rasterize(
         &mut self,
         settings: &Settings,
@@ -141,7 +143,7 @@ impl VulkanEngine {
             vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
 
-        current_frame.draw_geometry(&self.swapchain, &self.gfx);
+        current_frame.draw_geometries(&self.swapchain, &self.gfx);
 
         let (swapchain_img_index, swapchain_image, sem_render, swapchain_image_view) =
             self.swapchain.acquire_next_image(current_frame);
