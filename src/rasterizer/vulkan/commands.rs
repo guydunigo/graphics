@@ -4,6 +4,7 @@ use std::{
 };
 
 use ash::{Device, vk};
+use glam::{Mat4, vec3};
 
 use super::{
     base::VulkanBase,
@@ -302,12 +303,12 @@ impl FrameData {
             self.device_copy
                 .cmd_set_scissor(self.cmd_buf, 0, &scissors[..]);
             self.device_copy.cmd_draw(self.cmd_buf, 3, 1, 0, 0);
-            self.draw_geometry_meshes(gfx);
+            self.draw_geometry_meshes(gfx, draw_extent);
             self.device_copy.cmd_end_rendering(self.cmd_buf);
         }
     }
 
-    pub fn draw_geometry_meshes(&self, gfx: &VkGraphicsPipeline) {
+    pub fn draw_geometry_meshes(&self, gfx: &VkGraphicsPipeline, draw_extent: vk::Extent2D) {
         unsafe {
             self.device_copy.cmd_bind_pipeline(
                 self.cmd_buf,
@@ -337,7 +338,52 @@ impl FrameData {
             );
             self.device_copy
                 .cmd_draw_indexed(self.cmd_buf, 6, 1, 0, 0, 0);
-            // self.device_copy.cmd_draw(self.cmd_buf, 6, 1, 0, 0);
+        }
+
+        self.draw_test_mesh(gfx, draw_extent);
+    }
+
+    fn draw_test_mesh(&self, gfx: &VkGraphicsPipeline, draw_extent: vk::Extent2D) {
+        let mesh = &gfx.test_meshes[2];
+
+        let view = Mat4::from_translation(vec3(0., 0., -5.));
+        // Camera position
+        let mut projection = Mat4::perspective_rh(
+            70.,
+            draw_extent.width as f32 / draw_extent.height as f32,
+            10000.,
+            0.1,
+        );
+        // Invert the Y direction on projection matrix so that we are more similar
+        // to opengl and gltf axis
+        projection.y_axis[1] *= -1.;
+
+        let constants = GpuDrawPushConstants {
+            world_mat: projection * view,
+            vertex_buffer: mesh.mesh_buffers.vertex_buffer_address,
+        };
+        unsafe {
+            self.device_copy.cmd_push_constants(
+                self.cmd_buf,
+                gfx.pipeline_layout,
+                vk::ShaderStageFlags::VERTEX,
+                0,
+                as_u8_slice(&constants),
+            );
+            self.device_copy.cmd_bind_index_buffer(
+                self.cmd_buf,
+                *mesh.mesh_buffers.index_buffer(),
+                0,
+                vk::IndexType::UINT32,
+            );
+            self.device_copy.cmd_draw_indexed(
+                self.cmd_buf,
+                mesh.surfaces[0].count,
+                1,
+                mesh.surfaces[0].start_index,
+                0,
+                0,
+            );
         }
     }
 }
