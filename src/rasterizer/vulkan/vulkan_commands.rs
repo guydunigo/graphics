@@ -321,11 +321,8 @@ impl FrameData {
             );
         }
 
-        // TODO: 1. ?
-        let world_mat = glam::Mat4::default();
-
         let constants = GpuDrawPushConstants {
-            world_mat,
+            world_mat: glam::Mat4::IDENTITY,
             vertex_buffer: mesh_gfx
                 .mesh_buffers
                 .as_ref()
@@ -349,6 +346,7 @@ impl FrameData {
             );
             self.device_copy
                 .cmd_draw_indexed(self.cmd_buf, 6, 1, 0, 0, 0);
+            // self.device_copy.cmd_draw(self.cmd_buf, 6, 1, 0, 0);
         }
     }
 }

@@ -165,9 +165,10 @@ impl AllocatedBuffer {
 
         // TODO: check https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
 
-        let mut alloc_info = vk_mem::AllocationCreateInfo::default();
-        // GPU_ONLY deprecated
-        alloc_info.usage = vk_mem::MemoryUsage::Auto;
+        let mut alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::Auto,
+            ..Default::default()
+        };
 
         match memory_usage {
             MyMemoryUsage::GpuOnly => {
@@ -180,10 +181,9 @@ impl AllocatedBuffer {
                 // When using MemoryUsage::Auto + MAPPED, needs one of :
                 // #VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
                 // or #VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
-                // TODO: used if only GPU ?
-                alloc_info.flags = vk_mem::AllocationCreateFlags::MAPPED;
-                alloc_info.flags |= vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE;
-                // TODO: requires memcpy and no random access (no mapped_data[i] = ...) !
+                // requires memcpy and no random access (no mapped_data[i] = ...) !
+                alloc_info.flags = vk_mem::AllocationCreateFlags::MAPPED
+                    | vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE;
             }
         }
 
@@ -193,7 +193,7 @@ impl AllocatedBuffer {
                 let (buffer, allocation) =
                     allocator.create_buffer(&buffer_info, &alloc_info).unwrap();
                 let info = allocator.get_allocation_info(&allocation);
-                println!("{:?}", info);
+                println!("{info:?}");
                 (buffer, allocation, info)
             }
         };
@@ -247,7 +247,7 @@ pub struct GpuDrawPushConstants {
 impl GpuDrawPushConstants {
     pub fn as_u8_slice(&self) -> &[u8] {
         unsafe {
-            let ptr = std::mem::transmute::<&Self, *const u8>(self);
+            let ptr = self as *const Self as *const u8;
             std::slice::from_raw_parts(ptr, size_of::<Self>())
         }
     }
@@ -313,7 +313,40 @@ impl GpuMeshBuffers {
                 index_buffer_size,
             )
         };
-        align.copy_from_slice(vertices);
+        align.copy_from_slice(indices);
+        // let index_staging = {
+        //     let staging = AllocatedBuffer::new(
+        //         commands.allocator.clone(),
+        //         index_buffer_size,
+        //         vk::BufferUsageFlags::TRANSFER_SRC,
+        //         MyMemoryUsage::StagingUpload,
+        //     );
+
+        //     let data = staging.info.mapped_data;
+        //     let mut align =
+        //         unsafe { util::Align::new(data, mem::align_of::<u32>() as _, index_buffer_size) };
+        //     align.copy_from_slice(indices);
+
+        //     unsafe {
+        //         let ptr = std::mem::transmute::<*const u32, *const u8>((&indices[..]).as_ptr());
+        //         println!(
+        //             "A {:?}",
+        //             std::slice::from_raw_parts(ptr, index_buffer_size as usize)
+        //         );
+        //     }
+        //     unsafe {
+        //         let ptr = std::mem::transmute::<*mut std::ffi::c_void, *const u8>(
+        //             // staging.info.mapped_data.add(vertex_buffer_size as usize),
+        //             staging.info.mapped_data,
+        //         );
+        //         println!(
+        //             "B {:?}",
+        //             std::slice::from_raw_parts(ptr, index_buffer_size as usize)
+        //         );
+        //     }
+
+        //     staging
+        // };
 
         // TODO: can be sent to background thread to avoid blocking
         commands.immediate_submit(|device, cmd| {

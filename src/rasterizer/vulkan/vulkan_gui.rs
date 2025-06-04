@@ -56,9 +56,7 @@ impl VulkanGui {
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
-        let inner = self.inner.get_mut();
-        // TODO: result ?
-        let _ = inner.on_window_event(event);
+        self.inner.get_mut().on_window_event(event);
     }
 
     pub fn on_mouse_motion(&mut self, delta: (f64, f64)) {

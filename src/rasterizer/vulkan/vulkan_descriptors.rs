@@ -8,7 +8,7 @@ use super::vulkan_shaders::VulkanShaders;
 pub struct VulkanDescriptors {
     device_copy: Rc<Device>,
 
-    descriptor: DescriptorAllocator,
+    _descriptor: DescriptorAllocator,
     pub draw_img_descs: vk::DescriptorSet,
     draw_img_desc_layout: vk::DescriptorSetLayout,
 
@@ -53,11 +53,9 @@ impl VulkanDescriptors {
         let gradient = ComputeEffect::gradient(device.clone(), shaders, pipeline_layout);
         let sky = ComputeEffect::sky(device.clone(), shaders, pipeline_layout);
 
-        // TODO: shaders could be destroyed
-
         Self {
             device_copy: device,
-            descriptor,
+            _descriptor: descriptor,
             draw_img_descs,
             draw_img_desc_layout,
             pipeline_layout,
@@ -93,10 +91,6 @@ impl<'a> DescriptorLayoutBuilder<'a> {
         self.bindings.push(newbind);
 
         self
-    }
-
-    pub fn clear(&mut self) {
-        self.bindings.clear();
     }
 
     pub fn build(
@@ -214,9 +208,10 @@ pub struct ComputePushConstants {
 }
 
 impl ComputePushConstants {
+    // TODO: in common with GpuDrawPushConstants
     pub fn as_u8_slice(&self) -> &[u8] {
         unsafe {
-            let ptr = std::mem::transmute::<&Self, *const u8>(self);
+            let ptr = self as *const Self as *const u8;
             std::slice::from_raw_parts(ptr, size_of::<Self>())
         }
     }

@@ -6,9 +6,6 @@ use shaderc::{CompilationArtifact, CompileOptions, Compiler, ShaderKind};
 const SHADER_FOLDER: &str = "./resources/";
 const SHADER_EXT: &str = "glsl";
 
-// TODO: shaders can be destroyed once pipeline is created, should we keep them ? or just keep
-// compiled code ?
-
 #[allow(dead_code)]
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
 pub enum ShaderName {
@@ -26,11 +23,11 @@ impl ShaderName {
     }
 }
 
-impl Into<&str> for ShaderName {
-    fn into(self) -> &'static str {
+impl From<ShaderName> for &str {
+    fn from(value: ShaderName) -> &'static str {
         use ShaderName::*;
 
-        match self {
+        match value {
             Gradient => "gradient",
             ParametrableGradient => "parametrable_gradient",
             Sky => "sky",
@@ -40,12 +37,12 @@ impl Into<&str> for ShaderName {
     }
 }
 
-impl Into<ShaderKind> for ShaderName {
-    fn into(self) -> ShaderKind {
+impl From<ShaderName> for ShaderKind {
+    fn from(value: ShaderName) -> ShaderKind {
         use ShaderKind::*;
         use ShaderName::*;
 
-        match self {
+        match value {
             Gradient | ParametrableGradient | Sky => Compute,
             ColoredTriangleVert => Vertex,
             ColoredTriangleFrag => Fragment,
@@ -54,17 +51,17 @@ impl Into<ShaderKind> for ShaderName {
     }
 }
 
-impl Into<PathBuf> for ShaderName {
-    fn into(self) -> PathBuf {
-        let name: &str = self.into();
-        let stage = match self.into() {
+impl From<ShaderName> for PathBuf {
+    fn from(value: ShaderName) -> Self {
+        let name: &str = value.into();
+        let stage = match value.into() {
             ShaderKind::Compute => "comp",
             ShaderKind::Vertex => "vert",
             ShaderKind::Fragment => "frag",
             _ => unimplemented!(),
         };
         let mut path = PathBuf::from(SHADER_FOLDER);
-        path.push(format!("{}.{}.{}", name, stage, SHADER_EXT));
+        path.push(format!("{name}.{stage}.{SHADER_EXT}"));
         path
     }
 }

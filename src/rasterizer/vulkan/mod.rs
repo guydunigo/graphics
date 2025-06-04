@@ -85,7 +85,7 @@ impl VulkanEngine {
             shaders,
             base,
 
-            current_bg_effect: 1,
+            current_bg_effect: 0,
             bg_effects_data,
         }
     }
@@ -141,7 +141,6 @@ impl VulkanEngine {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
 
-        // current_frame.draw_geometry(&self.swapchain, self.graphics_pipeline.pipeline);
         current_frame.draw_geometry(
             &self.swapchain,
             self.triangle_pipeline.pipeline,
@@ -189,9 +188,9 @@ impl VulkanEngine {
             vk::ImageLayout::PRESENT_SRC_KHR,
         );
         current_frame.end_cmd_buf();
-        current_frame.submit(&sem_render, self.commands.queue);
+        current_frame.submit(sem_render, self.commands.queue);
         self.swapchain
-            .present(swapchain_img_index, &sem_render, self.commands.queue);
+            .present(swapchain_img_index, sem_render, self.commands.queue);
 
         self.commands.frame_number += 1;
     }
@@ -217,8 +216,8 @@ fn ui(
     bg_effects: &[ComputeEffect],
     bg_effects_data: &mut [ComputePushConstants],
 ) {
-    egui::Window::new("debug").show(&ctx, |ui| ui.label(debug));
-    egui::Window::new("test").show(&ctx, |ui| {
+    egui::Window::new("debug").show(ctx, |ui| ui.label(debug));
+    egui::Window::new("test").show(ctx, |ui| {
         ui.label("Hello world!");
         if ui.button("Click me").clicked() {
             println!("Click");
@@ -232,8 +231,8 @@ fn ui(
             });
         });
     });
-    egui::Window::new("Background").show(&ctx, |ui| {
-        if bg_effects.len() > 0 {
+    egui::Window::new("Background").show(ctx, |ui| {
+        if !bg_effects.is_empty() {
             ui.label("Selected effect :");
             bg_effects.iter().enumerate().for_each(|(i, n)| {
                 ui.radio_value(current_bg_effect, i, n.name.into_str());

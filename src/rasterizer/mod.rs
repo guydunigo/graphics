@@ -39,7 +39,7 @@ pub struct Stats {
 }
 
 pub enum Engine {
-    Cpu(CPUEngine),
+    Cpu(Box<CPUEngine>),
     Vulkan(Box<VulkanEngine>),
 }
 
@@ -55,7 +55,7 @@ impl Engine {
                     *self = Engine::Vulkan(Box::new(VulkanEngine::new(e.window().clone())));
                 }
             }
-            Engine::Vulkan(e) => *self = Engine::Cpu(CPUEngine::new(e.window().clone())),
+            Engine::Vulkan(e) => *self = Engine::Cpu(Box::new(CPUEngine::new(e.window().clone()))),
         }
     }
 
