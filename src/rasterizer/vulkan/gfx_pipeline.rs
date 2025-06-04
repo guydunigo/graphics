@@ -33,6 +33,7 @@ impl VkGraphicsPipeline {
         shaders: &ShadersLoader,
         device: Rc<Device>,
         draw_format: vk::Format,
+        depth_format: vk::Format,
     ) -> Self {
         let buffer_ranges = [vk::PushConstantRange::default()
             .offset(0)
@@ -55,10 +56,10 @@ impl VkGraphicsPipeline {
         builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
         builder.set_multisampling_none();
         builder.disable_blending();
-        builder.disable_depthtest();
-        let formats = [draw_format];
-        builder.set_color_attachment_format(&formats);
-        builder.set_depth_format(vk::Format::UNDEFINED);
+        builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
+        let draw_formats = [draw_format];
+        builder.set_color_attachment_format(&draw_formats);
+        builder.set_depth_format(depth_format);
 
         let pipeline = builder.clone().build(&device);
 
@@ -66,7 +67,7 @@ impl VkGraphicsPipeline {
         let mesh_buffers = GpuMeshBuffers::new(&device, commands, &indices[..], &vertices[..]);
 
         let (triangle_pipeline, triangle_pipeline_layout) =
-            Self::shader_with_hardcoded_mesh(shaders, &device, draw_format);
+            Self::shader_with_hardcoded_mesh(shaders, &device, draw_format, depth_format);
 
         // TODO:proper resource path and all mngmt
         let test_meshes = load_gltf_meshes(&device, commands, "./resources/basicmesh.glb");
@@ -87,6 +88,7 @@ impl VkGraphicsPipeline {
         shaders: &ShadersLoader,
         device: &Device,
         draw_format: vk::Format,
+        depth_format: vk::Format,
     ) -> (vk::Pipeline, vk::PipelineLayout) {
         let create_info = vk::PipelineLayoutCreateInfo::default();
         let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
@@ -103,10 +105,10 @@ impl VkGraphicsPipeline {
         builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
         builder.set_multisampling_none();
         builder.disable_blending();
-        builder.disable_depthtest();
+        builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
         let formats = [draw_format];
         builder.set_color_attachment_format(&formats);
-        builder.set_depth_format(vk::Format::UNDEFINED);
+        builder.set_depth_format(depth_format);
 
         let pipeline = builder.clone().build(device);
 
@@ -245,12 +247,24 @@ impl<'a> PipelineBuilder<'a> {
         self.render_info = self.render_info.depth_attachment_format(format);
     }
 
-    pub fn disable_depthtest(&mut self) {
+    // pub fn disable_depthtest(&mut self) {
+    //     self.depth_stencil = self
+    //         .depth_stencil
+    //         .depth_test_enable(false)
+    //         .depth_write_enable(false)
+    //         .depth_compare_op(vk::CompareOp::NEVER)
+    //         .depth_bounds_test_enable(false)
+    //         .stencil_test_enable(false)
+    //         .min_depth_bounds(0.)
+    //         .max_depth_bounds(1.);
+    // }
+
+    pub fn enable_depthtest(&mut self, depth_write_enable: bool, op: vk::CompareOp) {
         self.depth_stencil = self
             .depth_stencil
-            .depth_test_enable(false)
-            .depth_write_enable(false)
-            .depth_compare_op(vk::CompareOp::NEVER)
+            .depth_test_enable(true)
+            .depth_write_enable(depth_write_enable)
+            .depth_compare_op(op)
             .depth_bounds_test_enable(false)
             .stencil_test_enable(false)
             .min_depth_bounds(0.)
@@ -491,7 +505,7 @@ pub struct GeoSurface {
 }
 
 pub struct MeshAsset {
-    pub name: Option<String>,
+    pub _name: Option<String>,
     pub surfaces: Vec<GeoSurface>,
     pub mesh_buffers: GpuMeshBuffers,
 }
@@ -582,7 +596,7 @@ fn load_gltf_meshes(
             let mesh_buffers = GpuMeshBuffers::new(device, commands, &indices[..], &vertices[..]);
 
             MeshAsset {
-                name,
+                _name: name,
                 surfaces,
                 mesh_buffers,
             }

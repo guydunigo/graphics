@@ -12,8 +12,6 @@ use super::{
     base::VulkanBase, commands::FrameData, compute_shaders::Effects, shaders_loader::ShadersLoader,
 };
 
-pub const DRAW_IMG_FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
-
 /// Creation of the swapchain and images based on the window.
 pub struct VulkanSwapchain {
     device_copy: Rc<Device>,
@@ -27,6 +25,7 @@ pub struct VulkanSwapchain {
     pub swapchain_extent: vk::Extent2D,
 
     draw_img: AllocatedImage,
+    depth_img: AllocatedImage,
 
     /// TODO: need to recreate on resize along swapchain because we use draw_img ?
     pub effects: Effects,
@@ -125,7 +124,9 @@ impl VulkanSwapchain {
             })
             .collect();
 
-        let draw_img = AllocatedImage::new(base, allocator, window_size);
+        let draw_img = AllocatedImage::new_draw(base, allocator.clone(), window_size);
+        let depth_img = AllocatedImage::new_depth(base, allocator, window_size);
+
         let effects = Effects::new(base.device.clone(), shaders, draw_img.img_view);
 
         Self {
@@ -140,6 +141,7 @@ impl VulkanSwapchain {
             swapchain_img_format,
             swapchain_extent,
             draw_img,
+            depth_img,
             effects,
         }
     }
@@ -219,6 +221,18 @@ impl VulkanSwapchain {
             height: self.draw_img.extent.height,
         }
     }
+
+    pub fn depth_img(&self) -> &vk::Image {
+        &self.depth_img.img
+    }
+
+    pub fn depth_img_view(&self) -> &vk::ImageView {
+        &self.depth_img.img_view
+    }
+
+    pub fn depth_format(&self) -> &vk::Format {
+        &self.depth_img.format
+    }
 }
 
 impl Drop for VulkanSwapchain {
@@ -291,24 +305,56 @@ struct AllocatedImage {
 }
 
 impl AllocatedImage {
-    pub fn new(
+    pub fn new_draw(
         base: &VulkanBase,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
         window_size: PhysicalSize<u32>,
     ) -> Self {
-        let format = DRAW_IMG_FORMAT;
+        let usages = vk::ImageUsageFlags::TRANSFER_SRC
+            | vk::ImageUsageFlags::TRANSFER_DST
+            | vk::ImageUsageFlags::STORAGE
+            | vk::ImageUsageFlags::COLOR_ATTACHMENT;
 
+        Self::new(
+            base,
+            allocator,
+            window_size,
+            vk::Format::R16G16B16A16_SFLOAT,
+            usages,
+            vk::ImageAspectFlags::COLOR,
+        )
+    }
+
+    pub fn new_depth(
+        base: &VulkanBase,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        window_size: PhysicalSize<u32>,
+    ) -> Self {
+        Self::new(
+            base,
+            allocator,
+            window_size,
+            vk::Format::D32_SFLOAT,
+            vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+            vk::ImageAspectFlags::DEPTH,
+        )
+    }
+
+    fn new(
+        base: &VulkanBase,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        window_size: PhysicalSize<u32>,
+        format: vk::Format,
+        usages: vk::ImageUsageFlags,
+        aspect: vk::ImageAspectFlags,
+    ) -> Self {
         let extent = vk::Extent3D {
             width: window_size.width,
             height: window_size.height,
             depth: 1,
         };
 
-        let draw_img_usages = vk::ImageUsageFlags::TRANSFER_SRC
-            | vk::ImageUsageFlags::TRANSFER_DST
-            | vk::ImageUsageFlags::STORAGE
-            | vk::ImageUsageFlags::COLOR_ATTACHMENT;
-        let rimg_info = image_create_info(format, draw_img_usages, extent);
+        let rimg_info = image_create_info(format, usages, extent);
         let mut rimg_allocinfo = vk_mem::AllocationCreateInfo::default();
         {
             // Example : https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
@@ -327,7 +373,7 @@ impl AllocatedImage {
                 .unwrap()
         };
 
-        let view_create_info = image_view_create_info(format, img, vk::ImageAspectFlags::COLOR);
+        let view_create_info = image_view_create_info(format, img, aspect);
         let img_view = unsafe {
             base.device
                 .create_image_view(&view_create_info, None)

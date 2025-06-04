@@ -274,7 +274,15 @@ impl FrameData {
             None,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         )];
-        let render_info = rendering_info(swapchain.swapchain_extent, &color_attachments[..], None);
+        let depth_attachment = depth_attachment_info(
+            *swapchain.depth_img_view(),
+            vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
+        );
+        let render_info = rendering_info(
+            swapchain.swapchain_extent,
+            &color_attachments[..],
+            Some(&depth_attachment),
+        );
 
         unsafe {
             self.device_copy
@@ -553,6 +561,20 @@ fn attachment_info<'a>(
     if let Some(clear) = clear {
         res.clear_value = clear;
     }
+
+    res
+}
+
+fn depth_attachment_info<'a>(
+    view: vk::ImageView,
+    layout: vk::ImageLayout,
+) -> vk::RenderingAttachmentInfo<'a> {
+    let mut res = vk::RenderingAttachmentInfo::default()
+        .image_view(view)
+        .image_layout(layout)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::STORE);
+    res.clear_value.depth_stencil.depth = 0.;
 
     res
 }

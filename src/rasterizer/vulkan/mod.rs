@@ -71,6 +71,7 @@ impl VulkanEngine {
                 &shaders,
                 base.device.clone(),
                 *swapchain.draw_format(),
+                *swapchain.depth_format(),
             ),
             gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
             commands,
@@ -132,6 +133,12 @@ impl VulkanEngine {
             *image,
             vk::ImageLayout::GENERAL,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        );
+        let depth = self.swapchain.depth_img();
+        current_frame.transition_image(
+            *depth,
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
 
         current_frame.draw_geometry(&self.swapchain, &self.gfx);
