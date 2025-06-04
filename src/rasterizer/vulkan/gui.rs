@@ -9,9 +9,8 @@ use egui::{FontData, FontDefinitions, FontFamily, TextureId, TexturesDelta, epai
 use egui_ash_renderer::{DynamicRendering, Options, Renderer};
 use winit::{event::WindowEvent, window::Window};
 
+use super::{base::VulkanBase, commands::FRAME_OVERLAP};
 use crate::font::{FONT, FONT_NAME};
-
-use super::{vulkan_base::VulkanBase, vulkan_commands::FRAME_OVERLAP};
 
 pub struct GeneratedUi(Vec<ClippedShape>, TexturesDelta, f32);
 
@@ -19,6 +18,7 @@ pub struct VulkanGui {
     inner: RefCell<VulkanGuiMutable>,
 }
 
+/// Initializes egui for Winit and Ash
 struct VulkanGuiMutable {
     window: Rc<Window>,
     state: egui_winit::State,

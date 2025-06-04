@@ -18,6 +18,11 @@ use winit::{
 
 const APP_NAME: &CStr = c"My rasterizer";
 
+/// Initialisation des services de base de Vulkan :
+/// - Création d'instance,
+/// - Activation des validation layers
+/// - Choix du GPU
+/// - ...
 pub struct VulkanBase {
     // `_entry` must be kept alive all along in dynamic loading mode (not linked).
     // If it is dyn loaded and gets dropped, all references to vulkan functions and data

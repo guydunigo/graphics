@@ -4,26 +4,25 @@ use std::{
 };
 
 use ash::vk;
-use vulkan_descriptors::{ComputeEffect, ComputePushConstants};
 use winit::{event::WindowEvent, window::Window};
 
+use super::{format_debug, settings::Settings};
 use crate::{scene::World, window::AppObserver};
 
-use super::{format_debug, settings::Settings};
-
-mod vulkan_base;
-use vulkan_base::VulkanBase;
-mod vulkan_swapchain;
-use vulkan_swapchain::VulkanSwapchain;
-mod vulkan_commands;
-use vulkan_commands::VulkanCommands;
-mod vulkan_descriptors;
-mod vulkan_gui;
-use vulkan_gui::VulkanGui;
-mod vulkan_shaders;
-use vulkan_shaders::VulkanShaders;
-mod vk_graphics_pipeline;
-use vk_graphics_pipeline::VkGraphicsPipeline;
+mod base;
+use base::VulkanBase;
+mod swapchain;
+use swapchain::VulkanSwapchain;
+mod commands;
+use commands::VulkanCommands;
+mod compute_shaders;
+use compute_shaders::{ComputeEffect, ComputePushConstants};
+mod gui;
+use gui::VulkanGui;
+mod shaders_loader;
+use shaders_loader::ShadersLoader;
+mod gfx_pipeline;
+use gfx_pipeline::VkGraphicsPipeline;
 
 #[cfg(feature = "stats")]
 use super::Stats;
@@ -31,12 +30,11 @@ use super::Stats;
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine {
     // Elements are placed in the order they should be dropped, so inverse order of creation.
-    mesh_pipeline: VkGraphicsPipeline,
-    triangle_pipeline: VkGraphicsPipeline,
+    gfx: VkGraphicsPipeline,
     swapchain: VulkanSwapchain,
     gui: VulkanGui,
     commands: VulkanCommands,
-    shaders: VulkanShaders,
+    shaders: ShadersLoader,
     base: VulkanBase,
 
     current_bg_effect: usize,
@@ -55,11 +53,11 @@ impl VulkanEngine {
             Arc::new(Mutex::new(allocator))
         };
 
-        let shaders = VulkanShaders::new(base.device.clone());
+        let shaders = ShadersLoader::new(base.device.clone());
         let swapchain = VulkanSwapchain::new(&base, &shaders, allocator.clone());
 
         let bg_effects_data = swapchain
-            .descriptors
+            .effects
             .bg_effects
             .iter()
             .map(|b| *b.default_data())
@@ -68,12 +66,7 @@ impl VulkanEngine {
         let commands = VulkanCommands::new(&base, allocator.clone());
 
         Self {
-            triangle_pipeline: VkGraphicsPipeline::new_hardcoded_mesh(
-                &shaders,
-                base.device.clone(),
-                *swapchain.draw_format(),
-            ),
-            mesh_pipeline: VkGraphicsPipeline::new(
+            gfx: VkGraphicsPipeline::new(
                 &commands,
                 &shaders,
                 base.device.clone(),
@@ -106,7 +99,7 @@ impl VulkanEngine {
                 ctx,
                 format_debug(settings, world, app, self.base.window.inner_size(), None),
                 &mut self.current_bg_effect,
-                &self.swapchain.descriptors.bg_effects[..],
+                &self.swapchain.effects.bg_effects[..],
                 &mut self.bg_effects_data,
             )
         });
@@ -141,11 +134,7 @@ impl VulkanEngine {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
 
-        current_frame.draw_geometry(
-            &self.swapchain,
-            self.triangle_pipeline.pipeline,
-            &self.mesh_pipeline,
-        );
+        current_frame.draw_geometry(&self.swapchain, &self.gfx);
 
         let (swapchain_img_index, swapchain_image, sem_render, swapchain_image_view) =
             self.swapchain.acquire_next_image(current_frame);
@@ -217,20 +206,6 @@ fn ui(
     bg_effects_data: &mut [ComputePushConstants],
 ) {
     egui::Window::new("debug").show(ctx, |ui| ui.label(debug));
-    egui::Window::new("test").show(ctx, |ui| {
-        ui.label("Hello world!");
-        if ui.button("Click me").clicked() {
-            println!("Click");
-        }
-        ui.heading("My Heading is big !!!");
-        ui.menu_button("My menu", |ui| {
-            ui.menu_button("My sub-menu", |ui| {
-                if ui.button("Close the menu").clicked() {
-                    ui.close_menu();
-                }
-            });
-        });
-    });
     egui::Window::new("Background").show(ctx, |ui| {
         if !bg_effects.is_empty() {
             ui.label("Selected effect :");

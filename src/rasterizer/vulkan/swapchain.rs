@@ -9,12 +9,12 @@ use vk_mem::Alloc;
 use winit::dpi::PhysicalSize;
 
 use super::{
-    vulkan_base::VulkanBase, vulkan_commands::FrameData, vulkan_descriptors::VulkanDescriptors,
-    vulkan_shaders::VulkanShaders,
+    base::VulkanBase, commands::FrameData, compute_shaders::Effects, shaders_loader::ShadersLoader,
 };
 
 pub const DRAW_IMG_FORMAT: vk::Format = vk::Format::R16G16B16A16_SFLOAT;
 
+/// Creation of the swapchain and images based on the window.
 pub struct VulkanSwapchain {
     device_copy: Rc<Device>,
 
@@ -27,14 +27,15 @@ pub struct VulkanSwapchain {
     pub swapchain_extent: vk::Extent2D,
 
     draw_img: AllocatedImage,
+
     /// TODO: need to recreate on resize along swapchain because we use draw_img ?
-    pub descriptors: VulkanDescriptors,
+    pub effects: Effects,
 }
 
 impl VulkanSwapchain {
     pub fn new(
         base: &VulkanBase,
-        shaders: &VulkanShaders,
+        shaders: &ShadersLoader,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
     ) -> Self {
         let present_mode = vk::PresentModeKHR::FIFO;
@@ -125,7 +126,7 @@ impl VulkanSwapchain {
             .collect();
 
         let draw_img = AllocatedImage::new(base, allocator, window_size);
-        let descriptors = VulkanDescriptors::new(base.device.clone(), shaders, draw_img.img_view);
+        let effects = Effects::new(base.device.clone(), shaders, draw_img.img_view);
 
         Self {
             // I hope it's okay to clone the device...
@@ -139,7 +140,7 @@ impl VulkanSwapchain {
             swapchain_img_format,
             swapchain_extent,
             draw_img,
-            descriptors,
+            effects,
         }
     }
 
@@ -153,11 +154,12 @@ impl VulkanSwapchain {
     pub fn resize_if_necessary(
         &mut self,
         base: &VulkanBase,
-        shaders: &VulkanShaders,
+        shaders: &ShadersLoader,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
     ) {
         // TODO: need to compare window_size or is_suboptimal is enough ?
         if *self.is_suboptimal.borrow() || self.window_size != base.window.inner_size() {
+            println!("--- Resize ---");
             *self = VulkanSwapchain::new(base, shaders, allocator);
         }
     }

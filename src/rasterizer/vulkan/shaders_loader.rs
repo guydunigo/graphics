@@ -6,6 +6,53 @@ use shaderc::{CompilationArtifact, CompileOptions, Compiler, ShaderKind};
 const SHADER_FOLDER: &str = "./resources/";
 const SHADER_EXT: &str = "glsl";
 
+/// Making it easy to load shaders from the [`SHADER_FOLDER`].
+///
+/// Known shaders are listed in the [`ShaderName`] enum.
+/// Their corresponding name and kind are configured in the corresponding `From` impl for `&str` and
+/// `ShaderKind`.
+///
+/// The file name should be `{name}.{kind}.glsl` : `colored_triangle_mesh.vert.glsl`
+///
+/// This struct stores a [`shaderc::Compiler`], which is costly to create.
+pub struct ShadersLoader {
+    device_copy: Rc<Device>,
+    compiler: Compiler,
+    // shaders: RefCell<HashMap<ShaderName, vk::ShaderModule>>,
+}
+
+impl ShadersLoader {
+    pub fn new(device: Rc<Device>) -> Self {
+        Self {
+            device_copy: device,
+            compiler: Compiler::new().unwrap(),
+            // shaders: Default::default(),
+        }
+    }
+
+    pub fn get(&self, name: ShaderName) -> ShaderModule {
+        // let mut shaders = self.shaders.borrow_mut();
+        // if shaders.contains_key(&name) {
+        //     shaders.get(&name).unwrap()
+        // } else {
+        //     let module = self.load_shader_module(name);
+        //     shaders.entry(name).or_insert(module)
+        // }
+        ShaderModule::load(self.device_copy.clone(), &self.compiler, name)
+    }
+}
+
+// impl Drop for ShadersLoader {
+//     fn drop(&mut self) {
+//         println!("drop VulkanShaders : {} shaders", shaders.len());
+//         unsafe {
+//             shaders
+//                 .drain()
+//                 .for_each(|(_, module)| self.device_copy.destroy_shader_module(module, None));
+//         }
+//     }
+// }
+
 #[allow(dead_code)]
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
 pub enum ShaderName {
@@ -15,12 +62,6 @@ pub enum ShaderName {
     ColoredTriangleVert,
     ColoredTriangleFrag,
     ColoredTriangleMeshVert,
-}
-
-impl ShaderName {
-    pub fn into_str(self) -> &'static str {
-        self.into()
-    }
 }
 
 impl From<ShaderName> for &str {
@@ -66,6 +107,15 @@ impl From<ShaderName> for PathBuf {
     }
 }
 
+impl ShaderName {
+    pub fn into_str(self) -> &'static str {
+        self.into()
+    }
+}
+
+/// Wrapper around a [`vk::ShaderModule`].
+///
+/// It will take care of destroying it on drop, so keep it around long enough.
 pub struct ShaderModule {
     device_copy: Rc<Device>,
     name: ShaderName,
@@ -79,6 +129,7 @@ impl ShaderModule {
         self.module
     }
 
+    /// Loads the corresponding `glsl` file and compiles it using `shaderc`.
     pub fn load(device: Rc<Device>, compiler: &Compiler, name: ShaderName) -> Self {
         let path: PathBuf = name.into();
 
@@ -124,41 +175,3 @@ impl AsRef<vk::ShaderModule> for ShaderModule {
         &self.module
     }
 }
-
-pub struct VulkanShaders {
-    device_copy: Rc<Device>,
-    compiler: Compiler,
-    // shaders: RefCell<HashMap<ShaderName, vk::ShaderModule>>,
-}
-
-impl VulkanShaders {
-    pub fn new(device: Rc<Device>) -> Self {
-        Self {
-            device_copy: device,
-            compiler: Compiler::new().unwrap(),
-            // shaders: Default::default(),
-        }
-    }
-
-    pub fn get(&self, name: ShaderName) -> ShaderModule {
-        // let mut shaders = self.shaders.borrow_mut();
-        // if shaders.contains_key(&name) {
-        //     shaders.get(&name).unwrap()
-        // } else {
-        //     let module = self.load_shader_module(name);
-        //     shaders.entry(name).or_insert(module)
-        // }
-        ShaderModule::load(self.device_copy.clone(), &self.compiler, name)
-    }
-}
-
-// impl Drop for VulkanShaders {
-//     fn drop(&mut self) {
-//         println!("drop VulkanShaders : {} shaders", shaders.len());
-//         unsafe {
-//             shaders
-//                 .drain()
-//                 .for_each(|(_, module)| self.device_copy.destroy_shader_module(module, None));
-//         }
-//     }
-// }

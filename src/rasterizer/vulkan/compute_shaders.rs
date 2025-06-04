@@ -1,11 +1,10 @@
 use ash::{Device, vk};
 use std::rc::Rc;
 
-use crate::rasterizer::vulkan::vulkan_shaders::ShaderName;
+use super::shaders_loader::{ShaderName, ShadersLoader};
 
-use super::vulkan_shaders::VulkanShaders;
-
-pub struct VulkanDescriptors {
+/// This struct manages the background effects based on compute shaders.
+pub struct Effects {
     device_copy: Rc<Device>,
 
     _descriptor: DescriptorAllocator,
@@ -17,8 +16,8 @@ pub struct VulkanDescriptors {
     pub bg_effects: Vec<ComputeEffect>,
 }
 
-impl VulkanDescriptors {
-    pub fn new(device: Rc<Device>, shaders: &VulkanShaders, draw_img: vk::ImageView) -> Self {
+impl Effects {
+    pub fn new(device: Rc<Device>, shaders: &ShadersLoader, draw_img: vk::ImageView) -> Self {
         let descriptor = DescriptorAllocator::new_global(device.clone());
         let draw_img_desc_layout = DescriptorLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
@@ -64,9 +63,9 @@ impl VulkanDescriptors {
     }
 }
 
-impl Drop for VulkanDescriptors {
+impl Drop for Effects {
     fn drop(&mut self) {
-        println!("drop VulkanDescriptors");
+        println!("drop Effects");
         unsafe {
             self.device_copy
                 .destroy_descriptor_set_layout(self.draw_img_desc_layout, None);
@@ -207,16 +206,7 @@ pub struct ComputePushConstants {
     pub data3: [f32; 4],
 }
 
-impl ComputePushConstants {
-    // TODO: in common with GpuDrawPushConstants
-    pub fn as_u8_slice(&self) -> &[u8] {
-        unsafe {
-            let ptr = self as *const Self as *const u8;
-            std::slice::from_raw_parts(ptr, size_of::<Self>())
-        }
-    }
-}
-
+/// Loaded compute shader pipeline.
 pub struct ComputeEffect {
     device_copy: Rc<Device>,
 
@@ -229,7 +219,7 @@ pub struct ComputeEffect {
 impl ComputeEffect {
     fn new(
         device: Rc<Device>,
-        shaders: &VulkanShaders,
+        shaders: &ShadersLoader,
         pipeline_layout: vk::PipelineLayout,
         name: ShaderName,
         default_data: ComputePushConstants,
@@ -264,7 +254,7 @@ impl ComputeEffect {
 
     pub fn gradient(
         device: Rc<Device>,
-        shaders: &VulkanShaders,
+        shaders: &ShadersLoader,
         pipeline_layout: vk::PipelineLayout,
     ) -> Self {
         Self::new(
@@ -282,7 +272,7 @@ impl ComputeEffect {
 
     pub fn sky(
         device: Rc<Device>,
-        shaders: &VulkanShaders,
+        shaders: &ShadersLoader,
         pipeline_layout: vk::PipelineLayout,
     ) -> Self {
         Self::new(

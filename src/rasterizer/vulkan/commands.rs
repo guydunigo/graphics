@@ -6,11 +6,11 @@ use std::{
 use ash::{Device, vk};
 
 use super::{
-    vk_graphics_pipeline::{GpuDrawPushConstants, VkGraphicsPipeline},
-    vulkan_base::VulkanBase,
-    vulkan_descriptors::ComputePushConstants,
-    vulkan_gui::{GeneratedUi, VulkanGui},
-    vulkan_swapchain::VulkanSwapchain,
+    base::VulkanBase,
+    compute_shaders::ComputePushConstants,
+    gfx_pipeline::{GpuDrawPushConstants, VkGraphicsPipeline},
+    gui::{GeneratedUi, VulkanGui},
+    swapchain::VulkanSwapchain,
 };
 
 pub const FRAME_OVERLAP: usize = 2;
@@ -204,23 +204,23 @@ impl FrameData {
             self.device_copy.cmd_bind_pipeline(
                 self.cmd_buf,
                 vk::PipelineBindPoint::COMPUTE,
-                swapchain.descriptors.bg_effects[current_bg_effect].pipeline,
+                swapchain.effects.bg_effects[current_bg_effect].pipeline,
             );
             self.device_copy.cmd_bind_descriptor_sets(
                 self.cmd_buf,
                 vk::PipelineBindPoint::COMPUTE,
-                swapchain.descriptors.pipeline_layout,
+                swapchain.effects.pipeline_layout,
                 0,
-                &[swapchain.descriptors.draw_img_descs],
+                &[swapchain.effects.draw_img_descs],
                 &[],
             );
 
             self.device_copy.cmd_push_constants(
                 self.cmd_buf,
-                swapchain.descriptors.pipeline_layout,
+                swapchain.effects.pipeline_layout,
                 vk::ShaderStageFlags::COMPUTE,
                 0,
-                current_bg_effect_data.as_u8_slice(),
+                as_u8_slice(current_bg_effect_data),
             );
 
             let draw_extent = swapchain.draw_extent();
@@ -267,12 +267,7 @@ impl FrameData {
         }
     }
 
-    pub fn draw_geometry(
-        &self,
-        swapchain: &VulkanSwapchain,
-        triangle_pipeline: vk::Pipeline,
-        mesh_gfx: &VkGraphicsPipeline,
-    ) {
+    pub fn draw_geometry(&self, swapchain: &VulkanSwapchain, gfx: &VkGraphicsPipeline) {
         let color_attachments = [attachment_info(
             *swapchain.draw_img_view(),
             None,
@@ -286,7 +281,7 @@ impl FrameData {
             self.device_copy.cmd_bind_pipeline(
                 self.cmd_buf,
                 vk::PipelineBindPoint::GRAPHICS,
-                triangle_pipeline,
+                gfx.triangle_pipeline,
             );
         }
 
@@ -307,40 +302,36 @@ impl FrameData {
             self.device_copy
                 .cmd_set_scissor(self.cmd_buf, 0, &scissors[..]);
             self.device_copy.cmd_draw(self.cmd_buf, 3, 1, 0, 0);
-            self.draw_geometry_meshes(mesh_gfx);
+            self.draw_geometry_meshes(gfx);
             self.device_copy.cmd_end_rendering(self.cmd_buf);
         }
     }
 
-    pub fn draw_geometry_meshes(&self, mesh_gfx: &VkGraphicsPipeline) {
+    pub fn draw_geometry_meshes(&self, gfx: &VkGraphicsPipeline) {
         unsafe {
             self.device_copy.cmd_bind_pipeline(
                 self.cmd_buf,
                 vk::PipelineBindPoint::GRAPHICS,
-                mesh_gfx.pipeline,
+                gfx.pipeline,
             );
         }
 
         let constants = GpuDrawPushConstants {
             world_mat: glam::Mat4::IDENTITY,
-            vertex_buffer: mesh_gfx
-                .mesh_buffers
-                .as_ref()
-                .unwrap()
-                .vertex_buffer_address,
+            vertex_buffer: gfx.mesh_buffers.vertex_buffer_address,
         };
 
         unsafe {
             self.device_copy.cmd_push_constants(
                 self.cmd_buf,
-                mesh_gfx.pipeline_layout,
+                gfx.pipeline_layout,
                 vk::ShaderStageFlags::VERTEX,
                 0,
-                constants.as_u8_slice(),
+                as_u8_slice(&constants),
             );
             self.device_copy.cmd_bind_index_buffer(
                 self.cmd_buf,
-                *mesh_gfx.mesh_buffers.as_ref().unwrap().index_buffer(),
+                *gfx.mesh_buffers.index_buffer(),
                 0,
                 vk::IndexType::UINT32,
             );
@@ -538,4 +529,9 @@ fn rendering_info<'a>(
     } else {
         res
     }
+}
+
+fn as_u8_slice<T>(value: &T) -> &[u8] {
+    let ptr = value as *const T as *const u8;
+    unsafe { std::slice::from_raw_parts(ptr, size_of::<T>()) }
 }
