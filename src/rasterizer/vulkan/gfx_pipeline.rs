@@ -248,12 +248,12 @@ impl<'a> PipelineBuilder<'a> {
             .max_depth_bounds(1.);
     }
 
-    pub fn disable_blending(&mut self) {
-        self.color_blend_attachment = self
-            .color_blend_attachment
-            .color_write_mask(vk::ColorComponentFlags::RGBA)
-            .blend_enable(false);
-    }
+    // pub fn disable_blending(&mut self) {
+    //     self.color_blend_attachment = self
+    //         .color_blend_attachment
+    //         .color_write_mask(vk::ColorComponentFlags::RGBA)
+    //         .blend_enable(false);
+    // }
 
     fn enable_blending_base(&mut self, dst_color_blend_factor: vk::BlendFactor) {
         self.color_blend_attachment = self
@@ -272,7 +272,7 @@ impl<'a> PipelineBuilder<'a> {
         self.enable_blending_base(vk::BlendFactor::ONE);
     }
 
-    pub fn enable_blending_alphablend(&mut self) {
-        self.enable_blending_base(vk::BlendFactor::ONE_MINUS_SRC_ALPHA);
-    }
+    // pub fn enable_blending_alphablend(&mut self) {
+    //     self.enable_blending_base(vk::BlendFactor::ONE_MINUS_SRC_ALPHA);
+    // }
 }

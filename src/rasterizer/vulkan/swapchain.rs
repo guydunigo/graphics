@@ -14,15 +14,10 @@ use super::{
 
 /// Creation of the swapchain and images based on the window.
 pub struct VulkanSwapchain {
-    device_copy: Rc<Device>,
+    inner: SwapchainData,
 
-    window_size: PhysicalSize<u32>,
-    is_suboptimal: RefCell<bool>,
-    pub swapchain_loader: swapchain::Device,
-    pub swapchain: vk::SwapchainKHR,
-    swapchain_images: Vec<(vk::Image, vk::ImageView, vk::Semaphore)>,
-    pub swapchain_img_format: vk::Format,
-    pub swapchain_extent: vk::Extent2D,
+    draw_extent: vk::Extent2D,
+    pub render_scale: f32,
 
     draw_img: AllocatedImage,
     depth_img: AllocatedImage,
@@ -37,6 +32,190 @@ impl VulkanSwapchain {
         shaders: &ShadersLoader,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
     ) -> Self {
+        let swapchain_data = SwapchainData::new(base);
+        let window_size = base.window.inner_size();
+
+        let draw_img = AllocatedImage::new_draw(base, allocator.clone(), window_size);
+        let depth_img = AllocatedImage::new_depth(base, allocator, window_size);
+
+        let effects = Effects::new(base.device.clone(), shaders, draw_img.img_view);
+
+        let draw_extent = vk::Extent2D {
+            width: draw_img.extent.width,
+            height: draw_img.extent.height,
+        };
+
+        Self {
+            inner: swapchain_data,
+            draw_extent,
+            render_scale: 1.,
+            draw_img,
+            depth_img,
+            effects,
+        }
+    }
+
+    fn set_suboptimal(&self) {
+        println!("Suboptimal swapchain, needs resizing.");
+        *self.inner.is_suboptimal.borrow_mut() = true;
+    }
+
+    fn set_out_of_date_khr(&self) {
+        println!("Error out of date khr, needs, resizing.");
+        *self.inner.is_suboptimal.borrow_mut() = true;
+    }
+
+    /// If window is resized, we need to recreate the whole swapchain.
+    pub fn resize_if_necessary(
+        &mut self,
+        base: &VulkanBase,
+        shaders: &ShadersLoader,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+    ) {
+        let window_size = base.window.inner_size();
+
+        if *self.inner.is_suboptimal.borrow()
+            || *self.inner.is_out_of_date_khr.borrow()
+            || self.inner.window_size != window_size
+        {
+            // If the draw_img is bigger, we avoid re-allocating it,
+            // and just use smaller extent (updated from update_draw_extent) :
+            if self.draw_img.extent.height >= window_size.height
+                && self.draw_img.extent.width >= window_size.width
+            {
+                println!("--- Resize swapchain only ---");
+                self.inner = SwapchainData::new(base);
+            } else {
+                println!("--- Resize swapchain and draw image ---");
+                *self = VulkanSwapchain::new(base, shaders, allocator);
+            }
+
+            println!("--- End of resize ---");
+        }
+
+        self.update_draw_extent();
+    }
+
+    pub fn acquire_next_image(
+        &self,
+        current_frame: &FrameData,
+    ) -> Option<(u32, &vk::Image, &vk::Semaphore, &vk::ImageView)> {
+        let res = unsafe {
+            self.inner.swapchain_loader.acquire_next_image(
+                self.inner.swapchain,
+                1_000_000_000,
+                current_frame.sem_swapchain,
+                vk::Fence::null(),
+            )
+        };
+
+        match res {
+            Ok((swapchain_img_index, is_suboptimal)) => {
+                if is_suboptimal {
+                    self.set_suboptimal();
+                }
+
+                let (i, v, s) = &self.inner.swapchain_images[swapchain_img_index as usize];
+
+                Some((swapchain_img_index, i, s, v))
+            }
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                self.set_out_of_date_khr();
+                None
+            }
+            Err(e) => panic!("{}", e),
+        }
+    }
+
+    pub fn present(&self, swapchain_img_index: u32, sem_render: &vk::Semaphore, queue: vk::Queue) {
+        let swapchains = [self.inner.swapchain];
+        let wait_semaphores = [*sem_render];
+        let images_indices = [swapchain_img_index];
+        let present_info = vk::PresentInfoKHR::default()
+            .swapchains(&swapchains)
+            .wait_semaphores(&wait_semaphores)
+            .image_indices(&images_indices);
+        let res = unsafe {
+            self.inner
+                .swapchain_loader
+                .queue_present(queue, &present_info)
+        };
+
+        match res {
+            Ok(false) => (),
+            Ok(true) => self.set_suboptimal(),
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => self.set_out_of_date_khr(),
+            Err(e) => panic!("{}", e),
+        }
+    }
+
+    fn update_draw_extent(&mut self) {
+        self.draw_extent.height = (u32::min(
+            self.inner.swapchain_extent.height,
+            self.draw_img.extent.height,
+        ) as f32
+            * self.render_scale) as u32;
+        self.draw_extent.width = (u32::min(
+            self.inner.swapchain_extent.width,
+            self.draw_img.extent.width,
+        ) as f32
+            * self.render_scale) as u32;
+    }
+
+    pub fn draw_extent(&self) -> vk::Extent2D {
+        self.draw_extent
+    }
+
+    pub fn swapchain_extent(&self) -> vk::Extent2D {
+        self.inner.swapchain_extent
+    }
+
+    pub fn swapchain_img_format(&self) -> vk::Format {
+        self.inner.swapchain_img_format
+    }
+
+    pub fn draw_img(&self) -> &vk::Image {
+        &self.draw_img.img
+    }
+
+    pub fn draw_img_view(&self) -> &vk::ImageView {
+        &self.draw_img.img_view
+    }
+
+    pub fn draw_format(&self) -> &vk::Format {
+        &self.draw_img.format
+    }
+
+    pub fn depth_img(&self) -> &vk::Image {
+        &self.depth_img.img
+    }
+
+    pub fn depth_img_view(&self) -> &vk::ImageView {
+        &self.depth_img.img_view
+    }
+
+    pub fn depth_format(&self) -> &vk::Format {
+        &self.depth_img.format
+    }
+}
+
+/// Part that needs to be recreated on resize
+struct SwapchainData {
+    device_copy: Rc<Device>,
+
+    window_size: PhysicalSize<u32>,
+    is_suboptimal: RefCell<bool>,
+    is_out_of_date_khr: RefCell<bool>,
+
+    pub swapchain_loader: swapchain::Device,
+    pub swapchain: vk::SwapchainKHR,
+    swapchain_images: Vec<(vk::Image, vk::ImageView, vk::Semaphore)>,
+    pub swapchain_img_format: vk::Format,
+    pub swapchain_extent: vk::Extent2D,
+}
+
+impl SwapchainData {
+    pub fn new(base: &VulkanBase) -> Self {
         let present_mode = vk::PresentModeKHR::FIFO;
         // TODO: when implemented : MAILBOX : https://vkguide.dev/docs/new_chapter_1/vulkan_init_flow/
         // let present_mode = present_modes
@@ -124,120 +303,23 @@ impl VulkanSwapchain {
             })
             .collect();
 
-        let draw_img = AllocatedImage::new_draw(base, allocator.clone(), window_size);
-        let depth_img = AllocatedImage::new_depth(base, allocator, window_size);
-
-        let effects = Effects::new(base.device.clone(), shaders, draw_img.img_view);
-
         Self {
-            // I hope it's okay to clone the device...
-            // It's needed for Drop, but I'd like to keep this object separated from `VulkanBase`.
             device_copy: base.device.clone(),
             window_size,
             is_suboptimal: Default::default(),
+            is_out_of_date_khr: Default::default(),
             swapchain_loader,
             swapchain,
             swapchain_images,
             swapchain_img_format,
             swapchain_extent,
-            draw_img,
-            depth_img,
-            effects,
         }
-    }
-
-    fn set_suboptimal(&self, is_suboptimal: bool) {
-        if is_suboptimal {
-            *self.is_suboptimal.borrow_mut() |= is_suboptimal;
-        }
-    }
-
-    /// If window is resized, we need to recreate the whole swapchain.
-    pub fn resize_if_necessary(
-        &mut self,
-        base: &VulkanBase,
-        shaders: &ShadersLoader,
-        allocator: Arc<Mutex<vk_mem::Allocator>>,
-    ) {
-        // TODO: need to compare window_size or is_suboptimal is enough ?
-        if *self.is_suboptimal.borrow() || self.window_size != base.window.inner_size() {
-            println!("--- Resize ---");
-            *self = VulkanSwapchain::new(base, shaders, allocator);
-            println!("--- End of resize ---");
-        }
-    }
-
-    pub fn acquire_next_image(
-        &self,
-        current_frame: &FrameData,
-    ) -> (u32, &vk::Image, &vk::Semaphore, &vk::ImageView) {
-        let (swapchain_img_index, is_suboptimal) = unsafe {
-            self.swapchain_loader
-                .acquire_next_image(
-                    self.swapchain,
-                    1_000_000_000,
-                    current_frame.sem_swapchain,
-                    vk::Fence::null(),
-                )
-                .unwrap()
-        };
-        self.set_suboptimal(is_suboptimal);
-
-        let (i, v, s) = &self.swapchain_images[swapchain_img_index as usize];
-        (swapchain_img_index, i, s, v)
-    }
-
-    pub fn present(&self, swapchain_img_index: u32, sem_render: &vk::Semaphore, queue: vk::Queue) {
-        let swapchains = [self.swapchain];
-        let wait_semaphores = [*sem_render];
-        let images_indices = [swapchain_img_index];
-        let present_info = vk::PresentInfoKHR::default()
-            .swapchains(&swapchains)
-            .wait_semaphores(&wait_semaphores)
-            .image_indices(&images_indices);
-        let is_suboptimal = unsafe {
-            self.swapchain_loader
-                .queue_present(queue, &present_info)
-                .unwrap()
-        };
-        self.set_suboptimal(is_suboptimal);
-    }
-
-    pub fn draw_img(&self) -> &vk::Image {
-        &self.draw_img.img
-    }
-
-    pub fn draw_img_view(&self) -> &vk::ImageView {
-        &self.draw_img.img_view
-    }
-
-    pub fn draw_format(&self) -> &vk::Format {
-        &self.draw_img.format
-    }
-
-    pub fn draw_extent(&self) -> vk::Extent2D {
-        vk::Extent2D {
-            width: self.draw_img.extent.width,
-            height: self.draw_img.extent.height,
-        }
-    }
-
-    pub fn depth_img(&self) -> &vk::Image {
-        &self.depth_img.img
-    }
-
-    pub fn depth_img_view(&self) -> &vk::ImageView {
-        &self.depth_img.img_view
-    }
-
-    pub fn depth_format(&self) -> &vk::Format {
-        &self.depth_img.format
     }
 }
 
-impl Drop for VulkanSwapchain {
+impl Drop for SwapchainData {
     fn drop(&mut self) {
-        println!("drop VulkanSwapchain");
+        println!("drop SwapchainData");
         unsafe {
             self.device_copy.device_wait_idle().unwrap();
             self.swapchain_loader

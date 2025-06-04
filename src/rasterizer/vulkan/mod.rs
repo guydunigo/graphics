@@ -74,7 +74,7 @@ impl VulkanEngine {
                 *swapchain.draw_format(),
                 *swapchain.depth_format(),
             ),
-            gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format),
+            gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format()),
             commands,
             swapchain,
             shaders,
@@ -97,26 +97,35 @@ impl VulkanEngine {
         app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
-        let generated_ui = self.gui.generate(|ctx| {
-            ui(
-                ctx,
-                format_debug(settings, world, app, self.base.window.inner_size(), None),
-                &mut self.current_bg_effect,
-                &self.swapchain.effects.bg_effects[..],
-                &mut self.bg_effects_data,
-            )
-        });
-
         self.swapchain.resize_if_necessary(
             &self.base,
             &self.shaders,
             self.commands.allocator.clone(),
         );
 
+        let generated_ui = self.gui.generate(|ctx| {
+            ui(
+                ctx,
+                format_debug(settings, world, app, self.base.window.inner_size(), None),
+                &mut self.current_bg_effect,
+                &mut self.swapchain.render_scale,
+                &self.swapchain.effects.bg_effects[..],
+                &mut self.bg_effects_data,
+            )
+        });
+
         let current_frame = self.commands.current_frame();
         let image = self.swapchain.draw_img();
 
         current_frame.wait_for_fences();
+
+        let Some((swapchain_img_index, swapchain_image, sem_render, swapchain_image_view)) =
+            self.swapchain.acquire_next_image(current_frame)
+        else {
+            return;
+        };
+
+        current_frame.reset_fences();
         current_frame.begin_cmd_buf();
 
         current_frame.transition_image(
@@ -145,9 +154,6 @@ impl VulkanEngine {
 
         current_frame.draw_geometries(&self.swapchain, &self.gfx);
 
-        let (swapchain_img_index, swapchain_image, sem_render, swapchain_image_view) =
-            self.swapchain.acquire_next_image(current_frame);
-
         current_frame.transition_image(
             *image,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
@@ -163,7 +169,7 @@ impl VulkanEngine {
             *image,
             *swapchain_image,
             self.swapchain.draw_extent(),
-            self.swapchain.swapchain_extent,
+            self.swapchain.swapchain_extent(),
         );
 
         current_frame.transition_image(
@@ -211,11 +217,13 @@ fn ui(
     ctx: &egui::Context,
     debug: String,
     current_bg_effect: &mut usize,
+    render_scale: &mut f32,
     bg_effects: &[ComputeEffect],
     bg_effects_data: &mut [ComputePushConstants],
 ) {
     egui::Window::new("debug").show(ctx, |ui| ui.label(debug));
     egui::Window::new("Background").show(ctx, |ui| {
+        ui.add(egui::Slider::new(render_scale, 0.3..=1.).text("Render scale"));
         if !bg_effects.is_empty() {
             ui.label("Selected effect :");
             bg_effects.iter().enumerate().for_each(|(i, n)| {

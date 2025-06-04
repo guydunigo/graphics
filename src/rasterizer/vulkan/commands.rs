@@ -102,6 +102,11 @@ impl FrameData {
             self.device_copy
                 .wait_for_fences(&[self.fence_render], true, 1_000_000_000)
                 .unwrap();
+        }
+    }
+
+    pub fn reset_fences(&self) {
+        unsafe {
             self.device_copy.reset_fences(&[self.fence_render]).unwrap();
         }
     }
@@ -243,13 +248,13 @@ impl FrameData {
         target_img_view: vk::ImageView,
         generated_ui: GeneratedUi,
     ) {
-        // todo!("To vulkan_commands ?");
         let color_attachments = [attachment_info(
             target_img_view,
             None,
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         )];
-        let render_info = rendering_info(swapchain.swapchain_extent, &color_attachments[..], None);
+        let render_info =
+            rendering_info(swapchain.swapchain_extent(), &color_attachments[..], None);
 
         unsafe {
             self.device_copy
@@ -258,7 +263,7 @@ impl FrameData {
 
         gui.draw(
             commands_queue,
-            swapchain.draw_extent(),
+            swapchain.swapchain_extent(),
             self.cmd_pool,
             self.cmd_buf,
             generated_ui,
@@ -280,7 +285,7 @@ impl FrameData {
             vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
         let render_info = rendering_info(
-            swapchain.swapchain_extent,
+            swapchain.swapchain_extent(),
             &color_attachments[..],
             Some(&depth_attachment),
         );
