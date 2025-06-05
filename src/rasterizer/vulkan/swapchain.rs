@@ -27,16 +27,25 @@ pub struct VulkanSwapchain {
 }
 
 impl VulkanSwapchain {
+    /// If `min_extent` is provided, the new image will be at least as big in height and/or in
+    /// width.
     pub fn new(
         base: &VulkanBase,
         shaders: &ShadersLoader,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
+        min_extent: Option<vk::Extent3D>,
     ) -> Self {
         let swapchain_data = SwapchainData::new(base);
         let window_size = base.window.inner_size();
+        let max_size = min_extent
+            .map(|e| PhysicalSize {
+                width: u32::max(window_size.width, e.width),
+                height: u32::max(window_size.height, e.height),
+            })
+            .unwrap_or(window_size);
 
-        let draw_img = AllocatedImage::new_draw(base, allocator.clone(), window_size);
-        let depth_img = AllocatedImage::new_depth(base, allocator, window_size);
+        let draw_img = AllocatedImage::new_draw(base, allocator.clone(), max_size);
+        let depth_img = AllocatedImage::new_depth(base, allocator, max_size);
 
         let effects = Effects::new(base.device.clone(), shaders, draw_img.img_view);
 
@@ -65,7 +74,11 @@ impl VulkanSwapchain {
         *self.inner.is_suboptimal.borrow_mut() = true;
     }
 
-    /// If window is resized, we need to recreate the whole swapchain.
+    /// If window is resized, we need to recreate the swapchain.
+    ///
+    /// If the new size is smaller, we only recreate the [`SwapchainData`],
+    /// but if it's bigger we recreate the [`VulkanSwapchain`] and re-allocate the images at least
+    /// as big.
     pub fn resize_if_necessary(
         &mut self,
         base: &VulkanBase,
@@ -79,7 +92,7 @@ impl VulkanSwapchain {
             || self.inner.window_size != window_size
         {
             // If the draw_img is bigger, we avoid re-allocating it,
-            // and just use smaller extent (updated from update_draw_extent) :
+            // and just use smaller extent (updated from [`update_draw_extent`]) :
             if self.draw_img.extent.height >= window_size.height
                 && self.draw_img.extent.width >= window_size.width
             {
@@ -87,7 +100,7 @@ impl VulkanSwapchain {
                 self.inner = SwapchainData::new(base);
             } else {
                 println!("--- Resize swapchain and draw image ---");
-                *self = VulkanSwapchain::new(base, shaders, allocator);
+                *self = VulkanSwapchain::new(base, shaders, allocator, Some(self.draw_img.extent));
             }
 
             println!("--- End of resize ---");

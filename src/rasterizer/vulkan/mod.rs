@@ -55,7 +55,7 @@ impl VulkanEngine {
         };
 
         let shaders = ShadersLoader::new(base.device.clone());
-        let swapchain = VulkanSwapchain::new(&base, &shaders, allocator.clone());
+        let swapchain = VulkanSwapchain::new(&base, &shaders, allocator.clone(), None);
 
         let bg_effects_data = swapchain
             .effects
