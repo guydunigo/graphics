@@ -116,6 +116,8 @@ impl VulkanEngine {
             )
         });
 
+        self.commands.current_frame_mut().clear_descriptors();
+
         let current_frame = self.commands.current_frame();
         let image = self.swapchain.draw_img();
 

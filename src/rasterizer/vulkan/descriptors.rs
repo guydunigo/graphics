@@ -89,10 +89,24 @@ pub struct DescriptorAllocatorGrowable {
 
 impl DescriptorAllocatorGrowable {
     pub fn new_global(device: Rc<Device>) -> Self {
-        let sizes = [PoolSizeRatio {
-            desc_type: vk::DescriptorType::STORAGE_IMAGE,
-            ratio: 1.,
-        }];
+        let sizes = [
+            PoolSizeRatio {
+                desc_type: vk::DescriptorType::STORAGE_IMAGE,
+                ratio: 3.,
+            },
+            PoolSizeRatio {
+                desc_type: vk::DescriptorType::STORAGE_BUFFER,
+                ratio: 3.,
+            },
+            PoolSizeRatio {
+                desc_type: vk::DescriptorType::UNIFORM_BUFFER,
+                ratio: 3.,
+            },
+            PoolSizeRatio {
+                desc_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                ratio: 4.,
+            },
+        ];
 
         Self::new(device, 10, &sizes[..])
     }

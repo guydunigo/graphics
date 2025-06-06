@@ -9,6 +9,7 @@ use glam::{Mat4, vec3};
 use super::{
     base::VulkanBase,
     compute_shaders::ComputePushConstants,
+    descriptors::DescriptorAllocatorGrowable,
     gfx_pipeline::{GpuDrawPushConstants, VkGraphicsPipeline},
     gui::{GeneratedUi, VulkanGui},
     swapchain::VulkanSwapchain,
@@ -24,6 +25,8 @@ pub struct FrameData {
 
     fence_render: vk::Fence,
     pub sem_swapchain: vk::Semaphore,
+
+    frame_descriptors: DescriptorAllocatorGrowable,
 }
 
 impl Drop for FrameData {
@@ -53,12 +56,15 @@ impl FrameData {
         let fence_render = unsafe { device.create_fence(fence_create_info, None).unwrap() };
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
 
+        let frame_descriptors = DescriptorAllocatorGrowable::new_global(device.clone());
+
         Self {
             device_copy: device,
             cmd_pool,
             cmd_buf,
             fence_render,
             sem_swapchain,
+            frame_descriptors,
         }
     }
 
@@ -95,6 +101,10 @@ impl FrameData {
             self.device_copy
                 .cmd_pipeline_barrier2(self.cmd_buf, &dep_info)
         };
+    }
+
+    pub fn clear_descriptors(&mut self) {
+        self.frame_descriptors.clear_pools();
     }
 
     pub fn wait_for_fences(&self) {
@@ -434,6 +444,10 @@ impl VulkanCommands {
 
     pub fn current_frame(&self) -> &FrameData {
         &self.frames[self.frame_number % FRAME_OVERLAP]
+    }
+
+    pub fn current_frame_mut(&mut self) -> &mut FrameData {
+        &mut self.frames[self.frame_number % FRAME_OVERLAP]
     }
 
     pub fn immediate_submit(&self, f: impl FnOnce(&Device, vk::CommandBuffer)) {
