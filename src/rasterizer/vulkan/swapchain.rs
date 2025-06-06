@@ -136,7 +136,7 @@ impl VulkanSwapchain {
                 self.set_out_of_date_khr();
                 None
             }
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("Error acquiring next image : {e}"),
         }
     }
 
@@ -158,7 +158,7 @@ impl VulkanSwapchain {
             Ok(false) => (),
             Ok(true) => self.set_suboptimal(),
             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => self.set_out_of_date_khr(),
-            Err(e) => panic!("{}", e),
+            Err(e) => panic!("Error presenting queue : {e}"),
         }
     }
 

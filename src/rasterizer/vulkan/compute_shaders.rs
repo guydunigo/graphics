@@ -1,7 +1,10 @@
 use ash::{Device, vk};
 use std::rc::Rc;
 
-use super::shaders_loader::{ShaderName, ShadersLoader};
+use super::{
+    descriptors::{DescriptorAllocator, DescriptorWriter},
+    shaders_loader::{ShaderName, ShadersLoader},
+};
 
 /// This struct manages the background effects based on compute shaders.
 pub struct Effects {
@@ -24,18 +27,15 @@ impl Effects {
             .build(&device, vk::ShaderStageFlags::COMPUTE);
         let draw_img_descs = descriptor.allocate(draw_img_desc_layout);
 
-        let img_infos = [vk::DescriptorImageInfo::default()
-            .image_layout(vk::ImageLayout::GENERAL)
-            .image_view(draw_img)];
-
-        let draw_img_writes = [vk::WriteDescriptorSet::default()
-            .dst_binding(0)
-            .dst_set(draw_img_descs)
-            .descriptor_count(1)
-            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-            .image_info(&img_infos[..])];
-
-        unsafe { device.update_descriptor_sets(&draw_img_writes[..], &[]) };
+        let mut writer = DescriptorWriter::default();
+        writer.write_image(
+            0,
+            draw_img,
+            vk::Sampler::null(),
+            vk::ImageLayout::GENERAL,
+            vk::DescriptorType::STORAGE_IMAGE,
+        );
+        writer.update_set(&device, draw_img_descs);
 
         let push_constants = [vk::PushConstantRange::default()
             .size(size_of::<ComputePushConstants>() as u32)
@@ -124,77 +124,6 @@ impl<'a> DescriptorLayoutBuilder<'a> {
 
     //     unsafe { device.create_descriptor_set_layout(&info, None).unwrap() }
     // }
-}
-
-struct PoolSizeRatio {
-    desc_type: vk::DescriptorType,
-    ratio: f32,
-}
-
-struct DescriptorAllocator {
-    device_copy: Rc<Device>,
-    pool: vk::DescriptorPool,
-}
-
-impl DescriptorAllocator {
-    pub fn new_global(device: Rc<Device>) -> Self {
-        let sizes = [PoolSizeRatio {
-            desc_type: vk::DescriptorType::STORAGE_IMAGE,
-            ratio: 1.,
-        }];
-
-        Self::new(device, 10, &sizes[..])
-    }
-
-    fn new(device: Rc<Device>, max_sets: u32, pool_ratios: &[PoolSizeRatio]) -> Self {
-        let pool_sizes: Vec<vk::DescriptorPoolSize> = pool_ratios
-            .iter()
-            .map(|r| vk::DescriptorPoolSize {
-                ty: r.desc_type,
-                descriptor_count: (r.ratio * (max_sets as f32)) as u32,
-            })
-            .collect();
-
-        let pool_info = vk::DescriptorPoolCreateInfo::default()
-            .max_sets(max_sets)
-            .pool_sizes(&pool_sizes[..]);
-
-        let pool = unsafe { device.create_descriptor_pool(&pool_info, None).unwrap() };
-
-        Self {
-            device_copy: device,
-            pool,
-        }
-    }
-
-    // pub fn clear_descriptors(&self) {
-    //     unsafe {
-    //         self.device_copy
-    //             .reset_descriptor_pool(self.pool, vk::DescriptorPoolResetFlags::empty())
-    //             .unwrap()
-    //     };
-    // }
-
-    pub fn allocate(&self, layout: vk::DescriptorSetLayout) -> vk::DescriptorSet {
-        let layouts = [layout];
-        let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(self.pool)
-            .set_layouts(&layouts[..]);
-
-        unsafe {
-            self.device_copy
-                .allocate_descriptor_sets(&alloc_info)
-                // We allocate only one layout, so we keep only the first one :
-                .unwrap()[0]
-        }
-    }
-}
-
-impl Drop for DescriptorAllocator {
-    fn drop(&mut self) {
-        println!("drop DescriptorAllocator");
-        unsafe { self.device_copy.destroy_descriptor_pool(self.pool, None) };
-    }
 }
 
 #[derive(Default, Debug, Clone, Copy)]

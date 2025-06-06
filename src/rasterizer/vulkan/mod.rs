@@ -23,6 +23,7 @@ mod shaders_loader;
 use shaders_loader::ShadersLoader;
 mod gfx_pipeline;
 use gfx_pipeline::VkGraphicsPipeline;
+mod descriptors;
 mod gltf_loader;
 
 #[cfg(feature = "stats")]
@@ -44,6 +45,7 @@ pub struct VulkanEngine {
 
 impl VulkanEngine {
     pub fn new(window: Rc<Window>) -> Self {
+        // panic!("{}", size_of::<vk::DescriptorBufferInfo>());
         let base = VulkanBase::new(window);
 
         let allocator = {
