@@ -3,11 +3,13 @@ use std::rc::Rc;
 
 const MAX_SETS_PER_POOL: u32 = 4092;
 
-#[derive(Default, Debug, Clone, Copy)]
-struct PoolSizeRatio {
-    desc_type: vk::DescriptorType,
-    ratio: f32,
-}
+// #[derive(Default, Debug, Clone, Copy)]
+// struct PoolSizeRatio {
+//     desc_type: vk::DescriptorType,
+//     ratio: f32,
+// }
+
+type PoolSizeRatio = (vk::DescriptorType, f32);
 
 pub struct DescriptorAllocator {
     device_copy: Rc<Device>,
@@ -16,10 +18,7 @@ pub struct DescriptorAllocator {
 
 impl DescriptorAllocator {
     pub fn new_global(device: Rc<Device>) -> Self {
-        let sizes = [PoolSizeRatio {
-            desc_type: vk::DescriptorType::STORAGE_IMAGE,
-            ratio: 1.,
-        }];
+        let sizes = [(vk::DescriptorType::STORAGE_IMAGE, 1.)];
 
         Self::new(device, 10, &sizes[..])
     }
@@ -27,9 +26,9 @@ impl DescriptorAllocator {
     fn new(device: Rc<Device>, max_sets: u32, pool_ratios: &[PoolSizeRatio]) -> Self {
         let pool_sizes: Vec<vk::DescriptorPoolSize> = pool_ratios
             .iter()
-            .map(|r| vk::DescriptorPoolSize {
-                ty: r.desc_type,
-                descriptor_count: (r.ratio * (max_sets as f32)) as u32,
+            .map(|(ty, ratio)| vk::DescriptorPoolSize {
+                ty: *ty,
+                descriptor_count: (ratio * (max_sets as f32)) as u32,
             })
             .collect();
 
@@ -90,22 +89,10 @@ pub struct DescriptorAllocatorGrowable {
 impl DescriptorAllocatorGrowable {
     pub fn new_global(device: Rc<Device>) -> Self {
         let sizes = [
-            PoolSizeRatio {
-                desc_type: vk::DescriptorType::STORAGE_IMAGE,
-                ratio: 3.,
-            },
-            PoolSizeRatio {
-                desc_type: vk::DescriptorType::STORAGE_BUFFER,
-                ratio: 3.,
-            },
-            PoolSizeRatio {
-                desc_type: vk::DescriptorType::UNIFORM_BUFFER,
-                ratio: 3.,
-            },
-            PoolSizeRatio {
-                desc_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                ratio: 4.,
-            },
+            (vk::DescriptorType::STORAGE_IMAGE, 3.),
+            (vk::DescriptorType::STORAGE_BUFFER, 3.),
+            (vk::DescriptorType::UNIFORM_BUFFER, 3.),
+            (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 4.),
         ];
 
         Self::new(device, 10, &sizes[..])
@@ -135,7 +122,7 @@ impl DescriptorAllocatorGrowable {
         });
     }
 
-    // TODO: look online, seems wierd...
+    // TODO: look online, seems weird...
     // why continue creating bigger pools, aren't we creating empty ones anyway ?
     // We are not re-allocating existing.
     pub fn allocate<T: vk::ExtendsDescriptorSetAllocateInfo>(
@@ -188,9 +175,9 @@ impl DescriptorAllocatorGrowable {
         let pool_sizes: Vec<vk::DescriptorPoolSize> = self
             .ratios
             .iter()
-            .map(|r| vk::DescriptorPoolSize {
-                ty: r.desc_type,
-                descriptor_count: (r.ratio * (set_count as f32)) as u32,
+            .map(|(ty, ratio)| vk::DescriptorPoolSize {
+                ty: *ty,
+                descriptor_count: (ratio * (set_count as f32)) as u32,
             })
             .collect();
 
