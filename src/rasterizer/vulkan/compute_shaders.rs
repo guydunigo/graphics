@@ -1,6 +1,8 @@
 use ash::{Device, vk};
 use std::rc::Rc;
 
+use crate::rasterizer::vulkan::descriptors::DescriptorLayoutBuilder;
+
 use super::{
     descriptors::{DescriptorAllocator, DescriptorWriter},
     shaders_loader::{ShaderName, ShadersLoader},
@@ -73,57 +75,6 @@ impl Drop for Effects {
                 .destroy_pipeline_layout(self.pipeline_layout, None);
         }
     }
-}
-
-#[derive(Default)]
-struct DescriptorLayoutBuilder<'a> {
-    bindings: Vec<vk::DescriptorSetLayoutBinding<'a>>,
-}
-
-impl<'a> DescriptorLayoutBuilder<'a> {
-    pub fn add_binding(mut self, binding: u32, desc_type: vk::DescriptorType) -> Self {
-        let newbind = vk::DescriptorSetLayoutBinding::default()
-            .binding(binding)
-            .descriptor_type(desc_type)
-            .descriptor_count(1);
-
-        self.bindings.push(newbind);
-
-        self
-    }
-
-    pub fn build(
-        mut self,
-        device: &Device,
-        shader_stages: vk::ShaderStageFlags,
-    ) -> vk::DescriptorSetLayout {
-        self.bindings
-            .iter_mut()
-            .for_each(|b| b.stage_flags |= shader_stages);
-
-        let info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&self.bindings[..]);
-
-        unsafe { device.create_descriptor_set_layout(&info, None).unwrap() }
-    }
-
-    // fn build_2<T: vk::ExtendsDescriptorSetLayoutCreateInfo>(
-    //     mut self,
-    //     device: &Device,
-    //     shader_stages: vk::ShaderStageFlags,
-    //     p_next: &mut T,
-    //     flags: vk::DescriptorSetLayoutCreateFlags,
-    // ) -> vk::DescriptorSetLayout {
-    //     self.bindings
-    //         .iter_mut()
-    //         .for_each(|b| b.stage_flags |= shader_stages);
-
-    //     let info = vk::DescriptorSetLayoutCreateInfo::default()
-    //         .bindings(&self.bindings[..])
-    //         .push_next(p_next)
-    //         .flags(flags);
-
-    //     unsafe { device.create_descriptor_set_layout(&info, None).unwrap() }
-    // }
 }
 
 #[derive(Default, Debug, Clone, Copy)]

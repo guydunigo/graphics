@@ -1,5 +1,10 @@
 use ash::{Device, vk};
-use std::rc::Rc;
+use std::{
+    ffi::c_void,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
+use vk_mem::Alloc;
 
 const MAX_SETS_PER_POOL: u32 = 4092;
 
@@ -122,21 +127,30 @@ impl DescriptorAllocatorGrowable {
         });
     }
 
+    pub fn allocate(&mut self, layout: vk::DescriptorSetLayout) -> vk::DescriptorSet {
+        self.allocate_p_next(
+            layout,
+            None::<&mut vk::DescriptorSetVariableDescriptorCountAllocateInfo>,
+        )
+    }
+
     // TODO: look online, seems weird...
     // why continue creating bigger pools, aren't we creating empty ones anyway ?
     // We are not re-allocating existing.
-    pub fn allocate<T: vk::ExtendsDescriptorSetAllocateInfo>(
+    fn allocate_p_next<T: vk::ExtendsDescriptorSetAllocateInfo>(
         &mut self,
         layout: vk::DescriptorSetLayout,
-        p_next: &mut T,
+        p_next: Option<&mut T>,
     ) -> vk::DescriptorSet {
         let mut pool = self.get_pool();
 
         let layouts = [layout];
-        let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .push_next(p_next)
+        let mut alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(pool)
             .set_layouts(&layouts);
+        if let Some(p_next) = p_next {
+            alloc_info = alloc_info.push_next(p_next);
+        }
 
         let res = unsafe { self.device_copy.allocate_descriptor_sets(&alloc_info) };
         let ds = match res {
@@ -265,7 +279,7 @@ impl<'a> DescriptorWriter<'a> {
         self.writes.push(write);
     }
 
-    fn write_buffer(
+    pub fn write_buffer(
         &mut self,
         binding: u32,
         buffer: vk::Buffer,
@@ -296,6 +310,139 @@ impl<'a> DescriptorWriter<'a> {
 
         unsafe {
             device.update_descriptor_sets(&self.writes[..], &[]);
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct DescriptorLayoutBuilder<'a> {
+    bindings: Vec<vk::DescriptorSetLayoutBinding<'a>>,
+}
+
+impl<'a> DescriptorLayoutBuilder<'a> {
+    pub fn add_binding(mut self, binding: u32, desc_type: vk::DescriptorType) -> Self {
+        let newbind = vk::DescriptorSetLayoutBinding::default()
+            .binding(binding)
+            .descriptor_type(desc_type)
+            .descriptor_count(1);
+
+        self.bindings.push(newbind);
+
+        self
+    }
+
+    pub fn build(
+        mut self,
+        device: &Device,
+        shader_stages: vk::ShaderStageFlags,
+    ) -> vk::DescriptorSetLayout {
+        self.bindings
+            .iter_mut()
+            .for_each(|b| b.stage_flags |= shader_stages);
+
+        let info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&self.bindings[..]);
+
+        unsafe { device.create_descriptor_set_layout(&info, None).unwrap() }
+    }
+
+    // fn build_2<T: vk::ExtendsDescriptorSetLayoutCreateInfo>(
+    //     mut self,
+    //     device: &Device,
+    //     shader_stages: vk::ShaderStageFlags,
+    //     p_next: &mut T,
+    //     flags: vk::DescriptorSetLayoutCreateFlags,
+    // ) -> vk::DescriptorSetLayout {
+    //     self.bindings
+    //         .iter_mut()
+    //         .for_each(|b| b.stage_flags |= shader_stages);
+
+    //     let info = vk::DescriptorSetLayoutCreateInfo::default()
+    //         .bindings(&self.bindings[..])
+    //         .push_next(p_next)
+    //         .flags(flags);
+
+    //     unsafe { device.create_descriptor_set_layout(&info, None).unwrap() }
+    // }
+}
+
+pub struct AllocatedBuffer {
+    allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
+    pub buffer: vk::Buffer,
+    allocation: vk_mem::Allocation,
+    info: vk_mem::AllocationInfo,
+}
+
+pub enum MyMemoryUsage {
+    GpuOnly,
+    StagingUpload,
+    CpuToGpu,
+}
+
+impl AllocatedBuffer {
+    pub fn new(
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        alloc_size: u64,
+        usage: vk::BufferUsageFlags,
+        memory_usage: MyMemoryUsage,
+    ) -> Self {
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(alloc_size)
+            .usage(usage);
+
+        let mut alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::Auto,
+            ..Default::default()
+        };
+
+        match memory_usage {
+            MyMemoryUsage::GpuOnly => {
+                alloc_info.required_flags = vk::MemoryPropertyFlags::DEVICE_LOCAL;
+                // TODO: or usage : AutoPreferDevice ?
+                // TODO: Consider using vk_mem::AllocationCreateFlags::DEDICATED_MEMORY,
+                // especially if large
+            }
+            MyMemoryUsage::StagingUpload | MyMemoryUsage::CpuToGpu => {
+                // When using MemoryUsage::Auto + MAPPED, needs one of :
+                // #VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+                // or #VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
+                // requires memcpy and no random access (no mapped_data[i] = ...) !
+                alloc_info.flags = vk_mem::AllocationCreateFlags::MAPPED
+                    | vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE;
+            }
+        }
+
+        let (buffer, allocation, info) = {
+            let allocator = allocator.lock().unwrap();
+            unsafe {
+                let (buffer, allocation) =
+                    allocator.create_buffer(&buffer_info, &alloc_info).unwrap();
+                let info = allocator.get_allocation_info(&allocation);
+                println!("{info:?}");
+                (buffer, allocation, info)
+            }
+        };
+
+        Self {
+            allocator_copy: allocator,
+            buffer,
+            allocation,
+            info,
+        }
+    }
+
+    pub fn mapped_data(&self) -> *mut c_void {
+        self.info.mapped_data
+    }
+}
+
+impl Drop for AllocatedBuffer {
+    fn drop(&mut self) {
+        println!("drop AllocatedBuffer");
+        unsafe {
+            self.allocator_copy
+                .lock()
+                .unwrap()
+                .destroy_buffer(self.buffer, &mut self.allocation);
         }
     }
 }

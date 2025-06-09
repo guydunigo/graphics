@@ -1,14 +1,12 @@
-use std::{
-    mem,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{mem, path::Path};
 
 use ash::{Device, util::Align, vk};
 use glam::{Vec3, Vec4, vec3, vec4};
-use vk_mem::Alloc;
 
-use crate::rasterizer::vulkan::commands::VulkanCommands;
+use super::{
+    commands::VulkanCommands,
+    descriptors::{AllocatedBuffer, MyMemoryUsage},
+};
 
 pub struct MeshAsset {
     pub _name: Option<String>,
@@ -110,7 +108,7 @@ impl GpuMeshBuffers {
             MyMemoryUsage::StagingUpload,
         );
 
-        let data = staging.info.mapped_data;
+        let data = staging.mapped_data();
         let mut align =
             unsafe { Align::new(data, mem::align_of::<Vertex>() as _, vertex_buffer_size) };
         align.copy_from_slice(vertices);
@@ -165,83 +163,6 @@ impl GpuMeshBuffers {
     //     let indices = [0, 1, 2, 2, 1, 3];
     //     Self::new(device, commands, &indices[..], &vertices[..])
     // }
-}
-
-struct AllocatedBuffer {
-    allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
-    pub buffer: vk::Buffer,
-    allocation: vk_mem::Allocation,
-    info: vk_mem::AllocationInfo,
-}
-
-enum MyMemoryUsage {
-    GpuOnly,
-    StagingUpload,
-}
-
-impl AllocatedBuffer {
-    pub fn new(
-        allocator: Arc<Mutex<vk_mem::Allocator>>,
-        alloc_size: u64,
-        usage: vk::BufferUsageFlags,
-        memory_usage: MyMemoryUsage,
-    ) -> Self {
-        let buffer_info = vk::BufferCreateInfo::default()
-            .size(alloc_size)
-            .usage(usage);
-
-        let mut alloc_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::Auto,
-            ..Default::default()
-        };
-
-        match memory_usage {
-            MyMemoryUsage::GpuOnly => {
-                alloc_info.required_flags = vk::MemoryPropertyFlags::DEVICE_LOCAL;
-                // TODO: or usage : AutoPreferDevice ?
-                // TODO: Consider using vk_mem::AllocationCreateFlags::DEDICATED_MEMORY,
-                // especially if large
-            }
-            MyMemoryUsage::StagingUpload => {
-                // When using MemoryUsage::Auto + MAPPED, needs one of :
-                // #VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-                // or #VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
-                // requires memcpy and no random access (no mapped_data[i] = ...) !
-                alloc_info.flags = vk_mem::AllocationCreateFlags::MAPPED
-                    | vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE;
-            }
-        }
-
-        let (buffer, allocation, info) = {
-            let allocator = allocator.lock().unwrap();
-            unsafe {
-                let (buffer, allocation) =
-                    allocator.create_buffer(&buffer_info, &alloc_info).unwrap();
-                let info = allocator.get_allocation_info(&allocation);
-                println!("{info:?}");
-                (buffer, allocation, info)
-            }
-        };
-
-        Self {
-            allocator_copy: allocator,
-            buffer,
-            allocation,
-            info,
-        }
-    }
-}
-
-impl Drop for AllocatedBuffer {
-    fn drop(&mut self) {
-        println!("drop AllocatedBuffer");
-        unsafe {
-            self.allocator_copy
-                .lock()
-                .unwrap()
-                .destroy_buffer(self.buffer, &mut self.allocation);
-        }
-    }
 }
 
 /// Loads the glTF file and uploads it to GPU memory

@@ -26,7 +26,7 @@ pub struct FrameData {
     fence_render: vk::Fence,
     pub sem_swapchain: vk::Semaphore,
 
-    frame_descriptors: DescriptorAllocatorGrowable,
+    pub descriptors: DescriptorAllocatorGrowable,
 }
 
 impl Drop for FrameData {
@@ -56,7 +56,7 @@ impl FrameData {
         let fence_render = unsafe { device.create_fence(fence_create_info, None).unwrap() };
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
 
-        let frame_descriptors = DescriptorAllocatorGrowable::new_global(device.clone());
+        let descriptors = DescriptorAllocatorGrowable::new_global(device.clone());
 
         Self {
             device_copy: device,
@@ -64,7 +64,7 @@ impl FrameData {
             cmd_buf,
             fence_render,
             sem_swapchain,
-            frame_descriptors,
+            descriptors,
         }
     }
 
@@ -104,7 +104,7 @@ impl FrameData {
     }
 
     pub fn clear_descriptors(&mut self) {
-        self.frame_descriptors.clear_pools();
+        self.descriptors.clear_pools();
     }
 
     pub fn wait_for_fences(&self) {

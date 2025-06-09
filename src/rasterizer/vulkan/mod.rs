@@ -1,9 +1,12 @@
 use std::{
+    ffi::c_void,
+    mem,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 
 use ash::vk;
+use glam::{Mat4, Vec4};
 use winit::{event::WindowEvent, window::Window};
 
 use super::{format_debug, settings::Settings};
@@ -24,6 +27,7 @@ use shaders_loader::ShadersLoader;
 mod gfx_pipeline;
 use gfx_pipeline::VkGraphicsPipeline;
 mod descriptors;
+use descriptors::{AllocatedBuffer, DescriptorLayoutBuilder, DescriptorWriter, MyMemoryUsage};
 mod gltf_loader;
 
 #[cfg(feature = "stats")]
@@ -31,6 +35,10 @@ use super::Stats;
 
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine {
+    allocator: Arc<Mutex<vk_mem::Allocator>>,
+
+    gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
+
     // Elements are placed in the order they should be dropped, so inverse order of creation.
     gfx: VkGraphicsPipeline,
     swapchain: VulkanSwapchain,
@@ -41,6 +49,19 @@ pub struct VulkanEngine {
 
     current_bg_effect: usize,
     bg_effects_data: Vec<ComputePushConstants>,
+
+    scene_data: GpuSceneData,
+}
+
+impl Drop for VulkanEngine {
+    fn drop(&mut self) {
+        println!("drop VulkanEngine");
+        unsafe {
+            self.base
+                .device
+                .destroy_descriptor_set_layout(self.gpu_scene_data_descriptor_layout, None);
+        }
+    }
 }
 
 impl VulkanEngine {
@@ -68,6 +89,13 @@ impl VulkanEngine {
 
         let commands = VulkanCommands::new(&base, allocator.clone());
 
+        let gpu_scene_data_descriptor_layout = DescriptorLayoutBuilder::default()
+            .add_binding(0, vk::DescriptorType::UNIFORM_BUFFER)
+            .build(
+                &base.device,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+            );
+
         Self {
             gfx: VkGraphicsPipeline::new(
                 &commands,
@@ -84,6 +112,11 @@ impl VulkanEngine {
 
             current_bg_effect: 0,
             bg_effects_data,
+
+            allocator,
+
+            scene_data: Default::default(),
+            gpu_scene_data_descriptor_layout,
         }
     }
 
@@ -116,12 +149,12 @@ impl VulkanEngine {
             )
         });
 
+        let image = self.swapchain.draw_img();
+
+        self.commands.current_frame().wait_for_fences();
         self.commands.current_frame_mut().clear_descriptors();
 
         let current_frame = self.commands.current_frame();
-        let image = self.swapchain.draw_img();
-
-        current_frame.wait_for_fences();
 
         let Some((swapchain_img_index, swapchain_image, sem_render, swapchain_image_view)) =
             self.swapchain.acquire_next_image(current_frame)
@@ -201,6 +234,45 @@ impl VulkanEngine {
             .present(swapchain_img_index, sem_render, self.commands.queue);
 
         self.commands.frame_number += 1;
+
+        // TODO: move
+        // TODO: store until next frame so GPU has time to use it
+        {
+            // We will also dynamically allocate the uniform buffer itself as a way to
+            // showcase how you could do temporal per-frame data that is dynamically created.
+            // It would be better to hold the buffers cached in our FrameData structure,
+            // but we will be doing it this way to show how.
+            // There are cases with dynamic draws and passes where you might want to do it
+            // this way.
+            let gpu_scene_data_buffer = AllocatedBuffer::new(
+                self.allocator.clone(),
+                size_of::<GpuSceneData>() as u64,
+                vk::BufferUsageFlags::UNIFORM_BUFFER,
+                MyMemoryUsage::CpuToGpu,
+            );
+            let scene_data = unsafe {
+                mem::transmute::<*mut c_void, &mut GpuSceneData>(
+                    gpu_scene_data_buffer.mapped_data(),
+                )
+            };
+            *scene_data = self.scene_data;
+
+            let global_descriptor = self
+                .commands
+                .current_frame_mut()
+                .descriptors
+                .allocate(self.gpu_scene_data_descriptor_layout);
+
+            let mut writer = DescriptorWriter::default();
+            writer.write_buffer(
+                0,
+                gpu_scene_data_buffer.buffer,
+                size_of::<GpuSceneData>() as u64,
+                0,
+                vk::DescriptorType::UNIFORM_BUFFER,
+            );
+            writer.update_set(&self.base.device, global_descriptor);
+        }
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
@@ -261,4 +333,15 @@ fn ui(
             });
         }
     });
+}
+
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy)]
+struct GpuSceneData {
+    view: Mat4,
+    proj: Mat4,
+    view_proj: Mat4,
+    ambient_color: Vec4,
+    sunlight_direction: Vec4,
+    sunlight_color: Vec4,
 }
