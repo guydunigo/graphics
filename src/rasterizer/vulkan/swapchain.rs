@@ -44,8 +44,8 @@ impl VulkanSwapchain {
             })
             .unwrap_or(window_size);
 
-        let draw_img = AllocatedImage::new_draw(base, allocator.clone(), max_size);
-        let depth_img = AllocatedImage::new_depth(base, allocator, max_size);
+        let draw_img = AllocatedImage::new_draw(base.device.clone(), allocator.clone(), max_size);
+        let depth_img = AllocatedImage::new_depth(base.device.clone(), allocator, max_size);
 
         let effects = Effects::new(base.device.clone(), shaders, draw_img.img_view);
 
@@ -299,6 +299,7 @@ impl SwapchainData {
                     swapchain_img_format,
                     image,
                     vk::ImageAspectFlags::COLOR,
+                    None,
                 );
                 let view = unsafe {
                     base.device
@@ -367,6 +368,7 @@ fn image_view_create_info<'a>(
     format: vk::Format,
     image: vk::Image,
     aspect_flags: vk::ImageAspectFlags,
+    mip_level: Option<u32>,
 ) -> vk::ImageViewCreateInfo<'a> {
     vk::ImageViewCreateInfo::default()
         .view_type(vk::ImageViewType::TYPE_2D)
@@ -381,14 +383,14 @@ fn image_view_create_info<'a>(
             vk::ImageSubresourceRange::default()
                 .level_count(1)
                 .layer_count(1)
-                .base_mip_level(0)
+                .base_mip_level(mip_level.unwrap_or(0))
                 .base_array_layer(0)
                 .aspect_mask(aspect_flags),
         )
         .image(image)
 }
 
-struct AllocatedImage {
+pub struct AllocatedImage {
     device_copy: Rc<Device>,
     allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
 
@@ -401,7 +403,7 @@ struct AllocatedImage {
 
 impl AllocatedImage {
     pub fn new_draw(
-        base: &VulkanBase,
+        device: Rc<Device>,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
         window_size: PhysicalSize<u32>,
     ) -> Self {
@@ -410,8 +412,8 @@ impl AllocatedImage {
             | vk::ImageUsageFlags::STORAGE
             | vk::ImageUsageFlags::COLOR_ATTACHMENT;
 
-        Self::new(
-            base,
+        Self::new_with_window_size(
+            device,
             allocator,
             window_size,
             vk::Format::R16G16B16A16_SFLOAT,
@@ -421,12 +423,12 @@ impl AllocatedImage {
     }
 
     pub fn new_depth(
-        base: &VulkanBase,
+        device: Rc<Device>,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
         window_size: PhysicalSize<u32>,
     ) -> Self {
-        Self::new(
-            base,
+        Self::new_with_window_size(
+            device,
             allocator,
             window_size,
             vk::Format::D32_SFLOAT,
@@ -435,8 +437,8 @@ impl AllocatedImage {
         )
     }
 
-    fn new(
-        base: &VulkanBase,
+    pub fn new_with_window_size(
+        device: Rc<Device>,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
         window_size: PhysicalSize<u32>,
         format: vk::Format,
@@ -448,7 +450,17 @@ impl AllocatedImage {
             height: window_size.height,
             depth: 1,
         };
+        Self::new(device, allocator, extent, format, usages, aspect)
+    }
 
+    fn new(
+        device: Rc<Device>,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        extent: vk::Extent3D,
+        format: vk::Format,
+        usages: vk::ImageUsageFlags,
+        aspect: vk::ImageAspectFlags,
+    ) -> Self {
         let rimg_info = image_create_info(format, usages, extent);
         let mut rimg_allocinfo = vk_mem::AllocationCreateInfo::default();
         {
@@ -468,15 +480,11 @@ impl AllocatedImage {
                 .unwrap()
         };
 
-        let view_create_info = image_view_create_info(format, img, aspect);
-        let img_view = unsafe {
-            base.device
-                .create_image_view(&view_create_info, None)
-                .unwrap()
-        };
+        let view_create_info = image_view_create_info(format, img, aspect, None);
+        let img_view = unsafe { device.create_image_view(&view_create_info, None).unwrap() };
 
         Self {
-            device_copy: base.device.clone(),
+            device_copy: device,
             allocator_copy: allocator,
 
             img,
@@ -485,6 +493,51 @@ impl AllocatedImage {
             extent,
             format,
         }
+    }
+
+    // TODO: names
+    pub fn new_image(
+        device: Rc<Device>,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        extent: vk::Extent3D,
+        format: vk::Format,
+        usages: vk::ImageUsageFlags,
+        mipmapped: bool,
+    ) -> Self {
+        let mut img_info = image_create_info(format, usages, extent);
+        if mipmapped {
+            img_info.mip_levels =
+                f32::floor(f32::log2(u32::max(extent.width, extent.height) as f32)) as u32 + 1;
+        }
+
+        let mut alloc_info = vk_mem::AllocationCreateInfo::default();
+        alloc_info.usage = vk_mem::MemoryUsage::Auto;
+        alloc_info.required_flags = vk::MemoryPropertyFlags::DEVICE_LOCAL;
+
+        unsafe {
+            allocator
+                .lock()
+                .unwrap()
+                .create_image(&img_info, &alloc_info)
+                .unwrap();
+        }
+
+        let aspect = if format == vk::Format::D32_SFLOAT {
+            vk::ImageAspectFlags::DEPTH
+        } else {
+            vk::ImageAspectFlags::COLOR
+        };
+
+        let new_image = Self::new(device.clone(), allocator, extent, format, usages, aspect);
+
+        let view_info =
+            image_view_create_info(format, new_image.img, aspect, Some(img_info.mip_levels));
+
+        unsafe {
+            device.create_image_view(&view_info, None).unwrap();
+        }
+
+        new_image
     }
 }
 

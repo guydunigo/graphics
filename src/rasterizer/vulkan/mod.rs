@@ -15,7 +15,7 @@ use crate::{scene::World, window::AppObserver};
 mod base;
 use base::VulkanBase;
 mod swapchain;
-use swapchain::VulkanSwapchain;
+use swapchain::{AllocatedImage, VulkanSwapchain};
 mod commands;
 use commands::VulkanCommands;
 mod compute_shaders;
