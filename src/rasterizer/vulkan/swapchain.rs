@@ -407,7 +407,7 @@ pub struct AllocatedImage {
     allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
 
     img: vk::Image,
-    img_view: vk::ImageView,
+    pub img_view: vk::ImageView,
     allocation: vk_mem::Allocation,
     extent: vk::Extent3D,
     format: vk::Format,

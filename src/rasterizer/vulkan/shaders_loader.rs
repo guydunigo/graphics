@@ -63,6 +63,7 @@ pub enum ShaderName {
     ColoredTriangleVert,
     ColoredTriangleFrag,
     ColoredTriangleMeshVert,
+    TexImage,
 }
 
 impl From<ShaderName> for &str {
@@ -75,6 +76,7 @@ impl From<ShaderName> for &str {
             Sky => "sky",
             ColoredTriangleVert | ColoredTriangleFrag => "colored_triangle",
             ColoredTriangleMeshVert => "colored_triangle_mesh",
+            TexImage => "tex_image",
         }
     }
 }
@@ -89,6 +91,7 @@ impl From<ShaderName> for ShaderKind {
             ColoredTriangleVert => Vertex,
             ColoredTriangleFrag => Fragment,
             ColoredTriangleMeshVert => Vertex,
+            TexImage => Fragment,
         }
     }
 }

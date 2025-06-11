@@ -1,4 +1,5 @@
 use std::{
+    cell::{RefCell, RefMut},
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -9,10 +10,11 @@ use glam::{Mat4, vec3};
 use super::{
     base::VulkanBase,
     compute_shaders::ComputePushConstants,
-    descriptors::DescriptorAllocatorGrowable,
+    descriptors::{DescriptorAllocatorGrowable, DescriptorWriter},
     gfx_pipeline::{GpuDrawPushConstants, VkGraphicsPipeline},
     gui::{GeneratedUi, VulkanGui},
     swapchain::VulkanSwapchain,
+    textures::Textures,
 };
 
 pub const FRAME_OVERLAP: usize = 2;
@@ -26,7 +28,7 @@ pub struct FrameData {
     fence_render: vk::Fence,
     pub sem_swapchain: vk::Semaphore,
 
-    pub descriptors: DescriptorAllocatorGrowable,
+    descriptors: RefCell<DescriptorAllocatorGrowable>,
 }
 
 impl Drop for FrameData {
@@ -56,7 +58,7 @@ impl FrameData {
         let fence_render = unsafe { device.create_fence(fence_create_info, None).unwrap() };
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
 
-        let descriptors = DescriptorAllocatorGrowable::new_global(device.clone());
+        let descriptors = RefCell::new(DescriptorAllocatorGrowable::new_global(device.clone()));
 
         Self {
             device_copy: device,
@@ -84,7 +86,7 @@ impl FrameData {
     }
 
     pub fn clear_descriptors(&mut self) {
-        self.descriptors.clear_pools();
+        self.descriptors.borrow_mut().clear_pools();
     }
 
     pub fn wait_for_fences(&self) {
@@ -264,7 +266,12 @@ impl FrameData {
         }
     }
 
-    pub fn draw_geometries(&self, swapchain: &VulkanSwapchain, gfx: &VkGraphicsPipeline) {
+    pub fn draw_geometries(
+        &self,
+        swapchain: &VulkanSwapchain,
+        gfx: &VkGraphicsPipeline,
+        textures: &Textures,
+    ) {
         let color_attachments = [attachment_info(
             *swapchain.draw_img_view(),
             None,
@@ -314,14 +321,44 @@ impl FrameData {
             }
         }
 
-        self.draw_mesh(gfx, draw_extent);
+        self.draw_mesh(gfx, textures, draw_extent);
 
         unsafe {
             self.device_copy.cmd_end_rendering(self.cmd_buf);
         }
     }
 
-    fn draw_mesh(&self, gfx: &VkGraphicsPipeline, draw_extent: vk::Extent2D) {
+    fn draw_mesh(&self, gfx: &VkGraphicsPipeline, textures: &Textures, draw_extent: vk::Extent2D) {
+        let image_set = self
+            .descriptors
+            .borrow_mut()
+            .allocate(gfx.single_image_descriptor_layout);
+        {
+            let mut writer = DescriptorWriter::default();
+            // TODO: p-ê plus rapide d'utiliser 2 descriptors séparés plutôt que COMBINED :
+            // SAMPLER + SAMPLED_IMAGE ?
+            writer.write_image(
+                0,
+                textures.error_checkerboard.img_view,
+                textures.default_sampler_nearest,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            );
+            writer.update_set(&self.device_copy, image_set);
+        }
+        let image_sets = [image_set];
+
+        unsafe {
+            self.device_copy.cmd_bind_descriptor_sets(
+                self.cmd_buf,
+                vk::PipelineBindPoint::GRAPHICS,
+                gfx.pipeline_layout,
+                0,
+                &image_sets[..],
+                &[],
+            );
+        }
+
         let mesh = &gfx.meshes[2];
 
         let view = Mat4::from_translation(vec3(0., 0., -5.));
@@ -363,6 +400,10 @@ impl FrameData {
                 0,
             );
         }
+    }
+
+    pub fn descriptors_mut<'a>(&'a self) -> RefMut<'a, DescriptorAllocatorGrowable> {
+        self.descriptors.borrow_mut()
     }
 }
 

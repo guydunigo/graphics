@@ -11,13 +11,13 @@ use super::{commands::VulkanCommands, swapchain::AllocatedImage};
 pub struct Textures {
     device_copy: Rc<Device>,
 
-    white: AllocatedImage,
-    grey: AllocatedImage,
-    black: AllocatedImage,
-    error_checkerboard: AllocatedImage,
+    pub white: AllocatedImage,
+    pub grey: AllocatedImage,
+    pub black: AllocatedImage,
+    pub error_checkerboard: AllocatedImage,
 
-    default_sampler_linear: vk::Sampler,
-    default_sampler_nearest: vk::Sampler,
+    pub default_sampler_linear: vk::Sampler,
+    pub default_sampler_nearest: vk::Sampler,
 }
 
 impl Textures {
@@ -84,18 +84,13 @@ impl Textures {
             };
             let magenta_data = glam::u8vec4(255, 0, 255, 255).to_array();
             let mut pixels: [u8; 16 * 16 * 4] = [0; 1024];
-            for x in 0..16 {
-                for y in 0..16 {
+            for y in 0..16 {
+                for x in 0..16 {
+                    let index = y * 16 * 4 + x * 4;
                     if (x % 2) ^ (y % 2) == 0 {
-                        pixels[y * 16 + x] = black_data[0];
-                        pixels[y * 16 + x + 1] = black_data[1];
-                        pixels[y * 16 + x + 2] = black_data[2];
-                        pixels[y * 16 + x + 3] = black_data[3];
+                        pixels[index..index + 4].copy_from_slice(&black_data[..]);
                     } else {
-                        pixels[y * 16 + x] = magenta_data[0];
-                        pixels[y * 16 + x + 1] = magenta_data[1];
-                        pixels[y * 16 + x + 2] = magenta_data[2];
-                        pixels[y * 16 + x + 3] = magenta_data[3];
+                        pixels[index..index + 4].copy_from_slice(&magenta_data[..]);
                     };
                 }
             }

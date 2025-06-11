@@ -193,7 +193,7 @@ impl VulkanEngine {
             vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
 
-        current_frame.draw_geometries(&self.swapchain, &self.gfx);
+        current_frame.draw_geometries(&self.swapchain, &self.gfx, &self.textures);
 
         current_frame.transition_image(
             *image,
@@ -264,7 +264,7 @@ impl VulkanEngine {
             let global_descriptor = self
                 .commands
                 .current_frame_mut()
-                .descriptors
+                .descriptors_mut()
                 .allocate(self.gpu_scene_data_descriptor_layout);
 
             let mut writer = DescriptorWriter::default();

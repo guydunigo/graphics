@@ -5,6 +5,7 @@ use glam::Mat4;
 
 use super::{
     commands::VulkanCommands,
+    descriptors::DescriptorLayoutBuilder,
     gltf_loader::{MeshAsset, load_gltf_meshes},
     shaders_loader::{ShaderName, ShadersLoader},
 };
@@ -23,6 +24,8 @@ pub struct VkGraphicsPipeline {
     pub pipeline_layout: vk::PipelineLayout,
 
     pub meshes: Vec<MeshAsset>,
+
+    pub single_image_descriptor_layout: vk::DescriptorSetLayout,
 }
 
 impl VkGraphicsPipeline {
@@ -38,11 +41,17 @@ impl VkGraphicsPipeline {
             .size(size_of::<GpuDrawPushConstants>() as u32)
             .stage_flags(vk::ShaderStageFlags::VERTEX)];
 
-        let create_info =
-            vk::PipelineLayoutCreateInfo::default().push_constant_ranges(&buffer_ranges[..]);
+        let single_image_descriptor_layout = DescriptorLayoutBuilder::default()
+            .add_binding(0, vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .build(&device, vk::ShaderStageFlags::FRAGMENT);
+        let sid_layouts = [single_image_descriptor_layout];
+
+        let create_info = vk::PipelineLayoutCreateInfo::default()
+            .push_constant_ranges(&buffer_ranges[..])
+            .set_layouts(&sid_layouts[..]);
         let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
         let vertex_shader = shaders.get(ShaderName::ColoredTriangleMeshVert);
-        let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
+        let fragment_shader = shaders.get(ShaderName::TexImage);
 
         let mut builder = PipelineBuilder {
             pipeline_layout,
@@ -54,6 +63,7 @@ impl VkGraphicsPipeline {
         builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
         builder.set_multisampling_none();
         builder.enable_blending_additive();
+        // builder.disable_blending();
         builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
         let draw_formats = [draw_format];
         builder.set_color_attachment_format(&draw_formats);
@@ -69,6 +79,7 @@ impl VkGraphicsPipeline {
             pipeline,
             pipeline_layout,
             meshes,
+            single_image_descriptor_layout,
         }
     }
 
@@ -114,6 +125,8 @@ impl Drop for VkGraphicsPipeline {
             self.device_copy.destroy_pipeline(self.pipeline, None);
             self.device_copy
                 .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device_copy
+                .destroy_descriptor_set_layout(self.single_image_descriptor_layout, None);
         }
     }
 }
@@ -248,12 +261,12 @@ impl<'a> PipelineBuilder<'a> {
             .max_depth_bounds(1.);
     }
 
-    // pub fn disable_blending(&mut self) {
-    //     self.color_blend_attachment = self
-    //         .color_blend_attachment
-    //         .color_write_mask(vk::ColorComponentFlags::RGBA)
-    //         .blend_enable(false);
-    // }
+    pub fn disable_blending(&mut self) {
+        self.color_blend_attachment = self
+            .color_blend_attachment
+            .color_write_mask(vk::ColorComponentFlags::RGBA)
+            .blend_enable(false);
+    }
 
     fn enable_blending_base(&mut self, dst_color_blend_factor: vk::BlendFactor) {
         self.color_blend_attachment = self
