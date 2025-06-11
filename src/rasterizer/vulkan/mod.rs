@@ -41,7 +41,7 @@ pub struct VulkanEngine {
     gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
 
     // Elements are placed in the order they should be dropped, so inverse order of creation.
-    // textures: Textures,
+    textures: Textures,
     gfx: VkGraphicsPipeline,
     swapchain: VulkanSwapchain,
     gui: VulkanGui,
@@ -99,10 +99,8 @@ impl VulkanEngine {
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             );
 
-        let textures = Textures::new(&commands, base.device.clone(), allocator.clone());
-
         Self {
-            // textures: Textures::new(&commands, base.device.clone(), allocator.clone()),
+            textures: Textures::new(&commands, base.device.clone(), allocator.clone()),
             gfx: VkGraphicsPipeline::new(
                 &commands,
                 &shaders,
