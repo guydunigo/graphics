@@ -44,12 +44,13 @@ impl ShadersLoader {
 
 // impl Drop for ShadersLoader {
 //     fn drop(&mut self) {
-//         println!("drop VulkanShaders : {} shaders", shaders.len());
-//         unsafe {
-//             shaders
-//                 .drain()
-//                 .for_each(|(_, module)| self.device_copy.destroy_shader_module(module, None));
-//         }
+//         println!("drop VulkanShaders");
+//         // println!("drop VulkanShaders : {} shaders", shaders.len());
+//         // unsafe {
+//         //     shaders
+//         //         .drain()
+//         //         .for_each(|(_, module)| self.device_copy.destroy_shader_module(module, None));
+//         // }
 //     }
 // }
 

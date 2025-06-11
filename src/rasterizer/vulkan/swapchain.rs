@@ -9,12 +9,11 @@ use ash::{Device, khr::swapchain, vk};
 use vk_mem::Alloc;
 use winit::dpi::PhysicalSize;
 
-use crate::rasterizer::vulkan::descriptors::{AllocatedBuffer, MyMemoryUsage};
-
 use super::{
     base::VulkanBase,
-    commands::{FrameData, VulkanCommands},
+    commands::{FrameData, VulkanCommands, transition_image},
     compute_shaders::Effects,
+    descriptors::{AllocatedBuffer, MyMemoryUsage},
     shaders_loader::ShadersLoader,
 };
 
@@ -374,7 +373,7 @@ fn image_view_create_info<'a>(
     format: vk::Format,
     image: vk::Image,
     aspect_flags: vk::ImageAspectFlags,
-    mip_level: Option<u32>,
+    level_count: Option<u32>,
 ) -> vk::ImageViewCreateInfo<'a> {
     vk::ImageViewCreateInfo::default()
         .view_type(vk::ImageViewType::TYPE_2D)
@@ -387,9 +386,9 @@ fn image_view_create_info<'a>(
         // })
         .subresource_range(
             vk::ImageSubresourceRange::default()
-                .level_count(1)
+                .level_count(level_count.unwrap_or(1))
                 .layer_count(1)
-                .base_mip_level(mip_level.unwrap_or(0))
+                .base_mip_level(0)
                 .base_array_layer(0)
                 .aspect_mask(aspect_flags),
         )
@@ -582,7 +581,13 @@ impl AllocatedImage {
         );
 
         commands.immediate_submit(|device, cmd_buf| {
-            todo!("tr img");
+            transition_image(
+                device,
+                cmd_buf,
+                new_image.img,
+                vk::ImageLayout::UNDEFINED,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            );
 
             let copy_region = vk::BufferImageCopy::default()
                 .buffer_offset(0)
@@ -607,7 +612,13 @@ impl AllocatedImage {
                 );
             }
 
-            todo!("tr img");
+            transition_image(
+                device,
+                cmd_buf,
+                new_image.img,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            );
         });
 
         new_image

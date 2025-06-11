@@ -15,7 +15,7 @@ use crate::{scene::World, window::AppObserver};
 mod base;
 use base::VulkanBase;
 mod swapchain;
-use swapchain::{AllocatedImage, VulkanSwapchain};
+use swapchain::VulkanSwapchain;
 mod commands;
 use commands::VulkanCommands;
 mod compute_shaders;
@@ -29,22 +29,25 @@ use gfx_pipeline::VkGraphicsPipeline;
 mod descriptors;
 use descriptors::{AllocatedBuffer, DescriptorLayoutBuilder, DescriptorWriter, MyMemoryUsage};
 mod gltf_loader;
+mod textures;
+use textures::Textures;
 
 #[cfg(feature = "stats")]
 use super::Stats;
 
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine {
-    allocator: Arc<Mutex<vk_mem::Allocator>>,
-
+    // TODO: keep here ?
     gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
 
     // Elements are placed in the order they should be dropped, so inverse order of creation.
+    // textures: Textures,
     gfx: VkGraphicsPipeline,
     swapchain: VulkanSwapchain,
     gui: VulkanGui,
     commands: VulkanCommands,
     shaders: ShadersLoader,
+    allocator: Arc<Mutex<vk_mem::Allocator>>,
     base: VulkanBase,
 
     current_bg_effect: usize,
@@ -96,7 +99,10 @@ impl VulkanEngine {
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             );
 
+        let textures = Textures::new(&commands, base.device.clone(), allocator.clone());
+
         Self {
+            // textures: Textures::new(&commands, base.device.clone(), allocator.clone()),
             gfx: VkGraphicsPipeline::new(
                 &commands,
                 &shaders,
@@ -237,7 +243,7 @@ impl VulkanEngine {
 
         // TODO: move
         // TODO: store until next frame so GPU has time to use it
-        {
+        if false {
             // We will also dynamically allocate the uniform buffer itself as a way to
             // showcase how you could do temporal per-frame data that is dynamically created.
             // It would be better to hold the buffers cached in our FrameData structure,
