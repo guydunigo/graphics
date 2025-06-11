@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     rc::Rc,
+    slice,
     sync::{Arc, Mutex},
 };
 
@@ -8,8 +9,13 @@ use ash::{Device, khr::swapchain, vk};
 use vk_mem::Alloc;
 use winit::dpi::PhysicalSize;
 
+use crate::rasterizer::vulkan::descriptors::{AllocatedBuffer, MyMemoryUsage};
+
 use super::{
-    base::VulkanBase, commands::FrameData, compute_shaders::Effects, shaders_loader::ShadersLoader,
+    base::VulkanBase,
+    commands::{FrameData, VulkanCommands},
+    compute_shaders::Effects,
+    shaders_loader::ShadersLoader,
 };
 
 /// Creation of the swapchain and images based on the window.
@@ -495,8 +501,8 @@ impl AllocatedImage {
         }
     }
 
-    // TODO: names
-    pub fn new_image(
+    // TODO: names of new functions
+    fn new_image(
         device: Rc<Device>,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
         extent: vk::Extent3D,
@@ -536,6 +542,73 @@ impl AllocatedImage {
         unsafe {
             device.create_image_view(&view_info, None).unwrap();
         }
+
+        new_image
+    }
+
+    /// `data` must be at least `extent.depth * extent.width * extent.height * size_of::<u32>()`
+    pub fn new_image_with_data(
+        commands: &VulkanCommands,
+        device: Rc<Device>,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        extent: vk::Extent3D,
+        format: vk::Format,
+        usages: vk::ImageUsageFlags,
+        mipmapped: bool,
+        data: &[u8],
+    ) -> Self {
+        let data_size =
+            (extent.depth * extent.width * extent.height * size_of::<u32>() as u32) as usize;
+
+        let buffer = AllocatedBuffer::new(
+            allocator.clone(),
+            data_size as u64,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            MyMemoryUsage::CpuToGpu,
+        );
+
+        let data_buffer =
+            unsafe { slice::from_raw_parts_mut(buffer.mapped_data() as *mut u8, data_size) };
+
+        data_buffer.copy_from_slice(&data[0..data_size]);
+
+        let new_image = Self::new_image(
+            device,
+            allocator,
+            extent,
+            format,
+            usages | vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::TRANSFER_SRC,
+            mipmapped,
+        );
+
+        commands.immediate_submit(|device, cmd_buf| {
+            todo!("tr img");
+
+            let copy_region = vk::BufferImageCopy::default()
+                .buffer_offset(0)
+                .buffer_row_length(0)
+                .buffer_image_height(0)
+                .image_subresource(vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .image_extent(extent);
+            let copy_regions = [copy_region];
+
+            unsafe {
+                device.cmd_copy_buffer_to_image(
+                    cmd_buf,
+                    buffer.buffer,
+                    new_image.img,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &copy_regions[..],
+                );
+            }
+
+            todo!("tr img");
+        });
 
         new_image
     }

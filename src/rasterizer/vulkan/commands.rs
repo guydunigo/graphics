@@ -74,33 +74,13 @@ impl FrameData {
         current_layout: vk::ImageLayout,
         new_layout: vk::ImageLayout,
     ) {
-        let aspect_mask = if new_layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
-            vk::ImageAspectFlags::DEPTH
-        } else {
-            vk::ImageAspectFlags::COLOR
-        };
-
-        let sub_image = image_subresource_range(aspect_mask);
-
-        // TODO: replace ALL_COMMANDS by more accurate masks to not stop whole GPU pipeline
-        // https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples
-        let image_barrier = vk::ImageMemoryBarrier2::default()
-            .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
-            .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
-            .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
-            .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ)
-            .old_layout(current_layout)
-            .new_layout(new_layout)
-            .subresource_range(sub_image)
-            .image(image);
-
-        let ibs = [image_barrier];
-        let dep_info = vk::DependencyInfo::default().image_memory_barriers(&ibs);
-
-        unsafe {
-            self.device_copy
-                .cmd_pipeline_barrier2(self.cmd_buf, &dep_info)
-        };
+        transition_image(
+            &self.device_copy,
+            self.cmd_buf,
+            image,
+            current_layout,
+            new_layout,
+        );
     }
 
     pub fn clear_descriptors(&mut self) {
@@ -596,4 +576,37 @@ fn rendering_info<'a>(
 fn as_u8_slice<T>(value: &T) -> &[u8] {
     let ptr = value as *const T as *const u8;
     unsafe { std::slice::from_raw_parts(ptr, size_of::<T>()) }
+}
+
+pub fn transition_image(
+    device: &Device,
+    cmd_buf: vk::CommandBuffer,
+    image: vk::Image,
+    current_layout: vk::ImageLayout,
+    new_layout: vk::ImageLayout,
+) {
+    let aspect_mask = if new_layout == vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL {
+        vk::ImageAspectFlags::DEPTH
+    } else {
+        vk::ImageAspectFlags::COLOR
+    };
+
+    let sub_image = image_subresource_range(aspect_mask);
+
+    // TODO: replace ALL_COMMANDS by more accurate masks to not stop whole GPU pipeline
+    // https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples
+    let image_barrier = vk::ImageMemoryBarrier2::default()
+        .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+        .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+        .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+        .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ)
+        .old_layout(current_layout)
+        .new_layout(new_layout)
+        .subresource_range(sub_image)
+        .image(image);
+
+    let ibs = [image_barrier];
+    let dep_info = vk::DependencyInfo::default().image_memory_barriers(&ibs);
+
+    unsafe { device.cmd_pipeline_barrier2(cmd_buf, &dep_info) };
 }
