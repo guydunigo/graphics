@@ -35,6 +35,8 @@ use descriptors::{
 mod gltf_loader;
 mod textures;
 use textures::Textures;
+mod scene;
+use scene::DrawContext;
 
 #[cfg(feature = "stats")]
 use super::Stats;
@@ -410,11 +412,6 @@ struct MaterialInstance {
     material_set: vk::DescriptorSet,
     pass_type: MaterialPass,
 }
-
-// TODO: move
-// trait Renderable {
-//     fn draw(top_mat: &Mat4, ctx: &DrawContext);
-// }
 
 #[repr(C)]
 struct MaterialConstants {
