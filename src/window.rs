@@ -79,13 +79,13 @@ impl AppObserver {
     }
 }
 
-pub struct InitializedWindow {
+pub struct InitializedWindow<'a> {
     window: Rc<Window>,
     settings: Settings,
-    engine: Engine,
+    engine: Engine<'a>,
 }
 
-impl InitializedWindow {
+impl InitializedWindow<'_> {
     pub fn new(window: Rc<Window>) -> Self {
         Self {
             window: window.clone(),
@@ -109,8 +109,8 @@ impl InitializedWindow {
     }
 }
 
-pub struct App {
-    window: Option<InitializedWindow>,
+pub struct App<'a> {
+    window: Option<InitializedWindow<'a>>,
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     cursor_grabbed: bool,
@@ -124,7 +124,7 @@ pub struct App {
     last_buffer_copy_micros: u128,
 }
 
-impl Default for App {
+impl Default for App<'_> {
     fn default() -> Self {
         Self {
             window: Default::default(),
@@ -143,7 +143,7 @@ impl Default for App {
     }
 }
 
-impl App {
+impl App<'_> {
     pub fn run() {
         let event_loop = EventLoop::new().unwrap();
         // ControlFlow::Poll : Run in a loop (game)
@@ -169,7 +169,7 @@ impl App {
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler for App<'_> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = Rc::new(
             event_loop

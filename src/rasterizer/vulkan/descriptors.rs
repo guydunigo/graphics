@@ -243,6 +243,13 @@ pub struct DescriptorWriter<'a> {
 }
 
 impl<'a> DescriptorWriter<'a> {
+    pub fn clear(&mut self) {
+        self.writes.clear();
+        // This is okay because we clear self.writes (so references to them) first :
+        self.buffer_infos.0.clear();
+        self.image_infos.0.clear();
+    }
+
     // This should be fine as long as we don't remove the item from {image,buffer}_infos.
     //
     // This is needed because [`writes`] refers to [`image_infos`] and [`buffer_infos`],

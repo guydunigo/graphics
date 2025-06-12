@@ -7,7 +7,7 @@ use super::{
     commands::VulkanCommands,
     descriptors::DescriptorLayoutBuilder,
     gltf_loader::{MeshAsset, load_gltf_meshes},
-    shaders_loader::{ShaderName, ShadersLoader},
+    shaders_loader::{ShaderModule, ShaderName, ShadersLoader},
 };
 
 #[repr(C)]
@@ -53,20 +53,16 @@ impl VkGraphicsPipeline {
         let vertex_shader = shaders.get(ShaderName::ColoredTriangleMeshVert);
         let fragment_shader = shaders.get(ShaderName::TexImage);
 
-        let mut builder = PipelineBuilder {
-            pipeline_layout,
-            ..Default::default()
-        };
-        builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
+        let mut builder = PipelineBuilder::new(pipeline_layout);
+        builder.set_shaders(&vertex_shader, &fragment_shader);
         builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
         builder.set_polygon_mode(vk::PolygonMode::FILL);
         builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
         builder.set_multisampling_none();
         builder.enable_blending_additive();
-        // builder.disable_blending();
         builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
-        let draw_formats = [draw_format];
-        builder.set_color_attachment_format(&draw_formats);
+        let formats = [draw_format];
+        builder.set_color_attachment_format(&formats[..]);
         builder.set_depth_format(depth_format);
 
         let pipeline = builder.build(&device);
@@ -131,8 +127,8 @@ impl Drop for VkGraphicsPipeline {
     }
 }
 
-#[derive(Default, Debug, Clone)]
-struct PipelineBuilder<'a> {
+#[derive(Debug, Clone)]
+pub struct PipelineBuilder<'a> {
     shader_stages: Vec<vk::PipelineShaderStageCreateInfo<'a>>,
 
     input_assembly: vk::PipelineInputAssemblyStateCreateInfo<'a>,
@@ -146,7 +142,20 @@ struct PipelineBuilder<'a> {
 }
 
 impl<'a> PipelineBuilder<'a> {
-    pub fn build(mut self, device: &Device) -> vk::Pipeline {
+    // TODO: not ideal since we default all components...
+    pub fn new(pipeline_layout: vk::PipelineLayout) -> Self {
+        Self {
+            shader_stages: Default::default(),
+            input_assembly: Default::default(),
+            rasterizer: Default::default(),
+            color_blend_attachment: Default::default(),
+            multisampling: Default::default(),
+            pipeline_layout,
+            depth_stencil: Default::default(),
+            render_info: Default::default(),
+        }
+    }
+    pub fn build(&mut self, device: &Device) -> vk::Pipeline {
         let viewport_state = vk::PipelineViewportStateCreateInfo::default()
             .viewport_count(1)
             .scissor_count(1);
@@ -183,22 +192,18 @@ impl<'a> PipelineBuilder<'a> {
         }
     }
 
-    pub fn set_shaders(
-        &mut self,
-        vertex_shader: vk::ShaderModule,
-        fragment_shader: vk::ShaderModule,
-    ) {
-        let vertex_shader = vk::PipelineShaderStageCreateInfo::default()
+    pub fn set_shaders(&mut self, vertex_shader: &ShaderModule, fragment_shader: &ShaderModule) {
+        let vertex_shader_stage = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
-            .module(vertex_shader)
+            .module(vertex_shader.module_copy())
             .name(c"main");
-        let fragment_shader = vk::PipelineShaderStageCreateInfo::default()
+        let fragment_shader_stage = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::FRAGMENT)
-            .module(fragment_shader)
+            .module(fragment_shader.module_copy())
             .name(c"main");
 
-        self.shader_stages.push(vertex_shader);
-        self.shader_stages.push(fragment_shader);
+        self.shader_stages.push(vertex_shader_stage);
+        self.shader_stages.push(fragment_shader_stage);
     }
 
     pub fn set_input_topology(&mut self, topology: vk::PrimitiveTopology) {
@@ -228,9 +233,8 @@ impl<'a> PipelineBuilder<'a> {
             .alpha_to_one_enable(false);
     }
 
-    pub fn set_color_attachment_format(&mut self, formats: &'a [vk::Format; 1]) {
-        // self.color_attachment_formats = *formats;
-        self.render_info = self.render_info.color_attachment_formats(&formats[..]);
+    pub fn set_color_attachment_format(&mut self, formats: &'a [vk::Format]) {
+        self.render_info = self.render_info.color_attachment_formats(formats);
     }
 
     pub fn set_depth_format(&mut self, format: vk::Format) {

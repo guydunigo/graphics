@@ -54,6 +54,7 @@ impl ShadersLoader {
 //     }
 // }
 
+// TODO: stop using this and directly call with name + type ?
 #[allow(dead_code)]
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
 pub enum ShaderName {
@@ -64,6 +65,8 @@ pub enum ShaderName {
     ColoredTriangleFrag,
     ColoredTriangleMeshVert,
     TexImage,
+    MeshFrag,
+    MeshVert,
 }
 
 impl From<ShaderName> for &str {
@@ -77,6 +80,7 @@ impl From<ShaderName> for &str {
             ColoredTriangleVert | ColoredTriangleFrag => "colored_triangle",
             ColoredTriangleMeshVert => "colored_triangle_mesh",
             TexImage => "tex_image",
+            MeshFrag | MeshVert => "mesh",
         }
     }
 }
@@ -88,10 +92,8 @@ impl From<ShaderName> for ShaderKind {
 
         match value {
             Gradient | ParametrableGradient | Sky => Compute,
-            ColoredTriangleVert => Vertex,
-            ColoredTriangleFrag => Fragment,
-            ColoredTriangleMeshVert => Vertex,
-            TexImage => Fragment,
+            ColoredTriangleVert | ColoredTriangleMeshVert | MeshVert => Vertex,
+            ColoredTriangleFrag | TexImage | MeshFrag => Fragment,
         }
     }
 }
@@ -157,10 +159,46 @@ impl ShaderModule {
         name: ShaderName,
         glsl: &str,
     ) -> CompilationArtifact {
-        let options = CompileOptions::new().unwrap();
-        compiler
-            .compile_into_spirv(glsl, name.into(), name.into_str(), "main", Some(&options))
-            .unwrap()
+        let path: PathBuf = name.into();
+        let mut options = CompileOptions::new().unwrap();
+        options.set_include_callback(|name, include_type, _src_name, _| {
+            // TODO: handle relative, find src_name folder ?
+            println!("{name} {include_type:?}");
+            let resolved_path = match include_type {
+                shaderc::IncludeType::Relative => path.with_file_name(name),
+                shaderc::IncludeType::Standard => {
+                    let mut res = PathBuf::from(SHADER_FOLDER);
+                    res.push(name);
+                    res
+                }
+            };
+
+            let mut content = String::new();
+            File::open(resolved_path)
+                .unwrap()
+                .read_to_string(&mut content)
+                .unwrap();
+
+            Ok(shaderc::ResolvedInclude {
+                resolved_name: name.into(),
+                content,
+            })
+        });
+        let res =
+            compiler.compile_into_spirv(glsl, name.into(), name.into_str(), "main", Some(&options));
+        match res {
+            Ok(res) => res,
+            Err(shaderc::Error::CompilationError(nb, msg)) => {
+                panic!(
+                    "{nb} errors compiling shader `{}` :{}",
+                    path.to_string_lossy(),
+                    msg.lines()
+                        .map(|s| format!("\n    - {s}"))
+                        .collect::<String>()
+                );
+            }
+            Err(e) => panic!("{e:?}"),
+        }
     }
 }
 

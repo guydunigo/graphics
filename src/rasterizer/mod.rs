@@ -38,12 +38,12 @@ pub struct Stats {
     // pub misc: String,
 }
 
-pub enum Engine {
+pub enum Engine<'a> {
     Cpu(Box<CPUEngine>),
-    Vulkan(Box<VulkanEngine>),
+    Vulkan(Box<VulkanEngine<'a>>),
 }
 
-impl Engine {
+impl Engine<'_> {
     pub fn new(window: Rc<Window>) -> Self {
         Self::Vulkan(Box::new(VulkanEngine::new(window)))
     }

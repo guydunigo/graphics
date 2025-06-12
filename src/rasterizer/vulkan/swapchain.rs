@@ -402,6 +402,7 @@ fn image_view_create_info<'a>(
         .image(image)
 }
 
+// TODO: group with AllocatedBuffer and all ?
 pub struct AllocatedImage {
     device_copy: Rc<Device>,
     allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
