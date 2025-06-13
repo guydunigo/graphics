@@ -13,6 +13,7 @@ use super::{
     descriptors::{DescriptorAllocatorGrowable, DescriptorWriter},
     gfx_pipeline::{GpuDrawPushConstants, VkGraphicsPipeline},
     gui::{GeneratedUi, VulkanGui},
+    scene::{DrawContext, RenderObject},
     swapchain::VulkanSwapchain,
     textures::Textures,
 };
@@ -271,6 +272,8 @@ impl FrameData {
         swapchain: &VulkanSwapchain,
         gfx: &VkGraphicsPipeline,
         textures: &Textures,
+        draw_ctx: &DrawContext,
+        global_desc: vk::DescriptorSet,
     ) {
         let color_attachments = [attachment_info(
             *swapchain.draw_img_view(),
@@ -321,11 +324,64 @@ impl FrameData {
             }
         }
 
-        self.draw_mesh(gfx, textures, draw_extent);
+        draw_ctx
+            .opaque_surfaces
+            .iter()
+            .for_each(|d| self.draw_render_obj(global_desc, d));
+        // TODO: self.draw_mesh(gfx, textures, draw_extent);
 
         unsafe {
             self.device_copy.cmd_end_rendering(self.cmd_buf);
         }
+    }
+
+    fn draw_render_obj(&self, global_desc: vk::DescriptorSet, d: &RenderObject) {
+        unsafe {
+            let mat_pip = d.material.pipeline();
+            self.device_copy.cmd_bind_pipeline(
+                self.cmd_buf,
+                vk::PipelineBindPoint::GRAPHICS,
+                mat_pip.pipeline,
+            );
+
+            let descs = [global_desc];
+            self.device_copy.cmd_bind_descriptor_sets(
+                self.cmd_buf,
+                vk::PipelineBindPoint::GRAPHICS,
+                mat_pip.layout,
+                0,
+                &descs[..],
+                &[],
+            );
+
+            let descs = [d.material.material_set];
+            self.device_copy.cmd_bind_descriptor_sets(
+                self.cmd_buf,
+                vk::PipelineBindPoint::GRAPHICS,
+                mat_pip.layout,
+                1,
+                &descs[..],
+                &[],
+            );
+
+            self.device_copy.cmd_bind_index_buffer(
+                self.cmd_buf,
+                d.index_buffer,
+                0,
+                vk::IndexType::UINT32,
+            );
+
+            self.device_copy.cmd_push_constants(
+                self.cmd_buf,
+                mat_pip.layout,
+                vk::ShaderStageFlags::VERTEX,
+                0,
+                as_u8_slice(&GpuDrawPushConstants::from(d)),
+            );
+
+            self.device_copy
+                .cmd_draw_indexed(self.cmd_buf, d.index_count, 1, d.first_index, 0, 0);
+        };
     }
 
     fn draw_mesh(&self, gfx: &VkGraphicsPipeline, textures: &Textures, draw_extent: vk::Extent2D) {

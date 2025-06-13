@@ -6,7 +6,8 @@ use glam::Mat4;
 use super::{
     commands::VulkanCommands,
     descriptors::DescriptorLayoutBuilder,
-    gltf_loader::{MeshAsset, load_gltf_meshes},
+    gltf_loader::load_gltf_meshes,
+    scene::MeshAsset,
     shaders_loader::{ShaderModule, ShaderName, ShadersLoader},
 };
 

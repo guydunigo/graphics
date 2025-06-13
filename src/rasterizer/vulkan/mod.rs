@@ -1,13 +1,14 @@
 use std::{
+    cell::RefCell,
+    collections::HashMap,
     ffi::c_void,
     mem,
-    rc::{Rc, Weak},
+    rc::Rc,
     sync::{Arc, Mutex},
 };
 
-use ash::{Device, vk};
-use glam::{Mat4, Vec4};
-use vk_mem::Allocator;
+use ash::vk;
+use glam::Mat4;
 use winit::{event::WindowEvent, window::Window};
 
 use super::{format_debug, settings::Settings};
@@ -16,7 +17,7 @@ use crate::{scene::World, window::AppObserver};
 mod base;
 use base::VulkanBase;
 mod swapchain;
-use swapchain::{AllocatedImage, VulkanSwapchain};
+use swapchain::VulkanSwapchain;
 mod commands;
 use commands::VulkanCommands;
 mod compute_shaders;
@@ -24,9 +25,9 @@ use compute_shaders::{ComputeEffect, ComputePushConstants};
 mod gui;
 use gui::VulkanGui;
 mod shaders_loader;
-use shaders_loader::{ShaderName, ShadersLoader};
+use shaders_loader::ShadersLoader;
 mod gfx_pipeline;
-use gfx_pipeline::{GpuDrawPushConstants, PipelineBuilder, VkGraphicsPipeline};
+use gfx_pipeline::VkGraphicsPipeline;
 mod descriptors;
 use descriptors::{
     AllocatedBuffer, DescriptorAllocatorGrowable, DescriptorLayoutBuilder, DescriptorWriter,
@@ -36,14 +37,16 @@ mod gltf_loader;
 mod textures;
 use textures::Textures;
 mod scene;
-use scene::DrawContext;
+use scene::{DrawContext, GltfMetallicRoughness, GpuSceneData, MaterialInstance, MeshNode, Node};
 
 #[cfg(feature = "stats")]
 use super::Stats;
 
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine<'a> {
-    // TODO: keep here ?
+    // TODO: move to gfx
+    main_draw_ctx: DrawContext,
+    loaded_nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
     default_data: MaterialInstance,
     metal_rough_material: GltfMetallicRoughness<'a>,
     _material_constants: AllocatedBuffer,
@@ -127,20 +130,38 @@ impl VulkanEngine<'_> {
             &mut global_desc_alloc,
         );
 
+        let mut gfx = VkGraphicsPipeline::new(
+            &commands,
+            &shaders,
+            base.device.clone(),
+            *swapchain.draw_format(),
+            *swapchain.depth_format(),
+        );
+
+        let loaded_nodes = gfx
+            .meshes
+            .drain(..)
+            .map(|m| {
+                let name = m.name.clone();
+                let v: Rc<RefCell<dyn Node>> = Rc::new(RefCell::new(MeshNode::new(
+                    m,
+                    Mat4::IDENTITY,
+                    Mat4::IDENTITY,
+                )));
+                (name, v)
+            })
+            .collect();
+
         Self {
+            main_draw_ctx: Default::default(),
+            loaded_nodes,
             default_data,
             metal_rough_material,
             _material_constants: material_constants,
             global_desc_alloc,
             gpu_scene_data_descriptor_layout,
             textures,
-            gfx: VkGraphicsPipeline::new(
-                &commands,
-                &shaders,
-                base.device.clone(),
-                *swapchain.draw_format(),
-                *swapchain.depth_format(),
-            ),
+            gfx,
             gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format()),
             commands,
             swapchain,
@@ -158,6 +179,11 @@ impl VulkanEngine<'_> {
 
     pub fn window(&self) -> &Rc<Window> {
         &self.base.window
+    }
+
+    pub fn update_scene(&mut self) {
+        self.main_draw_ctx.clear();
+        todo!();
     }
 
     // TODO: move all this code to separate rendering pipeline file
@@ -188,7 +214,12 @@ impl VulkanEngine<'_> {
         let image = self.swapchain.draw_img();
 
         self.commands.current_frame().wait_for_fences();
-        self.commands.current_frame_mut().clear_descriptors();
+        let current_frame = self.commands.current_frame_mut();
+        current_frame.clear_descriptors();
+        // TODO: recreate each frame ?
+        let global_desc = current_frame
+            .descriptors_mut()
+            .allocate(self.gpu_scene_data_descriptor_layout);
 
         let current_frame = self.commands.current_frame();
 
@@ -225,7 +256,13 @@ impl VulkanEngine<'_> {
             vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
 
-        current_frame.draw_geometries(&self.swapchain, &self.gfx, &self.textures);
+        current_frame.draw_geometries(
+            &self.swapchain,
+            &self.gfx,
+            &self.textures,
+            &self.main_draw_ctx,
+            global_desc,
+        );
 
         current_frame.transition_image(
             *image,
@@ -293,12 +330,6 @@ impl VulkanEngine<'_> {
             };
             *scene_data = self.scene_data;
 
-            let global_descriptor = self
-                .commands
-                .current_frame_mut()
-                .descriptors_mut()
-                .allocate(self.gpu_scene_data_descriptor_layout);
-
             let mut writer = DescriptorWriter::default();
             writer.write_buffer(
                 0,
@@ -307,7 +338,7 @@ impl VulkanEngine<'_> {
                 0,
                 vk::DescriptorType::UNIFORM_BUFFER,
             );
-            writer.update_set(&self.base.device, global_descriptor);
+            writer.update_set(&self.base.device, global_desc);
         }
     }
 
@@ -369,256 +400,4 @@ fn ui(
             });
         }
     });
-}
-
-#[repr(C)]
-#[derive(Default, Debug, Clone, Copy)]
-struct GpuSceneData {
-    view: Mat4,
-    proj: Mat4,
-    view_proj: Mat4,
-    ambient_color: Vec4,
-    sunlight_direction: Vec4,
-    sunlight_color: Vec4,
-}
-
-// TODO: move these
-struct RenderObject<'a> {
-    // TODO: or slice/range ?
-    index_count: usize,
-    first_index: usize,
-    index_buffer: vk::Buffer,
-
-    material: &'a MaterialInstance,
-
-    transform: Mat4,
-    vertex_buffer_addr: vk::DeviceAddress,
-}
-
-/// The fields are supposed to be destroyed by the parent class GltfMetallicRoughness
-struct MaterialPipeline {
-    pipeline: vk::Pipeline,
-    layout: vk::PipelineLayout,
-}
-
-enum MaterialPass {
-    MainColor,
-    Transparent,
-    Other,
-}
-
-struct MaterialInstance {
-    pipeline: Weak<MaterialPipeline>,
-    material_set: vk::DescriptorSet,
-    pass_type: MaterialPass,
-}
-
-#[repr(C)]
-struct MaterialConstants {
-    color_factors: Vec4,
-    metal_rough_factors: Vec4,
-    // padding up to 256 bit alignment, we need it anyway for uniform buffer
-    // TODO needed in rust ??? what if we use utils' Align copy ?
-    // extra: [Vec4; 14],
-}
-
-struct MaterialResources<'a> {
-    color_img: &'a AllocatedImage,
-    color_sampler: vk::Sampler,
-    metal_rough_img: &'a AllocatedImage,
-    metal_rough_sampler: vk::Sampler,
-    data_buffer: vk::Buffer,
-    data_buffer_offset: u32,
-}
-
-/// This struct should be the master of the pipelines and layouts,
-/// it takes care of destroying the layout on drop.
-struct GltfMetallicRoughness<'a> {
-    device_copy: Rc<Device>,
-
-    pipeline_opaque: Rc<MaterialPipeline>,
-    pipeline_transparent: Rc<MaterialPipeline>,
-
-    material_layout: vk::DescriptorSetLayout,
-
-    writer: DescriptorWriter<'a>,
-}
-
-impl Drop for GltfMetallicRoughness<'_> {
-    fn drop(&mut self) {
-        println!("drop GltfMetallicRoughness");
-        unsafe {
-            self.device_copy
-                .destroy_descriptor_set_layout(self.material_layout, None);
-
-            self.device_copy
-                .destroy_pipeline_layout(self.pipeline_opaque.layout, None);
-            if self.pipeline_opaque.layout != self.pipeline_transparent.layout {
-                self.device_copy
-                    .destroy_pipeline_layout(self.pipeline_transparent.layout, None);
-            }
-
-            self.device_copy
-                .destroy_pipeline(self.pipeline_opaque.pipeline, None);
-            self.device_copy
-                .destroy_pipeline(self.pipeline_transparent.pipeline, None);
-        }
-    }
-}
-
-impl GltfMetallicRoughness<'_> {
-    fn new(
-        device: Rc<Device>,
-        shaders: &ShadersLoader,
-        draw_img_format: vk::Format,
-        depth_img_format: vk::Format,
-        gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
-    ) -> Self {
-        let mesh_frag = shaders.get(ShaderName::MeshFrag);
-        let mesh_vert = shaders.get(ShaderName::MeshVert);
-
-        let matrix_range = vk::PushConstantRange::default()
-            .offset(0)
-            .size(size_of::<GpuDrawPushConstants>() as u32)
-            .stage_flags(vk::ShaderStageFlags::VERTEX);
-        let push_constant_ranges = [matrix_range];
-
-        let material_layout = DescriptorLayoutBuilder::default()
-            .add_binding(0, vk::DescriptorType::UNIFORM_BUFFER)
-            .add_binding(1, vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .add_binding(2, vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .build(
-                &device,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-            );
-        let layouts = [gpu_scene_data_descriptor_layout, material_layout];
-
-        let mesh_layout_info = vk::PipelineLayoutCreateInfo::default()
-            .set_layouts(&layouts[..])
-            .push_constant_ranges(&push_constant_ranges[..]);
-
-        let new_layout = unsafe {
-            device
-                .create_pipeline_layout(&mesh_layout_info, None)
-                .unwrap()
-        };
-
-        let mut pipeline_builder = PipelineBuilder::new(new_layout);
-        pipeline_builder.set_shaders(&mesh_vert, &mesh_frag);
-        pipeline_builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
-        pipeline_builder.set_polygon_mode(vk::PolygonMode::FILL);
-        pipeline_builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
-        pipeline_builder.set_multisampling_none();
-        pipeline_builder.disable_blending();
-        pipeline_builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
-        // render format
-        let formats = [draw_img_format];
-        pipeline_builder.set_color_attachment_format(&formats[..]);
-        pipeline_builder.set_depth_format(depth_img_format);
-
-        let pipeline_opaque = pipeline_builder.build(&device);
-
-        pipeline_builder.enable_blending_additive();
-        pipeline_builder.enable_depthtest(false, vk::CompareOp::GREATER_OR_EQUAL);
-        let pipeline_transparent = pipeline_builder.build(&device);
-
-        Self {
-            device_copy: device,
-
-            pipeline_opaque: Rc::new(MaterialPipeline {
-                pipeline: pipeline_opaque,
-                layout: new_layout,
-            }),
-            pipeline_transparent: Rc::new(MaterialPipeline {
-                pipeline: pipeline_transparent,
-                layout: new_layout,
-            }),
-            material_layout,
-            writer: Default::default(),
-        }
-    }
-
-    fn write_material(
-        &mut self,
-        pass: MaterialPass,
-        resources: &MaterialResources,
-        desc_alloc: &mut DescriptorAllocatorGrowable,
-    ) -> MaterialInstance {
-        let mat_data = MaterialInstance {
-            pipeline: Rc::downgrade(if let MaterialPass::Transparent = pass {
-                &self.pipeline_transparent
-            } else {
-                &self.pipeline_opaque
-            }),
-            material_set: desc_alloc.allocate(self.material_layout),
-            pass_type: pass,
-        };
-
-        self.writer.clear();
-        self.writer.write_buffer(
-            0,
-            resources.data_buffer,
-            size_of::<MaterialConstants>() as u64,
-            resources.data_buffer_offset as u64,
-            vk::DescriptorType::UNIFORM_BUFFER,
-        );
-        self.writer.write_image(
-            1,
-            resources.color_img.img_view,
-            resources.color_sampler,
-            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-        );
-        self.writer.write_image(
-            2,
-            resources.metal_rough_img.img_view,
-            resources.metal_rough_sampler,
-            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-        );
-
-        self.writer
-            .update_set(&self.device_copy, mat_data.material_set);
-
-        mat_data
-    }
-
-    pub fn create_material(
-        &mut self,
-        allocator: Arc<Mutex<Allocator>>,
-        textures: &Textures,
-        global_desc_alloc: &mut DescriptorAllocatorGrowable,
-    ) -> (AllocatedBuffer, MaterialInstance) {
-        let material_constants = AllocatedBuffer::new(
-            allocator,
-            size_of::<MaterialConstants>() as u64,
-            vk::BufferUsageFlags::UNIFORM_BUFFER,
-            MyMemoryUsage::CpuToGpu,
-        );
-
-        let scene_uniform_data = unsafe {
-            mem::transmute::<*mut c_void, &mut MaterialConstants>(material_constants.mapped_data())
-        };
-        *scene_uniform_data = MaterialConstants {
-            color_factors: Vec4::splat(1.),
-            metal_rough_factors: glam::vec4(1., 0.5, 0., 0.),
-        };
-
-        let material_resources = MaterialResources {
-            color_img: &textures.white,
-            color_sampler: textures.default_sampler_linear,
-            metal_rough_img: &textures.white,
-            metal_rough_sampler: textures.default_sampler_linear,
-            data_buffer: material_constants.buffer,
-            data_buffer_offset: 0,
-        };
-
-        let instance = self.write_material(
-            MaterialPass::MainColor,
-            &material_resources,
-            global_desc_alloc,
-        );
-
-        (material_constants, instance)
-    }
 }
