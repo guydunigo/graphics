@@ -8,7 +8,7 @@ use std::{
 };
 
 use ash::vk;
-use glam::Mat4;
+use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 use winit::{event::WindowEvent, window::Window};
 
 use super::{format_debug, settings::Settings};
@@ -45,12 +45,14 @@ use super::Stats;
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine<'a> {
     // TODO: move to gfx
+    gpu_scene_data_buffer: Vec<AllocatedBuffer>,
     main_draw_ctx: DrawContext,
     loaded_nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
-    default_data: MaterialInstance,
-    metal_rough_material: GltfMetallicRoughness<'a>,
+    // TODO: store here ?
+    _default_data: Rc<MaterialInstance>,
+    _metal_rough_material: GltfMetallicRoughness<'a>,
     _material_constants: AllocatedBuffer,
-    global_desc_alloc: DescriptorAllocatorGrowable,
+    _global_desc_alloc: DescriptorAllocatorGrowable,
     gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
 
     // Elements are placed in the order they should be dropped, so inverse order of creation.
@@ -71,6 +73,7 @@ pub struct VulkanEngine<'a> {
 
 impl Drop for VulkanEngine<'_> {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop VulkanEngine");
         unsafe {
             self.base.device.device_wait_idle().unwrap();
@@ -130,9 +133,12 @@ impl VulkanEngine<'_> {
             &mut global_desc_alloc,
         );
 
+        let default_data = Rc::new(default_data);
+
         let mut gfx = VkGraphicsPipeline::new(
             &commands,
             &shaders,
+            default_data.clone(),
             base.device.clone(),
             *swapchain.draw_format(),
             *swapchain.depth_format(),
@@ -153,12 +159,13 @@ impl VulkanEngine<'_> {
             .collect();
 
         Self {
+            gpu_scene_data_buffer: Default::default(),
             main_draw_ctx: Default::default(),
             loaded_nodes,
-            default_data,
-            metal_rough_material,
+            _default_data: default_data,
+            _metal_rough_material: metal_rough_material,
             _material_constants: material_constants,
-            global_desc_alloc,
+            _global_desc_alloc: global_desc_alloc,
             gpu_scene_data_descriptor_layout,
             textures,
             gfx,
@@ -183,7 +190,42 @@ impl VulkanEngine<'_> {
 
     pub fn update_scene(&mut self) {
         self.main_draw_ctx.clear();
-        todo!();
+
+        self.loaded_nodes
+            .get("Suzanne")
+            .unwrap()
+            .borrow()
+            .draw(&Mat4::IDENTITY, &mut self.main_draw_ctx);
+
+        {
+            let cube = self.loaded_nodes["Cube"].borrow();
+            (-3..3).for_each(|x| {
+                let scale = Mat4::from_scale(Vec3::splat(0.2));
+                let translation = Mat4::from_translation(vec3(x as f32, 1., 0.));
+
+                cube.draw(&(translation * scale), &mut self.main_draw_ctx);
+            });
+        }
+
+        let view = Mat4::from_translation(vec3(0., 0., -5.));
+        // Camera projection
+        let draw_extent = self.swapchain.draw_extent();
+        let mut proj = Mat4::perspective_rh(
+            70.,
+            draw_extent.width as f32 / draw_extent.height as f32,
+            10_000.,
+            0.1,
+        );
+        proj.y_axis[1] *= -1.;
+        // TODO: move to setters ?
+        self.scene_data = GpuSceneData {
+            view,
+            proj,
+            view_proj: self.scene_data.proj * self.scene_data.view,
+            ambient_color: Vec4::splat(1.),
+            sunlight_direction: vec4(0., 1., 0.5, 1.),
+            sunlight_color: Vec4::splat(1.),
+        };
     }
 
     // TODO: move all this code to separate rendering pipeline file
@@ -210,6 +252,8 @@ impl VulkanEngine<'_> {
                 &mut self.bg_effects_data,
             )
         });
+
+        self.update_scene();
 
         let image = self.swapchain.draw_img();
 
@@ -255,6 +299,41 @@ impl VulkanEngine<'_> {
             vk::ImageLayout::UNDEFINED,
             vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
+
+        // TODO: move
+        // TODO: store until next frame so GPU has time to use it
+        {
+            // We will also dynamically allocate the uniform buffer itself as a way to
+            // showcase how you could do temporal per-frame data that is dynamically created.
+            // It would be better to hold the buffers cached in our FrameData structure,
+            // but we will be doing it this way to show how.
+            // There are cases with dynamic draws and passes where you might want to do it
+            // this way.
+            let gpu_scene_data_buffer = AllocatedBuffer::new(
+                self.allocator.clone(),
+                size_of::<GpuSceneData>() as u64,
+                vk::BufferUsageFlags::UNIFORM_BUFFER,
+                MyMemoryUsage::CpuToGpu,
+            );
+            let scene_data = unsafe {
+                mem::transmute::<*mut c_void, &mut GpuSceneData>(
+                    gpu_scene_data_buffer.mapped_data(),
+                )
+            };
+            *scene_data = self.scene_data;
+
+            let mut writer = DescriptorWriter::default();
+            writer.write_buffer(
+                0,
+                gpu_scene_data_buffer.buffer,
+                size_of::<GpuSceneData>() as u64,
+                0,
+                vk::DescriptorType::UNIFORM_BUFFER,
+            );
+            writer.update_set(&self.base.device, global_desc);
+
+            self.gpu_scene_data_buffer.push(gpu_scene_data_buffer);
+        }
 
         current_frame.draw_geometries(
             &self.swapchain,
@@ -307,39 +386,6 @@ impl VulkanEngine<'_> {
             .present(swapchain_img_index, sem_render, self.commands.queue);
 
         self.commands.frame_number += 1;
-
-        // TODO: move
-        // TODO: store until next frame so GPU has time to use it
-        if false {
-            // We will also dynamically allocate the uniform buffer itself as a way to
-            // showcase how you could do temporal per-frame data that is dynamically created.
-            // It would be better to hold the buffers cached in our FrameData structure,
-            // but we will be doing it this way to show how.
-            // There are cases with dynamic draws and passes where you might want to do it
-            // this way.
-            let gpu_scene_data_buffer = AllocatedBuffer::new(
-                self.allocator.clone(),
-                size_of::<GpuSceneData>() as u64,
-                vk::BufferUsageFlags::UNIFORM_BUFFER,
-                MyMemoryUsage::CpuToGpu,
-            );
-            let scene_data = unsafe {
-                mem::transmute::<*mut c_void, &mut GpuSceneData>(
-                    gpu_scene_data_buffer.mapped_data(),
-                )
-            };
-            *scene_data = self.scene_data;
-
-            let mut writer = DescriptorWriter::default();
-            writer.write_buffer(
-                0,
-                gpu_scene_data_buffer.buffer,
-                size_of::<GpuSceneData>() as u64,
-                0,
-                vk::DescriptorType::UNIFORM_BUFFER,
-            );
-            writer.update_set(&self.base.device, global_desc);
-        }
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {

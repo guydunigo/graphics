@@ -339,6 +339,7 @@ impl SwapchainData {
 
 impl Drop for SwapchainData {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop SwapchainData");
         unsafe {
             self.device_copy.device_wait_idle().unwrap();
@@ -618,6 +619,7 @@ impl AllocatedImage {
 
 impl Drop for AllocatedImage {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop AllocatedImage");
         unsafe {
             self.device_copy.device_wait_idle().unwrap();

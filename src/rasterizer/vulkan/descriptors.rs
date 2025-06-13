@@ -74,6 +74,7 @@ impl DescriptorAllocator {
 
 impl Drop for DescriptorAllocator {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop DescriptorAllocator");
         unsafe { self.device_copy.destroy_descriptor_pool(self.pool, None) };
     }
@@ -209,6 +210,7 @@ impl DescriptorAllocatorGrowable {
 
 impl Drop for DescriptorAllocatorGrowable {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!(
             "drop DescriptorAllocatorGrowable : {} full, {} ready descriptor pools",
             self.full.len(),
@@ -424,6 +426,7 @@ impl AllocatedBuffer {
                 let (buffer, allocation) =
                     allocator.create_buffer(&buffer_info, &alloc_info).unwrap();
                 let info = allocator.get_allocation_info(&allocation);
+                #[cfg(feature = "dbg_mem")]
                 println!("{info:?}");
                 (buffer, allocation, info)
             }
@@ -444,6 +447,7 @@ impl AllocatedBuffer {
 
 impl Drop for AllocatedBuffer {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop AllocatedBuffer");
         unsafe {
             self.allocator_copy

@@ -44,6 +44,7 @@ impl ShadersLoader {
 
 // impl Drop for ShadersLoader {
 //     fn drop(&mut self) {
+//         #[cfg(feature = "dbg_mem")]
 //         println!("drop VulkanShaders");
 //         // println!("drop VulkanShaders : {} shaders", shaders.len());
 //         // unsafe {
@@ -124,7 +125,7 @@ impl ShaderName {
 /// It will take care of destroying it on drop, so keep it around long enough.
 pub struct ShaderModule {
     device_copy: Rc<Device>,
-    name: ShaderName,
+    // name: ShaderName,
     module: vk::ShaderModule,
 }
 
@@ -149,7 +150,7 @@ impl ShaderModule {
 
         Self {
             device_copy: device,
-            name,
+            // name,
             module,
         }
     }
@@ -162,8 +163,6 @@ impl ShaderModule {
         let path: PathBuf = name.into();
         let mut options = CompileOptions::new().unwrap();
         options.set_include_callback(|name, include_type, _src_name, _| {
-            // TODO: handle relative, find src_name folder ?
-            println!("{name} {include_type:?}");
             let resolved_path = match include_type {
                 shaderc::IncludeType::Relative => path.with_file_name(name),
                 shaderc::IncludeType::Standard => {
@@ -204,8 +203,11 @@ impl ShaderModule {
 
 impl Drop for ShaderModule {
     fn drop(&mut self) {
-        let kind: ShaderKind = self.name.into();
-        println!("drop ShaderModule {:?}, kind {:?}", self.name, kind);
+        #[cfg(feature = "dbg_mem")]
+        {
+            let kind: ShaderKind = self.name.into();
+            println!("drop ShaderModule {:?}, kind {:?}", self.name, kind);
+        }
         unsafe {
             self.device_copy.destroy_shader_module(self.module, None);
         }

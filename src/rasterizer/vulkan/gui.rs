@@ -183,13 +183,14 @@ impl VulkanGuiMutable {
     }
 }
 
-impl Drop for VulkanGuiMutable {
-    fn drop(&mut self) {
-        println!("drop VulkanGui");
-        // unsafe {
-        // }
-    }
-}
+// impl Drop for VulkanGuiMutable {
+//     fn drop(&mut self) {
+//         #[cfg(feature = "dbg_mem")]
+//         println!("drop VulkanGui");
+//         // unsafe {
+//         // }
+//     }
+// }
 
 fn load_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();

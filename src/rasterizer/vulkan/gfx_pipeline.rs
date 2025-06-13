@@ -7,7 +7,7 @@ use super::{
     commands::VulkanCommands,
     descriptors::DescriptorLayoutBuilder,
     gltf_loader::load_gltf_meshes,
-    scene::MeshAsset,
+    scene::{MaterialInstance, MeshAsset},
     shaders_loader::{ShaderModule, ShaderName, ShadersLoader},
 };
 
@@ -33,6 +33,7 @@ impl VkGraphicsPipeline {
     pub fn new(
         commands: &VulkanCommands,
         shaders: &ShadersLoader,
+        default_data: Rc<MaterialInstance>,
         device: Rc<Device>,
         draw_format: vk::Format,
         depth_format: vk::Format,
@@ -69,7 +70,7 @@ impl VkGraphicsPipeline {
         let pipeline = builder.build(&device);
 
         // TODO: proper resource path and all mngmt
-        let meshes = load_gltf_meshes(&device, commands, "./resources/basicmesh.glb");
+        let meshes = load_gltf_meshes(&device, commands, default_data, "./resources/basicmesh.glb");
 
         Self {
             device_copy: device,
@@ -115,6 +116,7 @@ impl VkGraphicsPipeline {
 
 impl Drop for VkGraphicsPipeline {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop VkGraphicsPipeline");
         unsafe {
             self.device_copy.device_wait_idle().unwrap();

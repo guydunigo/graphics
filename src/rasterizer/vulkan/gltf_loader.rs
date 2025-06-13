@@ -8,11 +8,14 @@ use super::{
     scene::{GeoSurface, GpuMeshBuffers, MaterialInstance, MeshAsset, Vertex},
 };
 
+/// Override colors with normal value
+const OVERRIDE_COLORS: bool = false;
+
 /// Loads the glTF file and uploads it to GPU memory
 pub fn load_gltf_meshes(
     device: &Device,
     commands: &VulkanCommands,
-    default_data: MaterialInstance,
+    default_data: Rc<MaterialInstance>,
     path: impl AsRef<Path>,
 ) -> Vec<MeshAsset> {
     let (document, buffers, _) = gltf::import(path).unwrap();
@@ -20,8 +23,6 @@ pub fn load_gltf_meshes(
     // In common to prevent reallocating much
     let mut indices = Vec::new();
     let mut vertices = Vec::new();
-
-    let default_data: Rc<MaterialInstance> = Rc::new(default_data.into());
 
     document
         .meshes()
@@ -89,8 +90,7 @@ pub fn load_gltf_meshes(
                 })
                 .collect();
 
-            let override_colors = true;
-            if override_colors {
+            if OVERRIDE_COLORS {
                 vertices
                     .iter_mut()
                     .for_each(|v| v.color = v.normal.extend(1.));

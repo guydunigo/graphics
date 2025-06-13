@@ -28,12 +28,12 @@ use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
 pub struct GpuSceneData {
-    view: Mat4,
-    proj: Mat4,
-    view_proj: Mat4,
-    ambient_color: Vec4,
-    sunlight_direction: Vec4,
-    sunlight_color: Vec4,
+    pub view: Mat4,
+    pub proj: Mat4,
+    pub view_proj: Mat4,
+    pub ambient_color: Vec4,
+    pub sunlight_direction: Vec4,
+    pub sunlight_color: Vec4,
 }
 
 #[repr(C)]
@@ -266,6 +266,7 @@ pub struct GltfMetallicRoughness<'a> {
 
 impl Drop for GltfMetallicRoughness<'_> {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop GltfMetallicRoughness");
         unsafe {
             self.device_copy
@@ -474,7 +475,7 @@ impl DrawContext {
     }
 }
 
-trait Renderable {
+pub trait Renderable {
     fn draw(&self, top_mat: &Mat4, ctx: &mut DrawContext);
 }
 

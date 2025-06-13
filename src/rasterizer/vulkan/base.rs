@@ -89,6 +89,7 @@ impl VulkanBase {
 
 impl Drop for VulkanBase {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop VulkanBase");
         unsafe {
             self.device.device_wait_idle().unwrap();

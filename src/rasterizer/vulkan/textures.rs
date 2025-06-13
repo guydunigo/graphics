@@ -135,6 +135,7 @@ impl Textures {
 
 impl Drop for Textures {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop Textures");
         unsafe {
             self.device_copy

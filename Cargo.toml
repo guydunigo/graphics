@@ -29,5 +29,6 @@ debug = true
 
 [features]
 stats = []
+dbg_mem = []
 vulkan_linked = ["ash/linked", "shaderc/prefer-static-linking", "vk-mem/linked"]
 # default = ["vulkan_linked"]

@@ -7,6 +7,8 @@ use std::{
 use ash::{Device, vk};
 use glam::{Mat4, vec3};
 
+use crate::rasterizer::vulkan::scene::GpuSceneData;
+
 use super::{
     base::VulkanBase,
     compute_shaders::ComputePushConstants,
@@ -34,6 +36,7 @@ pub struct FrameData {
 
 impl Drop for FrameData {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop FrameData");
         unsafe {
             // TODO: useful or cause perf problems if used everywhere :
@@ -557,6 +560,7 @@ impl VulkanCommands {
 
 impl Drop for VulkanCommands {
     fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
         println!("drop VulkanCommands");
         unsafe {
             self.device_copy.destroy_fence(self.imm_fence, None);
