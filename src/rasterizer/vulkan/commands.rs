@@ -5,19 +5,15 @@ use std::{
 };
 
 use ash::{Device, vk};
-use glam::{Mat4, vec3};
-
-use crate::rasterizer::vulkan::scene::GpuSceneData;
 
 use super::{
     base::VulkanBase,
     compute_shaders::ComputePushConstants,
-    descriptors::{DescriptorAllocatorGrowable, DescriptorWriter},
+    descriptors::DescriptorAllocatorGrowable,
     gfx_pipeline::{GpuDrawPushConstants, VkGraphicsPipeline},
     gui::{GeneratedUi, VulkanGui},
     scene::{DrawContext, RenderObject},
     swapchain::VulkanSwapchain,
-    textures::Textures,
 };
 
 pub const FRAME_OVERLAP: usize = 2;
@@ -180,23 +176,6 @@ impl FrameData {
         unsafe { self.device_copy.cmd_blit_image2(self.cmd_buf, &blit_info) };
     }
 
-    // pub fn draw_background_simple(&self, image: vk::Image, frame_number: usize) {
-    //     let flash = (frame_number as f32 / 120.).sin().abs();
-    //     let clear_value = vk::ClearColorValue {
-    //         float32: [0., 0., flash, 1.],
-    //     };
-    //     let clear_range = VulkanCommands::image_subresource_range(vk::ImageAspectFlags::COLOR);
-    //     unsafe {
-    //         self.device_copy.cmd_clear_color_image(
-    //             self.cmd_buf,
-    //             image,
-    //             vk::ImageLayout::GENERAL,
-    //             &clear_value,
-    //             &[clear_range],
-    //         )
-    //     };
-    // }
-
     pub fn draw_background(
         &self,
         swapchain: &VulkanSwapchain,
@@ -274,7 +253,6 @@ impl FrameData {
         &self,
         swapchain: &VulkanSwapchain,
         gfx: &VkGraphicsPipeline,
-        textures: &Textures,
         draw_ctx: &DrawContext,
         global_desc: vk::DescriptorSet,
     ) {
@@ -331,7 +309,6 @@ impl FrameData {
             .opaque_surfaces
             .iter()
             .for_each(|d| self.draw_render_obj(global_desc, d));
-        // TODO: self.draw_mesh(gfx, textures, draw_extent);
 
         unsafe {
             self.device_copy.cmd_end_rendering(self.cmd_buf);
@@ -385,80 +362,6 @@ impl FrameData {
             self.device_copy
                 .cmd_draw_indexed(self.cmd_buf, d.index_count, 1, d.first_index, 0, 0);
         };
-    }
-
-    fn draw_mesh(&self, gfx: &VkGraphicsPipeline, textures: &Textures, draw_extent: vk::Extent2D) {
-        let image_set = self
-            .descriptors
-            .borrow_mut()
-            .allocate(gfx.single_image_descriptor_layout);
-        {
-            let mut writer = DescriptorWriter::default();
-            // TODO: p-ê plus rapide d'utiliser 2 descriptors séparés plutôt que COMBINED :
-            // SAMPLER + SAMPLED_IMAGE ?
-            writer.write_image(
-                0,
-                textures.error_checkerboard.img_view,
-                textures.default_sampler_nearest,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            );
-            writer.update_set(&self.device_copy, image_set);
-        }
-        let image_sets = [image_set];
-
-        unsafe {
-            self.device_copy.cmd_bind_descriptor_sets(
-                self.cmd_buf,
-                vk::PipelineBindPoint::GRAPHICS,
-                gfx.pipeline_layout,
-                0,
-                &image_sets[..],
-                &[],
-            );
-        }
-
-        let mesh = &gfx.meshes[2];
-
-        let view = Mat4::from_translation(vec3(0., 0., -5.));
-        // Camera position
-        let mut projection = Mat4::perspective_rh(
-            70.,
-            draw_extent.width as f32 / draw_extent.height as f32,
-            10000.,
-            0.1,
-        );
-        // Invert the Y direction on projection matrix so that we are more similar
-        // to opengl and gltf axis
-        projection.y_axis[1] *= -1.;
-
-        let constants = GpuDrawPushConstants {
-            world_mat: projection * view,
-            vertex_buffer: mesh.vertex_buffer_address(),
-        };
-        unsafe {
-            self.device_copy.cmd_push_constants(
-                self.cmd_buf,
-                gfx.pipeline_layout,
-                vk::ShaderStageFlags::VERTEX,
-                0,
-                as_u8_slice(&constants),
-            );
-            self.device_copy.cmd_bind_index_buffer(
-                self.cmd_buf,
-                *mesh.index_buffer(),
-                0,
-                vk::IndexType::UINT32,
-            );
-            self.device_copy.cmd_draw_indexed(
-                self.cmd_buf,
-                mesh.surfaces[0].count,
-                1,
-                mesh.surfaces[0].start_index,
-                0,
-                0,
-            );
-        }
     }
 
     pub fn descriptors_mut<'a>(&'a self) -> RefMut<'a, DescriptorAllocatorGrowable> {

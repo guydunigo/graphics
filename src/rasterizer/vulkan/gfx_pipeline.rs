@@ -24,6 +24,7 @@ pub struct VkGraphicsPipeline {
     pub pipeline: vk::Pipeline,
     pub pipeline_layout: vk::PipelineLayout,
 
+    // TODO: move to scene state ?
     pub meshes: Vec<MeshAsset>,
 
     pub single_image_descriptor_layout: vk::DescriptorSetLayout,

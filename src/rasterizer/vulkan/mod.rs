@@ -44,19 +44,19 @@ use super::Stats;
 
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine<'a> {
+    // Elements are placed in the order they should be dropped, so inverse order of creation.
+
     // TODO: move to gfx
     gpu_scene_data_buffer: Vec<AllocatedBuffer>,
     main_draw_ctx: DrawContext,
     loaded_nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
-    // TODO: store here ?
     _default_data: Rc<MaterialInstance>,
     _metal_rough_material: GltfMetallicRoughness<'a>,
     _material_constants: AllocatedBuffer,
     _global_desc_alloc: DescriptorAllocatorGrowable,
     gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
 
-    // Elements are placed in the order they should be dropped, so inverse order of creation.
-    textures: Textures,
+    _textures: Textures,
     gfx: VkGraphicsPipeline,
     swapchain: VulkanSwapchain,
     gui: VulkanGui,
@@ -167,7 +167,7 @@ impl VulkanEngine<'_> {
             _material_constants: material_constants,
             _global_desc_alloc: global_desc_alloc,
             gpu_scene_data_descriptor_layout,
-            textures,
+            _textures: textures,
             gfx,
             gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format()),
             commands,
@@ -335,13 +335,7 @@ impl VulkanEngine<'_> {
             self.gpu_scene_data_buffer.push(gpu_scene_data_buffer);
         }
 
-        current_frame.draw_geometries(
-            &self.swapchain,
-            &self.gfx,
-            &self.textures,
-            &self.main_draw_ctx,
-            global_desc,
-        );
+        current_frame.draw_geometries(&self.swapchain, &self.gfx, &self.main_draw_ctx, global_desc);
 
         current_frame.transition_image(
             *image,

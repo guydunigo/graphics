@@ -426,10 +426,10 @@ impl GltfMetallicRoughness<'_> {
         };
 
         let material_resources = MaterialResources {
-            color_img: &textures.white,
-            color_sampler: textures.default_sampler_linear,
-            metal_rough_img: &textures.white,
-            metal_rough_sampler: textures.default_sampler_linear,
+            color_img: &textures.error_checkerboard,
+            color_sampler: textures.default_sampler_nearest,
+            metal_rough_img: &textures.error_checkerboard,
+            metal_rough_sampler: textures.default_sampler_nearest,
             data_buffer: material_constants.buffer,
             data_buffer_offset: 0,
         };

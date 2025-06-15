@@ -29,7 +29,6 @@ pub struct VulkanBase {
     // would crash !
     _entry: Entry,
 
-    // TODO: store here ?
     pub window: Rc<Window>,
 
     pub instance: Instance,
