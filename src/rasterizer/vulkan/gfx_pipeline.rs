@@ -20,65 +20,19 @@ pub struct GpuDrawPushConstants {
 
 pub struct VkGraphicsPipeline {
     device_copy: Rc<Device>,
-
-    pub pipeline: vk::Pipeline,
-    pub pipeline_layout: vk::PipelineLayout,
-
-    // TODO: move to scene state ?
-    pub meshes: Vec<MeshAsset>,
-
-    pub single_image_descriptor_layout: vk::DescriptorSetLayout,
 }
 
 impl VkGraphicsPipeline {
     pub fn new(
         commands: &VulkanCommands,
         shaders: &ShadersLoader,
-        default_data: Rc<MaterialInstance>,
         device: Rc<Device>,
         draw_format: vk::Format,
         depth_format: vk::Format,
     ) -> Self {
-        let buffer_ranges = [vk::PushConstantRange::default()
-            .offset(0)
-            .size(size_of::<GpuDrawPushConstants>() as u32)
-            .stage_flags(vk::ShaderStageFlags::VERTEX)];
-
-        let single_image_descriptor_layout = DescriptorLayoutBuilder::default()
-            .add_binding(0, vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .build(&device, vk::ShaderStageFlags::FRAGMENT);
-        let sid_layouts = [single_image_descriptor_layout];
-
-        let create_info = vk::PipelineLayoutCreateInfo::default()
-            .push_constant_ranges(&buffer_ranges[..])
-            .set_layouts(&sid_layouts[..]);
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
-        let vertex_shader = shaders.get(ShaderName::ColoredTriangleMeshVert);
-        let fragment_shader = shaders.get(ShaderName::TexImage);
-
-        let mut builder = PipelineBuilder::new(pipeline_layout);
-        builder.set_shaders(&vertex_shader, &fragment_shader);
-        builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
-        builder.set_polygon_mode(vk::PolygonMode::FILL);
-        builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
-        builder.set_multisampling_none();
-        builder.enable_blending_additive();
-        builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
-        let formats = [draw_format];
-        builder.set_color_attachment_format(&formats[..]);
-        builder.set_depth_format(depth_format);
-
-        let pipeline = builder.build(&device);
-
-        // TODO: proper resource path and all mngmt
-        let meshes = load_gltf_meshes(&device, commands, default_data, "./resources/basicmesh.glb");
-
+        todo!();
         Self {
             device_copy: device,
-            pipeline,
-            pipeline_layout,
-            meshes,
-            single_image_descriptor_layout,
         }
     }
 
@@ -121,12 +75,6 @@ impl Drop for VkGraphicsPipeline {
         println!("drop VkGraphicsPipeline");
         unsafe {
             self.device_copy.device_wait_idle().unwrap();
-
-            self.device_copy.destroy_pipeline(self.pipeline, None);
-            self.device_copy
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device_copy
-                .destroy_descriptor_set_layout(self.single_image_descriptor_layout, None);
         }
     }
 }
@@ -146,7 +94,6 @@ pub struct PipelineBuilder<'a> {
 }
 
 impl<'a> PipelineBuilder<'a> {
-    // TODO: not ideal since we default all components...
     pub fn new(pipeline_layout: vk::PipelineLayout) -> Self {
         Self {
             shader_stages: Default::default(),

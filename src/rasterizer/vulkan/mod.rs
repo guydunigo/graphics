@@ -36,7 +36,7 @@ mod gltf_loader;
 mod textures;
 use textures::Textures;
 mod scene;
-use scene::{DrawContext, GltfMetallicRoughness, GpuSceneData, MeshNode, Node};
+use scene::{DrawContext, GltfMetallicRoughness, GpuSceneData, MeshNode, Node, Scene};
 
 #[cfg(feature = "stats")]
 use super::Stats;
@@ -45,19 +45,16 @@ use super::Stats;
 pub struct VulkanEngine<'a> {
     // Elements are placed in the order they should be dropped, so inverse order of creation.
 
-    // TODO: move to gfx
+    // TODO: move to scene
     gpu_scene_data_buffer: Vec<AllocatedBuffer>,
     main_draw_ctx: DrawContext,
     loaded_nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
+    scene: Scene<'a>,
     // TODO: move to textures ?
-    _metal_rough_material: GltfMetallicRoughness<'a>,
-    // TODO: move to textures
-    /// Keep it to prevent de-allocation
-    _material_constants: AllocatedBuffer,
     _global_desc_alloc: DescriptorAllocatorGrowable,
+    // TODO: move to scene ?
     gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
 
-    _textures: Textures,
     gfx: VkGraphicsPipeline,
     swapchain: VulkanSwapchain,
     gui: VulkanGui,
@@ -110,8 +107,6 @@ impl VulkanEngine<'_> {
 
         let commands = VulkanCommands::new(&base, allocator.clone());
 
-        let textures = Textures::new(&commands, base.device.clone(), allocator.clone());
-
         let gpu_scene_data_descriptor_layout = DescriptorLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::UNIFORM_BUFFER)
             .build(
@@ -120,26 +115,18 @@ impl VulkanEngine<'_> {
             );
         let mut global_desc_alloc = DescriptorAllocatorGrowable::new_global(base.device.clone());
 
-        let mut metal_rough_material = GltfMetallicRoughness::new(
-            base.device.clone(),
+        let scene = Scene::new(
+            &swapchain,
+            &commands,
             &shaders,
-            *swapchain.draw_format(),
-            *swapchain.depth_format(),
-            gpu_scene_data_descriptor_layout,
-        );
-
-        let (material_constants, default_data) = metal_rough_material.create_material(
+            base.device.clone(),
             allocator.clone(),
-            &textures,
             &mut global_desc_alloc,
         );
-
-        let default_data = Rc::new(default_data);
 
         let mut gfx = VkGraphicsPipeline::new(
             &commands,
             &shaders,
-            default_data.clone(),
             base.device.clone(),
             *swapchain.draw_format(),
             *swapchain.depth_format(),
@@ -163,11 +150,9 @@ impl VulkanEngine<'_> {
             gpu_scene_data_buffer: Default::default(),
             main_draw_ctx: Default::default(),
             loaded_nodes,
-            _metal_rough_material: metal_rough_material,
-            _material_constants: material_constants,
+            scene,
             _global_desc_alloc: global_desc_alloc,
             gpu_scene_data_descriptor_layout,
-            _textures: textures,
             gfx,
             gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format()),
             commands,

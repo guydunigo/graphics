@@ -15,7 +15,7 @@ const OVERRIDE_COLORS: bool = false;
 pub fn load_gltf_meshes(
     device: &Device,
     commands: &VulkanCommands,
-    default_data: Rc<MaterialInstance>,
+    default_material: Rc<MaterialInstance>,
     path: impl AsRef<Path>,
 ) -> Vec<MeshAsset> {
     let (document, buffers, _) = gltf::import(path).unwrap();
@@ -43,7 +43,7 @@ pub fn load_gltf_meshes(
                     let surface = GeoSurface {
                         start_index: indices.len() as u32,
                         count: count as u32,
-                        material: default_data.clone(),
+                        material: default_material.clone(),
                     };
 
                     let initial_vtx = vertices.len();

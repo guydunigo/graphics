@@ -13,12 +13,52 @@ use super::{
     commands::VulkanCommands,
     descriptors::{DescriptorAllocatorGrowable, DescriptorLayoutBuilder, DescriptorWriter},
     gfx_pipeline::{GpuDrawPushConstants, PipelineBuilder},
+    gltf_loader::load_gltf_meshes,
     shaders_loader::{ShaderName, ShadersLoader},
+    swapchain::VulkanSwapchain,
     textures::Textures,
 };
 
 use ash::{Device, util::Align, vk};
 use glam::{Mat4, Vec3, Vec4, vec3, vec4};
+
+pub struct Scene<'a> {
+    meshes: Vec<MeshAsset>,
+    _textures: Textures<'a>,
+}
+
+impl Scene<'_> {
+    pub fn new(
+        swapchain: &VulkanSwapchain,
+        commands: &VulkanCommands,
+        shaders: &ShadersLoader,
+        device: Rc<Device>,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        desc_allocator: &mut DescriptorAllocatorGrowable,
+    ) -> Self {
+        let textures = Textures::new(
+            swapchain,
+            commands,
+            shaders,
+            device.clone(),
+            allocator,
+            desc_allocator,
+        );
+
+        // TODO: proper resource path and all mngmt
+        let meshes = load_gltf_meshes(
+            &device,
+            commands,
+            textures.default_material.clone(),
+            "./resources/basicmesh.glb",
+        );
+
+        Self {
+            meshes,
+            _textures: textures,
+        }
+    }
+}
 
 // TODO: sort and split between actual scene and gpu data and ...
 
@@ -168,13 +208,6 @@ impl GpuMeshBuffers {
     // }
 }
 
-// TODO: need this wrapper ?
-// TODO: here or in gltf loader ?
-// struct GltfMaterial {
-//     // TODO: Rc ?
-//     data: Rc<MaterialInstance>,
-// }
-
 pub struct GeoSurface {
     pub start_index: u32,
     pub count: u32,
@@ -248,6 +281,7 @@ struct MaterialResources<'a> {
     data_buffer_offset: u32,
 }
 
+// TODO: to textures + remove pub(s)
 /// This struct should be the master of the pipelines and layouts,
 /// it takes care of destroying the layout on drop.
 pub struct GltfMetallicRoughness<'a> {
@@ -404,8 +438,9 @@ impl GltfMetallicRoughness<'_> {
     pub fn create_material(
         &mut self,
         allocator: Arc<Mutex<Allocator>>,
-        textures: &Textures,
         global_desc_alloc: &mut DescriptorAllocatorGrowable,
+        texture: &AllocatedImage,
+        sampler: vk::Sampler,
     ) -> (AllocatedBuffer, MaterialInstance) {
         let material_constants = AllocatedBuffer::new(
             allocator,
@@ -423,10 +458,10 @@ impl GltfMetallicRoughness<'_> {
         };
 
         let material_resources = MaterialResources {
-            color_img: &textures.error_checkerboard,
-            color_sampler: textures.default_sampler_nearest,
-            metal_rough_img: &textures.error_checkerboard,
-            metal_rough_sampler: textures.default_sampler_nearest,
+            color_img: texture,
+            color_sampler: sampler,
+            metal_rough_img: texture,
+            metal_rough_sampler: sampler,
             data_buffer: material_constants.buffer,
             data_buffer_offset: 0,
         };

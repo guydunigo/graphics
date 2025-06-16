@@ -6,9 +6,16 @@ use std::{
 use ash::{Device, vk};
 use vk_mem::Allocator;
 
-use super::{allocated::AllocatedImage, commands::VulkanCommands};
+use super::{
+    allocated::{AllocatedBuffer, AllocatedImage},
+    commands::VulkanCommands,
+    descriptors::DescriptorAllocatorGrowable,
+    scene::{GltfMetallicRoughness, MaterialInstance},
+    shaders_loader::ShadersLoader,
+    swapchain::VulkanSwapchain,
+};
 
-pub struct Textures {
+pub struct Textures<'a> {
     device_copy: Rc<Device>,
 
     pub white: AllocatedImage,
@@ -18,13 +25,20 @@ pub struct Textures {
 
     pub default_sampler_linear: vk::Sampler,
     pub default_sampler_nearest: vk::Sampler,
+
+    pub default_material: Rc<MaterialInstance>,
+    _material_constants: AllocatedBuffer,
+    _metal_rough_material: GltfMetallicRoughness<'a>,
 }
 
-impl Textures {
+impl Textures<'_> {
     pub fn new(
+        swapchain: &VulkanSwapchain,
         commands: &VulkanCommands,
+        shaders: &ShadersLoader,
         device: Rc<Device>,
         allocator: Arc<Mutex<Allocator>>,
+        desc_allocator: &mut DescriptorAllocatorGrowable,
     ) -> Self {
         let extent = vk::Extent3D {
             width: 1,
@@ -120,6 +134,21 @@ impl Textures {
             unsafe { device.create_sampler(&create_info, None).unwrap() }
         };
 
+        let mut metal_rough_material = GltfMetallicRoughness::new(
+            device,
+            &shaders,
+            *swapchain.draw_format(),
+            *swapchain.depth_format(),
+            gpu_scene_data_descriptor_layout,
+        );
+
+        let (material_constants, default_material) = metal_rough_material.create_material(
+            allocator.clone(),
+            desc_allocator,
+            &error_checkerboard,
+            default_sampler_nearest,
+        );
+
         Self {
             device_copy: device,
 
@@ -129,11 +158,15 @@ impl Textures {
             error_checkerboard,
             default_sampler_linear,
             default_sampler_nearest,
+
+            default_material: Rc::new(default_material),
+            _material_constants: material_constants,
+            _metal_rough_material: metal_rough_material,
         }
     }
 }
 
-impl Drop for Textures {
+impl Drop for Textures<'_> {
     fn drop(&mut self) {
         #[cfg(feature = "dbg_mem")]
         println!("drop Textures");

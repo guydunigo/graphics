@@ -276,14 +276,6 @@ impl FrameData {
                 .cmd_begin_rendering(self.cmd_buf, &render_info);
         }
 
-        unsafe {
-            self.device_copy.cmd_bind_pipeline(
-                self.cmd_buf,
-                vk::PipelineBindPoint::GRAPHICS,
-                gfx.pipeline,
-            );
-        }
-
         let draw_extent = swapchain.draw_extent();
         {
             let viewports = [vk::Viewport::default()
