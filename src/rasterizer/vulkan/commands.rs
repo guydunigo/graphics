@@ -58,7 +58,7 @@ impl FrameData {
         let fence_render = unsafe { device.create_fence(fence_create_info, None).unwrap() };
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
 
-        let descriptors = RefCell::new(DescriptorAllocatorGrowable::new_global(device.clone()));
+        let descriptors = RefCell::new(DescriptorAllocatorGrowable::new_frame(device.clone()));
 
         Self {
             device_copy: device,

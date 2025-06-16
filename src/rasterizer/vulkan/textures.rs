@@ -6,7 +6,7 @@ use std::{
 use ash::{Device, vk};
 use vk_mem::Allocator;
 
-use super::{commands::VulkanCommands, swapchain::AllocatedImage};
+use super::{allocated::AllocatedImage, commands::VulkanCommands};
 
 pub struct Textures {
     device_copy: Rc<Device>,
@@ -36,7 +36,7 @@ impl Textures {
 
         let white = {
             let data = glam::U8Vec4::splat(255).to_array();
-            AllocatedImage::new_image_with_data(
+            AllocatedImage::new_and_upload(
                 commands,
                 device.clone(),
                 allocator.clone(),
@@ -50,7 +50,7 @@ impl Textures {
 
         let black_data = glam::U8Vec4::splat(0).to_array();
         let black = {
-            AllocatedImage::new_image_with_data(
+            AllocatedImage::new_and_upload(
                 commands,
                 device.clone(),
                 allocator.clone(),
@@ -64,7 +64,7 @@ impl Textures {
 
         let grey = {
             let data = glam::U8Vec4::splat((255. * 0.66) as u8).to_array();
-            AllocatedImage::new_image_with_data(
+            AllocatedImage::new_and_upload(
                 commands,
                 device.clone(),
                 allocator.clone(),
@@ -95,7 +95,7 @@ impl Textures {
                 }
             }
 
-            AllocatedImage::new_image_with_data(
+            AllocatedImage::new_and_upload(
                 commands,
                 device.clone(),
                 allocator,

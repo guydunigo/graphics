@@ -209,3 +209,8 @@ fn load_fonts(ctx: &egui::Context) {
         .insert(0, FONT_NAME.into());
     ctx.set_fonts(fonts);
 }
+
+// Converts rgba a u32 (4*[0,255]) to (4*[0.,1.])
+// fn rgba_u32_to_f32(color: egui::Color32) -> [f32; 4] {
+//     egui::Rgba::from(color).to_array()
+// }

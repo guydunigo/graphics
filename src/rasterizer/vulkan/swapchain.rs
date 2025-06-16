@@ -8,10 +8,10 @@ use ash::{Device, khr::swapchain, vk};
 use winit::dpi::PhysicalSize;
 
 use super::{
+    allocated::{AllocatedImage, image_view_create_info},
     base::VulkanBase,
     commands::FrameData,
     compute_shaders::Effects,
-    descriptors::{AllocatedImage, image_view_create_info},
     shaders_loader::ShadersLoader,
 };
 
@@ -25,7 +25,7 @@ pub struct VulkanSwapchain {
     draw_img: AllocatedImage,
     depth_img: AllocatedImage,
 
-    /// TODO: need to recreate on resize along swapchain because we use draw_img ?
+    // TODO: need to recreate on resize along swapchain because we use draw_img ?
     pub effects: Effects,
 }
 

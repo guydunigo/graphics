@@ -9,14 +9,11 @@ use std::{
 use vk_mem::Allocator;
 
 use super::{
+    allocated::{AllocatedBuffer, AllocatedImage, MyMemoryUsage},
     commands::VulkanCommands,
-    descriptors::{
-        AllocatedBuffer, DescriptorAllocatorGrowable, DescriptorLayoutBuilder, DescriptorWriter,
-        MyMemoryUsage,
-    },
+    descriptors::{DescriptorAllocatorGrowable, DescriptorLayoutBuilder, DescriptorWriter},
     gfx_pipeline::{GpuDrawPushConstants, PipelineBuilder},
     shaders_loader::{ShaderName, ShadersLoader},
-    swapchain::AllocatedImage,
     textures::Textures,
 };
 

@@ -29,15 +29,14 @@ use shaders_loader::ShadersLoader;
 mod gfx_pipeline;
 use gfx_pipeline::VkGraphicsPipeline;
 mod descriptors;
-use descriptors::{
-    AllocatedBuffer, DescriptorAllocatorGrowable, DescriptorLayoutBuilder, DescriptorWriter,
-    MyMemoryUsage,
-};
+use descriptors::{DescriptorAllocatorGrowable, DescriptorLayoutBuilder, DescriptorWriter};
+mod allocated;
+use allocated::{AllocatedBuffer, MyMemoryUsage};
 mod gltf_loader;
 mod textures;
 use textures::Textures;
 mod scene;
-use scene::{DrawContext, GltfMetallicRoughness, GpuSceneData, MaterialInstance, MeshNode, Node};
+use scene::{DrawContext, GltfMetallicRoughness, GpuSceneData, MeshNode, Node};
 
 #[cfg(feature = "stats")]
 use super::Stats;
@@ -50,8 +49,10 @@ pub struct VulkanEngine<'a> {
     gpu_scene_data_buffer: Vec<AllocatedBuffer>,
     main_draw_ctx: DrawContext,
     loaded_nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
-    _default_data: Rc<MaterialInstance>,
+    // TODO: move to textures ?
     _metal_rough_material: GltfMetallicRoughness<'a>,
+    // TODO: move to textures
+    /// Keep it to prevent de-allocation
     _material_constants: AllocatedBuffer,
     _global_desc_alloc: DescriptorAllocatorGrowable,
     gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
@@ -162,7 +163,6 @@ impl VulkanEngine<'_> {
             gpu_scene_data_buffer: Default::default(),
             main_draw_ctx: Default::default(),
             loaded_nodes,
-            _default_data: default_data,
             _metal_rough_material: metal_rough_material,
             _material_constants: material_constants,
             _global_desc_alloc: global_desc_alloc,
@@ -260,7 +260,6 @@ impl VulkanEngine<'_> {
         self.commands.current_frame().wait_for_fences();
         let current_frame = self.commands.current_frame_mut();
         current_frame.clear_descriptors();
-        // TODO: recreate each frame ?
         let global_desc = current_frame
             .descriptors_mut()
             .allocate(self.gpu_scene_data_descriptor_layout);
@@ -301,7 +300,7 @@ impl VulkanEngine<'_> {
         );
 
         // TODO: move
-        // TODO: store until next frame so GPU has time to use it
+        // TODO: store until next frame so GPU has time to use it ?
         {
             // We will also dynamically allocate the uniform buffer itself as a way to
             // showcase how you could do temporal per-frame data that is dynamically created.
@@ -390,11 +389,6 @@ impl VulkanEngine<'_> {
         self.gui.on_mouse_motion(delta);
     }
 }
-
-// Converts rgba a u32 (4*[0,255]) to (4*[0.,1.])
-// fn rgba_u32_to_f32(color: egui::Color32) -> [f32; 4] {
-//     egui::Rgba::from(color).to_array()
-// }
 
 fn ui(
     ctx: &egui::Context,

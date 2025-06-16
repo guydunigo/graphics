@@ -130,13 +130,9 @@ pub struct ShaderModule {
 }
 
 impl ShaderModule {
-    /// ShaderModule takes care of destroying the vk::ShaderModule on drop.
-    /// So it **must** outlive this object, even if you copy it.
-    pub fn module_copy(&self) -> vk::ShaderModule {
-        self.module
-    }
-
     /// Loads the corresponding `glsl` file and compiles it using `shaderc`.
+    ///
+    /// Global includes will be searched in `SHADER_FOLDER`.
     pub fn load(device: Rc<Device>, compiler: &Compiler, name: ShaderName) -> Self {
         let path: PathBuf = name.into();
 
@@ -153,6 +149,12 @@ impl ShaderModule {
             // name,
             module,
         }
+    }
+
+    /// `ShaderModule` takes care of destroying the `vk::ShaderModule` on drop.
+    /// So it **must** outlive this object, even if you copy it.
+    pub fn module_copy(&self) -> vk::ShaderModule {
+        self.module
     }
 
     fn compile_glsl_to_spirv(
@@ -211,11 +213,5 @@ impl Drop for ShaderModule {
         unsafe {
             self.device_copy.destroy_shader_module(self.module, None);
         }
-    }
-}
-
-impl AsRef<vk::ShaderModule> for ShaderModule {
-    fn as_ref(&self) -> &vk::ShaderModule {
-        &self.module
     }
 }
