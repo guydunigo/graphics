@@ -10,7 +10,7 @@ use super::{
     base::VulkanBase,
     compute_shaders::ComputePushConstants,
     descriptors::DescriptorAllocatorGrowable,
-    gfx_pipeline::{GpuDrawPushConstants, VkGraphicsPipeline},
+    gfx_pipeline::GpuDrawPushConstants,
     gui::{GeneratedUi, VulkanGui},
     scene::{DrawContext, RenderObject},
     swapchain::VulkanSwapchain,
@@ -35,8 +35,6 @@ impl Drop for FrameData {
         #[cfg(feature = "dbg_mem")]
         println!("drop FrameData");
         unsafe {
-            // TODO: useful or cause perf problems if used everywhere :
-            self.device_copy.device_wait_idle().unwrap();
             self.device_copy.destroy_command_pool(self.cmd_pool, None);
             self.device_copy.destroy_fence(self.fence_render, None);
             self.device_copy.destroy_semaphore(self.sem_swapchain, None);
@@ -44,7 +42,6 @@ impl Drop for FrameData {
     }
 }
 
-// TODO: move all this code to separate rendering pipeline file
 impl FrameData {
     pub fn new(
         device: Rc<Device>,
@@ -252,7 +249,6 @@ impl FrameData {
     pub fn draw_geometries(
         &self,
         swapchain: &VulkanSwapchain,
-        gfx: &VkGraphicsPipeline,
         draw_ctx: &DrawContext,
         global_desc: vk::DescriptorSet,
     ) {

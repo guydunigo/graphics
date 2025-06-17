@@ -1,15 +1,7 @@
-use std::rc::Rc;
-
 use ash::{Device, vk};
 use glam::Mat4;
 
-use super::{
-    commands::VulkanCommands,
-    descriptors::DescriptorLayoutBuilder,
-    gltf_loader::load_gltf_meshes,
-    scene::{MaterialInstance, MeshAsset},
-    shaders_loader::{ShaderModule, ShaderName, ShadersLoader},
-};
+use super::shaders_loader::ShaderModule;
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
@@ -18,66 +10,66 @@ pub struct GpuDrawPushConstants {
     pub vertex_buffer: vk::DeviceAddress,
 }
 
-pub struct VkGraphicsPipeline {
-    device_copy: Rc<Device>,
-}
-
-impl VkGraphicsPipeline {
-    pub fn new(
-        commands: &VulkanCommands,
-        shaders: &ShadersLoader,
-        device: Rc<Device>,
-        draw_format: vk::Format,
-        depth_format: vk::Format,
-    ) -> Self {
-        todo!();
-        Self {
-            device_copy: device,
-        }
-    }
-
-    // /// Triangle is hardcoded in vertex shader
-    // fn shader_with_hardcoded_mesh(
-    //     shaders: &ShadersLoader,
-    //     device: &Device,
-    //     draw_format: vk::Format,
-    //     depth_format: vk::Format,
-    // ) -> (vk::Pipeline, vk::PipelineLayout) {
-    //     let create_info = vk::PipelineLayoutCreateInfo::default();
-    //     let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
-    //     let vertex_shader = shaders.get(ShaderName::ColoredTriangleVert);
-    //     let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
-
-    //     let mut builder = PipelineBuilder {
-    //         pipeline_layout,
-    //         ..Default::default()
-    //     };
-    //     builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
-    //     builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
-    //     builder.set_polygon_mode(vk::PolygonMode::FILL);
-    //     builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
-    //     builder.set_multisampling_none();
-    //     builder.disable_blending();
-    //     builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
-    //     let formats = [draw_format];
-    //     builder.set_color_attachment_format(&formats);
-    //     builder.set_depth_format(depth_format);
-
-    //     let pipeline = builder.clone().build(device);
-
-    //     (pipeline, pipeline_layout)
-    // }
-}
-
-impl Drop for VkGraphicsPipeline {
-    fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
-        println!("drop VkGraphicsPipeline");
-        unsafe {
-            self.device_copy.device_wait_idle().unwrap();
-        }
-    }
-}
+// pub struct VkGraphicsPipeline {
+//     device_copy: Rc<Device>,
+// }
+//
+// impl VkGraphicsPipeline {
+//     pub fn new(
+//         commands: &VulkanCommands,
+//         shaders: &ShadersLoader,
+//         device: Rc<Device>,
+//         draw_format: vk::Format,
+//         depth_format: vk::Format,
+//     ) -> Self {
+//         // todo!();
+//         Self {
+//             device_copy: device,
+//         }
+//     }
+//
+//     // /// Triangle is hardcoded in vertex shader
+//     // fn shader_with_hardcoded_mesh(
+//     //     shaders: &ShadersLoader,
+//     //     device: &Device,
+//     //     draw_format: vk::Format,
+//     //     depth_format: vk::Format,
+//     // ) -> (vk::Pipeline, vk::PipelineLayout) {
+//     //     let create_info = vk::PipelineLayoutCreateInfo::default();
+//     //     let pipeline_layout = unsafe { device.create_pipeline_layout(&create_info, None).unwrap() };
+//     //     let vertex_shader = shaders.get(ShaderName::ColoredTriangleVert);
+//     //     let fragment_shader = shaders.get(ShaderName::ColoredTriangleFrag);
+//
+//     //     let mut builder = PipelineBuilder {
+//     //         pipeline_layout,
+//     //         ..Default::default()
+//     //     };
+//     //     builder.set_shaders(vertex_shader.module_copy(), fragment_shader.module_copy());
+//     //     builder.set_input_topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+//     //     builder.set_polygon_mode(vk::PolygonMode::FILL);
+//     //     builder.set_cull_mode(vk::CullModeFlags::NONE, vk::FrontFace::CLOCKWISE);
+//     //     builder.set_multisampling_none();
+//     //     builder.disable_blending();
+//     //     builder.enable_depthtest(true, vk::CompareOp::GREATER_OR_EQUAL);
+//     //     let formats = [draw_format];
+//     //     builder.set_color_attachment_format(&formats);
+//     //     builder.set_depth_format(depth_format);
+//
+//     //     let pipeline = builder.clone().build(device);
+//
+//     //     (pipeline, pipeline_layout)
+//     // }
+// }
+//
+// impl Drop for VkGraphicsPipeline {
+//     fn drop(&mut self) {
+//         #[cfg(feature = "dbg_mem")]
+//         println!("drop VkGraphicsPipeline");
+//         unsafe {
+//             self.device_copy.device_wait_idle().unwrap();
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone)]
 pub struct PipelineBuilder<'a> {

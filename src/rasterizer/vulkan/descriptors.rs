@@ -263,7 +263,7 @@ impl<'a> DescriptorWriter<'a> {
     // This is needed because [`writes`] refers to [`image_infos`] and [`buffer_infos`],
     // but it locks the whole object as it cannot ensure you won't remove the referenced item
     // from the vecs.
-    fn unsafe_ref_to_slice_cut_lifetime<'b, 'c, T>(ref_value: &'b T) -> &'c [T] {
+    fn unsafe_ref_to_slice_cut_lifetime<'c, T>(ref_value: &T) -> &'c [T] {
         unsafe { std::slice::from_raw_parts(ref_value, 1) }
     }
 

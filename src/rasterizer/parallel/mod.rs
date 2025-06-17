@@ -361,8 +361,8 @@ fn draw_vertice_basic(
     v: Vec3f,
     texture: &Texture,
 ) {
-    if v.x >= 1. && v.x < (size.width as f32) - 1. && v.y >= 1. && v.y < (size.height as f32) - 1. {
-        if let Some(i) = buffer_index(v, size) {
+    if v.x >= 1. && v.x < (size.width as f32) - 1. && v.y >= 1. && v.y < (size.height as f32) - 1.
+        && let Some(i) = buffer_index(v, size) {
             let color = match texture {
                 Texture::Color(col) => *col,
                 // TODO: Better color calculus
@@ -379,5 +379,4 @@ fn draw_vertice_basic(
             depth_color_buffer[i - (size.width as usize)].store(color, Ordering::Relaxed);
             depth_color_buffer[i + (size.width as usize)].store(color, Ordering::Relaxed);
         }
-    }
 }

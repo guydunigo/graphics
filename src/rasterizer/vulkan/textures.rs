@@ -29,6 +29,7 @@ pub struct Textures<'a> {
     pub default_material: Rc<MaterialInstance>,
     _material_constants: AllocatedBuffer,
     _metal_rough_material: GltfMetallicRoughness<'a>,
+    _global_desc_alloc: DescriptorAllocatorGrowable,
 }
 
 impl Textures<'_> {
@@ -38,7 +39,7 @@ impl Textures<'_> {
         shaders: &ShadersLoader,
         device: Rc<Device>,
         allocator: Arc<Mutex<Allocator>>,
-        desc_allocator: &mut DescriptorAllocatorGrowable,
+        scene_data_descriptor_layout: vk::DescriptorSetLayout,
     ) -> Self {
         let extent = vk::Extent3D {
             width: 1,
@@ -112,7 +113,7 @@ impl Textures<'_> {
             AllocatedImage::new_and_upload(
                 commands,
                 device.clone(),
-                allocator,
+                allocator.clone(),
                 extent,
                 format,
                 usages,
@@ -135,16 +136,18 @@ impl Textures<'_> {
         };
 
         let mut metal_rough_material = GltfMetallicRoughness::new(
-            device,
-            &shaders,
+            device.clone(),
+            shaders,
             *swapchain.draw_format(),
             *swapchain.depth_format(),
-            gpu_scene_data_descriptor_layout,
+            scene_data_descriptor_layout,
         );
+
+        let mut global_desc_alloc = DescriptorAllocatorGrowable::new_global(device.clone());
 
         let (material_constants, default_material) = metal_rough_material.create_material(
             allocator.clone(),
-            desc_allocator,
+            &mut global_desc_alloc,
             &error_checkerboard,
             default_sampler_nearest,
         );
@@ -162,6 +165,7 @@ impl Textures<'_> {
             default_material: Rc::new(default_material),
             _material_constants: material_constants,
             _metal_rough_material: metal_rough_material,
+            _global_desc_alloc: global_desc_alloc,
         }
     }
 }

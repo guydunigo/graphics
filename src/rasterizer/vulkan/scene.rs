@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    ffi::c_void,
+    collections::HashMap,
     mem,
     ops::Deref,
     rc::{Rc, Weak},
@@ -23,8 +23,15 @@ use ash::{Device, util::Align, vk};
 use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 
 pub struct Scene<'a> {
-    meshes: Vec<MeshAsset>,
+    device_copy: Rc<Device>,
+
+    nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
     _textures: Textures<'a>,
+
+    data: GpuSceneData,
+    pub data_descriptor_layout: vk::DescriptorSetLayout,
+    // gpu_scene_data_buffer: Option<AllocatedBuffer>,
+    pub main_draw_ctx: DrawContext,
 }
 
 impl Scene<'_> {
@@ -34,28 +41,139 @@ impl Scene<'_> {
         shaders: &ShadersLoader,
         device: Rc<Device>,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
-        desc_allocator: &mut DescriptorAllocatorGrowable,
     ) -> Self {
+        let data_descriptor_layout = DescriptorLayoutBuilder::default()
+            .add_binding(0, vk::DescriptorType::UNIFORM_BUFFER)
+            .build(
+                &device,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+            );
+
         let textures = Textures::new(
             swapchain,
             commands,
             shaders,
             device.clone(),
             allocator,
-            desc_allocator,
+            data_descriptor_layout,
         );
 
-        // TODO: proper resource path and all mngmt
-        let meshes = load_gltf_meshes(
+        // TODO: proper resource path mngmt and all
+        let mut meshes = load_gltf_meshes(
             &device,
             commands,
             textures.default_material.clone(),
             "./resources/basicmesh.glb",
         );
 
+        let nodes = meshes
+            .drain(..)
+            .map(|m| {
+                let name = m.name.clone();
+                let v: Rc<RefCell<dyn Node>> = Rc::new(RefCell::new(MeshNode::new(
+                    m,
+                    Mat4::IDENTITY,
+                    Mat4::IDENTITY,
+                )));
+                (name, v)
+            })
+            .collect();
+
         Self {
-            meshes,
+            device_copy: device.clone(),
+
+            nodes,
             _textures: textures,
+
+            data: Default::default(),
+            data_descriptor_layout,
+            // gpu_scene_data_buffer: Default::default(),
+            main_draw_ctx: Default::default(),
+        }
+    }
+
+    pub fn upload_data(
+        &self,
+        device: &Device,
+        allocator: Arc<Mutex<vk_mem::Allocator>>,
+        global_desc: vk::DescriptorSet,
+    ) {
+        // We will also dynamically allocate the uniform buffer itself as a way to
+        // showcase how you could do temporal per-frame data that is dynamically created.
+        // It would be better to hold the buffers cached in our FrameData structure,
+        // but we will be doing it this way to show how.
+        // There are cases with dynamic draws and passes where you might want to do it
+        // this way.
+        let gpu_scene_data_buffer = AllocatedBuffer::new(
+            allocator,
+            size_of::<GpuSceneData>() as u64,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            MyMemoryUsage::CpuToGpu,
+        );
+        let scene_data =
+            unsafe { &mut *gpu_scene_data_buffer.mapped_data().cast::<GpuSceneData>() };
+        *scene_data = self.data;
+
+        let mut writer = DescriptorWriter::default();
+        writer.write_buffer(
+            0,
+            gpu_scene_data_buffer.buffer,
+            size_of::<GpuSceneData>() as u64,
+            0,
+            vk::DescriptorType::UNIFORM_BUFFER,
+        );
+        writer.update_set(device, global_desc);
+
+        // TODO: store until next frame so GPU has time to use it ?
+        // self.gpu_scene_data_buffer = Some(gpu_scene_data_buffer);
+    }
+
+    /// Clears the `main_draw_ctx` and fills it with the meshes to render.
+    pub fn update_scene(&mut self, draw_extent: vk::Extent2D) {
+        self.main_draw_ctx.clear();
+
+        self.nodes["Suzanne"]
+            .borrow()
+            .draw(&Mat4::IDENTITY, &mut self.main_draw_ctx);
+
+        {
+            let cube = self.nodes["Cube"].borrow();
+            (-3..3).for_each(|x| {
+                let scale = Mat4::from_scale(Vec3::splat(0.2));
+                let translation = Mat4::from_translation(vec3(x as f32, 1., 0.));
+
+                cube.draw(&(translation * scale), &mut self.main_draw_ctx);
+            });
+        }
+
+        let view = Mat4::from_translation(vec3(0., 0., -5.));
+        // Camera projection
+        let mut proj = Mat4::perspective_rh(
+            70.,
+            draw_extent.width as f32 / draw_extent.height as f32,
+            10_000.,
+            0.1,
+        );
+        proj.y_axis[1] *= -1.;
+        // TODO: move to setters ?
+        self.data = GpuSceneData {
+            view,
+            proj,
+            view_proj: proj * view,
+            ambient_color: Vec4::splat(1.),
+            sunlight_direction: vec4(0., 1., 0.5, 1.),
+            sunlight_color: Vec4::splat(1.),
+        };
+    }
+}
+
+impl Drop for Scene<'_> {
+    fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
+        println!("drop Scene");
+        unsafe {
+            self.device_copy
+                .destroy_descriptor_set_layout(self.data_descriptor_layout, None);
         }
     }
 }
@@ -324,7 +442,7 @@ impl GltfMetallicRoughness<'_> {
         shaders: &ShadersLoader,
         draw_img_format: vk::Format,
         depth_img_format: vk::Format,
-        gpu_scene_data_descriptor_layout: vk::DescriptorSetLayout,
+        scene_data_descriptor_layout: vk::DescriptorSetLayout,
     ) -> Self {
         let mesh_frag = shaders.get(ShaderName::MeshFrag);
         let mesh_vert = shaders.get(ShaderName::MeshVert);
@@ -343,7 +461,7 @@ impl GltfMetallicRoughness<'_> {
                 &device,
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             );
-        let layouts = [gpu_scene_data_descriptor_layout, material_layout];
+        let layouts = [scene_data_descriptor_layout, material_layout];
 
         let mesh_layout_info = vk::PipelineLayoutCreateInfo::default()
             .set_layouts(&layouts[..])
@@ -449,9 +567,8 @@ impl GltfMetallicRoughness<'_> {
             MyMemoryUsage::CpuToGpu,
         );
 
-        let scene_uniform_data = unsafe {
-            mem::transmute::<*mut c_void, &mut MaterialConstants>(material_constants.mapped_data())
-        };
+        let scene_uniform_data =
+            unsafe { &mut *material_constants.mapped_data().cast::<MaterialConstants>() };
         *scene_uniform_data = MaterialConstants {
             color_factors: Vec4::splat(1.),
             metal_rough_factors: glam::vec4(1., 0.5, 0., 0.),
