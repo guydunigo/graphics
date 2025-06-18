@@ -1,11 +1,13 @@
-use std::{path::Path, rc::Rc};
+use std::{collections::HashMap, path::Path, rc::Rc};
 
-use ash::Device;
+use ash::{Device, vk};
 use glam::{Vec3, Vec4};
 
 use super::{
+    allocated::{AllocatedBuffer, AllocatedImage},
     commands::VulkanCommands,
-    scene::{GeoSurface, GpuMeshBuffers, MeshAsset, Vertex},
+    descriptors::DescriptorAllocatorGrowable,
+    scene::{GeoSurface, GpuMeshBuffers, MeshAsset, Node, Renderable, Vertex},
     textures::MaterialInstance,
 };
 
@@ -102,4 +104,25 @@ pub fn load_gltf_meshes(
             MeshAsset::new(name, surfaces, mesh_buffers)
         })
         .collect()
+}
+
+struct LoadedGLTF {
+    meshes: HashMap<String, Rc<MeshAsset>>,
+    nodes: HashMap<String, Rc<dyn Node>>,
+    images: HashMap<String, AllocatedImage>,
+    materials: HashMap<String, Rc<MaterialInstance>>,
+
+    top_nodes: HashMap<String, Rc<dyn Node>>,
+
+    samplers: Vec<vk::Sampler>,
+
+    descriptor_pool: DescriptorAllocatorGrowable,
+
+    material_data_buffer: AllocatedBuffer,
+}
+
+impl Renderable for LoadedGLTF {
+    fn draw(&self, top_mat: &glam::Mat4, ctx: &mut super::scene::DrawContext) {
+        todo!()
+    }
 }
