@@ -5,7 +5,8 @@ use glam::{Vec3, Vec4};
 
 use super::{
     commands::VulkanCommands,
-    scene::{GeoSurface, GpuMeshBuffers, MaterialInstance, MeshAsset, Vertex},
+    scene::{GeoSurface, GpuMeshBuffers, MeshAsset, Vertex},
+    textures::MaterialInstance,
 };
 
 /// Override colors with normal value
