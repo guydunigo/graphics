@@ -353,7 +353,11 @@ impl ApplicationHandler for App<'_> {
         event: DeviceEvent,
     ) {
         if let DeviceEvent::MouseMotion { delta } = event {
-            self.window.as_mut().unwrap().engine.on_mouse_motion(delta);
+            self.window
+                .as_mut()
+                .unwrap()
+                .engine
+                .on_mouse_motion(delta, self.cursor_grabbed);
             if self.cursor_grabbed {
                 self.world
                     .camera

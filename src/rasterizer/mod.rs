@@ -98,10 +98,10 @@ impl Engine<'_> {
         }
     }
 
-    pub fn on_mouse_motion(&mut self, delta: (f64, f64)) {
+    pub fn on_mouse_motion(&mut self, delta: (f64, f64), cursor_grabbed: bool) {
         match self {
             Self::Cpu(_) => (),
-            Self::Vulkan(e) => e.on_mouse_motion(delta),
+            Self::Vulkan(e) => e.on_mouse_motion(delta, cursor_grabbed),
         }
     }
 }

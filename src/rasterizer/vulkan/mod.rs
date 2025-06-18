@@ -4,7 +4,12 @@ use std::{
 };
 
 use ash::vk;
-use winit::{event::WindowEvent, window::Window};
+use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles, vec3};
+use winit::{
+    event::{ElementState, KeyEvent, WindowEvent},
+    keyboard::{KeyCode, PhysicalKey},
+    window::Window,
+};
 
 use super::{format_debug, settings::Settings};
 use crate::{scene::World, window::AppObserver};
@@ -45,6 +50,7 @@ pub struct VulkanEngine<'a> {
 
     current_bg_effect: usize,
     bg_effects_data: Vec<ComputePushConstants>,
+    camera: Camera,
 }
 
 impl Drop for VulkanEngine<'_> {
@@ -101,6 +107,7 @@ impl VulkanEngine<'_> {
 
             current_bg_effect: 0,
             bg_effects_data,
+            camera: Default::default(),
         }
     }
 
@@ -132,7 +139,7 @@ impl VulkanEngine<'_> {
             )
         });
 
-        self.scene.update_scene(self.swapchain.draw_extent());
+        self.update_scene();
 
         let image = self.swapchain.draw_img();
 
@@ -231,10 +238,18 @@ impl VulkanEngine<'_> {
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
         self.gui.on_window_event(event);
+        self.camera.on_window_event(event);
     }
 
-    pub fn on_mouse_motion(&mut self, delta: (f64, f64)) {
+    pub fn on_mouse_motion(&mut self, delta: (f64, f64), cursor_grabbed: bool) {
         self.gui.on_mouse_motion(delta);
+        self.camera.on_mouse_motion(delta, cursor_grabbed);
+    }
+
+    fn update_scene(&mut self) {
+        self.camera.update();
+        self.scene
+            .update_scene(self.swapchain.draw_extent(), self.camera.view_mat());
     }
 }
 
@@ -282,4 +297,88 @@ fn ui(
             });
         }
     });
+}
+
+// TODO: merge camera with general engine
+struct Camera {
+    vel: Vec3,
+    pitch: f32,
+    yaw: f32,
+
+    pos: Vec3,
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            vel: Default::default(),
+            pitch: Default::default(),
+            yaw: Default::default(),
+
+            pos: vec3(0., 0., 5.),
+        }
+    }
+}
+
+impl Camera {
+    fn view_mat(&self) -> Mat4 {
+        // to create a correct model view, we need to move the world in opposite
+        // direction to the camera
+        //  so we will create the camera model matrix and invert
+        let tr = Mat4::from_translation(self.pos);
+        let rot = self.rot_mat();
+        (tr * rot).inverse()
+    }
+
+    fn rot_mat(&self) -> Mat4 {
+        // fairly typical FPS style camera. we join the pitch and yaw rotations into
+        // the final rotation matrix
+        let pitch = Quat::from_axis_angle(vec3(1., 0., 0.), self.pitch);
+        let yaw = Quat::from_axis_angle(vec3(0., -1., 0.), self.yaw);
+
+        Mat4::from_quat(yaw * pitch)
+    }
+
+    // TODO: doesn't take into account time delta.
+    fn update(&mut self) {
+        let rot = self.rot_mat();
+        self.pos += (rot * Vec4::from((self.vel * 0.5, 0.))).xyz();
+    }
+
+    fn on_window_event(&mut self, event: &WindowEvent) {
+        match event {
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(key),
+                        state,
+                        ..
+                    },
+                ..
+            } => match state {
+                ElementState::Pressed => match key {
+                    KeyCode::KeyW => self.vel.z = -1.,
+                    KeyCode::KeyS => self.vel.z = 1.,
+                    KeyCode::KeyA => self.vel.x = -1.,
+                    KeyCode::KeyD => self.vel.x = 1.,
+                    _ => (),
+                },
+                ElementState::Released => match key {
+                    KeyCode::KeyW => self.vel.z = 0.,
+                    KeyCode::KeyS => self.vel.z = 0.,
+                    KeyCode::KeyA => self.vel.x = 0.,
+                    KeyCode::KeyD => self.vel.x = 0.,
+                    _ => (),
+                },
+            },
+            _ => (),
+        }
+    }
+
+    fn on_mouse_motion(&mut self, (delta_x, delta_y): (f64, f64), cursor_grabbed: bool) {
+        if cursor_grabbed {
+            self.yaw += delta_x as f32 / 200.;
+            self.pitch -= delta_y as f32 / 200.;
+        }
+    }
 }

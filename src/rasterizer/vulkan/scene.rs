@@ -127,7 +127,7 @@ impl Scene<'_> {
     }
 
     /// Clears the `main_draw_ctx` and fills it with the meshes to render.
-    pub fn update_scene(&mut self, draw_extent: vk::Extent2D) {
+    pub fn update_scene(&mut self, draw_extent: vk::Extent2D, view: Mat4) {
         self.main_draw_ctx.clear();
 
         self.nodes["Suzanne"]
@@ -144,7 +144,6 @@ impl Scene<'_> {
             });
         }
 
-        let view = Mat4::from_translation(vec3(0., 0., -5.));
         // Camera projection
         let mut proj = Mat4::perspective_rh(
             70.,
