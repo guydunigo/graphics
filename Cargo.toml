@@ -2,6 +2,7 @@
 name = "graphics"
 version = "0.1.0"
 edition = "2024"
+include = ["src/**/*"]
 
 [dependencies]
 ash = "0.38.0"

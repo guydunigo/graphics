@@ -20,10 +20,10 @@ use super::{
 pub struct Textures<'a> {
     device_copy: Rc<Device>,
 
-    pub white: AllocatedImage,
-    pub grey: AllocatedImage,
-    pub black: AllocatedImage,
-    pub error_checkerboard: AllocatedImage,
+    pub white: Rc<AllocatedImage>,
+    pub grey: Rc<AllocatedImage>,
+    pub black: Rc<AllocatedImage>,
+    pub error_checkerboard: Rc<AllocatedImage>,
 
     pub default_sampler_linear: vk::Sampler,
     pub default_sampler_nearest: vk::Sampler,
@@ -157,10 +157,10 @@ impl Textures<'_> {
         Self {
             device_copy: device,
 
-            white,
-            grey,
-            black,
-            error_checkerboard,
+            white: Rc::new(white),
+            grey: Rc::new(grey),
+            black: Rc::new(black),
+            error_checkerboard: Rc::new(error_checkerboard),
             default_sampler_linear,
             default_sampler_nearest,
 
@@ -384,7 +384,7 @@ pub struct MaterialPipeline {
     pub layout: vk::PipelineLayout,
 }
 
-enum MaterialPass {
+pub enum MaterialPass {
     MainColor,
     Transparent,
     Other,
@@ -402,20 +402,18 @@ impl MaterialInstance {
     }
 }
 
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct MaterialConstants {
-    color_factors: Vec4,
-    metal_rough_factors: Vec4,
-    // padding up to 256 bit alignment, we need it anyway for uniform buffer
-    // TODO needed in rust ??? what if we use utils' Align copy ?
-    // extra: [Vec4; 14],
+    pub color_factors: Vec4,
+    pub metal_rough_factors: Vec4,
 }
 
-struct MaterialResources<'a> {
-    color_img: &'a AllocatedImage,
-    color_sampler: vk::Sampler,
-    metal_rough_img: &'a AllocatedImage,
-    metal_rough_sampler: vk::Sampler,
-    data_buffer: vk::Buffer,
-    data_buffer_offset: u32,
+pub struct MaterialResources<'a> {
+    pub color_img: &'a AllocatedImage,
+    pub color_sampler: vk::Sampler,
+    pub metal_rough_img: &'a AllocatedImage,
+    pub metal_rough_sampler: vk::Sampler,
+    pub data_buffer: vk::Buffer,
+    pub data_buffer_offset: u32,
 }

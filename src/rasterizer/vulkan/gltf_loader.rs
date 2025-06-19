@@ -1,13 +1,17 @@
 use std::{
     collections::HashMap,
+    mem,
     path::Path,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 
-use ash::{Device, vk};
-use glam::{Vec3, Vec4};
-use gltf::texture::{MagFilter, MinFilter};
+use ash::{Device, util::Align, vk};
+use glam::{Vec3, Vec4, vec4};
+use gltf::{
+    material::AlphaMode,
+    texture::{MagFilter, MinFilter},
+};
 use vk_mem::Allocator;
 
 use super::{
@@ -15,7 +19,7 @@ use super::{
     commands::VulkanCommands,
     descriptors::DescriptorAllocatorGrowable,
     scene::{GeoSurface, GpuMeshBuffers, MeshAsset, Node, Renderable, Vertex},
-    textures::{MaterialConstants, MaterialInstance},
+    textures::{MaterialConstants, MaterialInstance, MaterialPass, MaterialResources, Textures},
 };
 
 /// Override colors with normal value
@@ -138,7 +142,7 @@ impl LoadedGLTF {
     pub fn load(
         device: Rc<Device>,
         allocator: Arc<Mutex<Allocator>>,
-        error_checkerboard: Rc<AllocatedImage>,
+        textures: &Textures,
         path: impl AsRef<Path>,
     ) -> Self {
         println!("Loading glTF : {}", path.as_ref().to_string_lossy());
@@ -171,25 +175,80 @@ impl LoadedGLTF {
         );
 
         // Chargement dans l'ordre des dépendences
-        let images: Vec<Rc<AllocatedImage>> =
-            images.iter().map(|_| error_checkerboard.clone()).collect();
+        let images: Vec<Rc<AllocatedImage>> = images
+            .iter()
+            .map(|_| textures.error_checkerboard.clone())
+            .collect();
 
-        let mut material_data_buffer = AllocatedBuffer::new(
+        let material_data_buffer_size =
+            (size_of::<MaterialConstants>() * document.materials().count()) as u64;
+        let material_data_buffer = AllocatedBuffer::new(
             allocator,
-            (size_of::<MaterialConstants>() * document.materials().count()) as u64,
+            material_data_buffer_size,
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             MyMemoryUsage::CpuToGpu,
         );
 
-        let scene_material_constants = unsafe {
-            &mut *material_data_buffer
-                .mapped_data()
-                .cast::<MaterialConstants>()
+        let data = material_data_buffer.mapped_data();
+
+        let mut scene_material_constants = unsafe {
+            Align::new(
+                data,
+                mem::align_of::<MaterialConstants>() as _,
+                material_data_buffer_size,
+            )
         };
 
-        document.materials().enumerate().map(|(index, mat)| {
-            todo!();
-        });
+        std::iter::zip(scene_material_constants.iter_mut(), document.materials())
+            .enumerate()
+            .for_each(|(index, (buf_slot, mat))| {
+                let pbr_data = mat.pbr_metallic_roughness();
+                *buf_slot = MaterialConstants {
+                    color_factors: pbr_data.base_color_factor().into(),
+                    metal_rough_factors: vec4(
+                        pbr_data.metallic_factor(),
+                        pbr_data.roughness_factor(),
+                        0.,
+                        0.,
+                    ),
+                };
+
+                let pass_type = if mat.alpha_mode() == AlphaMode::Blend {
+                    MaterialPass::Transparent
+                } else {
+                    MaterialPass::MainColor
+                };
+
+                let material_resources = MaterialResources {
+                    // TODO
+                    color_img: &textures.white,
+                    color_sampler: textures.default_sampler_linear,
+                    metal_rough_img: &textures.white,
+                    metal_rough_sampler: textures.default_sampler_linear,
+                    data_buffer: material_data_buffer.buffer,
+                    data_buffer_offset: dbg!(
+                        ((buf_slot as *const MaterialConstants) as isize - data as isize) as u32
+                    ),
+                };
+
+                todo!();
+            });
+
+        // .enumerate()
+        // .for_each(|(index, (buf_slot, mat))| {
+        //     let pbr_data = mat.pbr_metallic_roughness();
+        //     *buf_slot = MaterialConstants {
+        //         color_factors: pbr_data.base_color_factor().into(),
+        //         metal_rough_factors: vec4(
+        //             pbr_data.metallic_factor(),
+        //             pbr_data.roughness_factor(),
+        //             0.,
+        //             0.,
+        //         ),
+        //     };
+
+        //     todo!("materials.push + file.materials[name] = newMat");
+        // });
 
         Self {
             meshes: todo!(),
