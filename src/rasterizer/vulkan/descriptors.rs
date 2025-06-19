@@ -110,7 +110,7 @@ impl DescriptorAllocatorGrowable {
         Self::new(device, 10, &sizes[..])
     }
 
-    fn new(device: Rc<Device>, max_sets: u32, pool_ratios: &[PoolSizeRatio]) -> Self {
+    pub fn new(device: Rc<Device>, max_sets: u32, pool_ratios: &[PoolSizeRatio]) -> Self {
         let mut res = Self {
             device_copy: device,
             // TODO: clone

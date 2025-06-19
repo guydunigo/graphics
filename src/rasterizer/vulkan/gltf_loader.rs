@@ -1,14 +1,21 @@
-use std::{collections::HashMap, path::Path, rc::Rc};
+use std::{
+    collections::HashMap,
+    path::Path,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 use ash::{Device, vk};
 use glam::{Vec3, Vec4};
+use gltf::texture::{MagFilter, MinFilter};
+use vk_mem::Allocator;
 
 use super::{
-    allocated::{AllocatedBuffer, AllocatedImage},
+    allocated::{AllocatedBuffer, AllocatedImage, MyMemoryUsage},
     commands::VulkanCommands,
     descriptors::DescriptorAllocatorGrowable,
     scene::{GeoSurface, GpuMeshBuffers, MeshAsset, Node, Renderable, Vertex},
-    textures::MaterialInstance,
+    textures::{MaterialConstants, MaterialInstance},
 };
 
 /// Override colors with normal value
@@ -109,7 +116,7 @@ pub fn load_gltf_meshes(
 struct LoadedGLTF {
     meshes: HashMap<String, Rc<MeshAsset>>,
     nodes: HashMap<String, Rc<dyn Node>>,
-    images: HashMap<String, AllocatedImage>,
+    images: HashMap<String, Rc<AllocatedImage>>,
     materials: HashMap<String, Rc<MaterialInstance>>,
 
     top_nodes: HashMap<String, Rc<dyn Node>>,
@@ -124,5 +131,103 @@ struct LoadedGLTF {
 impl Renderable for LoadedGLTF {
     fn draw(&self, top_mat: &glam::Mat4, ctx: &mut super::scene::DrawContext) {
         todo!()
+    }
+}
+
+impl LoadedGLTF {
+    pub fn load(
+        device: Rc<Device>,
+        allocator: Arc<Mutex<Allocator>>,
+        error_checkerboard: Rc<AllocatedImage>,
+        path: impl AsRef<Path>,
+    ) -> Self {
+        println!("Loading glTF : {}", path.as_ref().to_string_lossy());
+
+        let (document, buffers, images) = gltf::import(path).unwrap();
+
+        let samplers = document
+            .samplers()
+            .map(|s| {
+                let create_info = vk::SamplerCreateInfo::default()
+                    .max_lod(vk::LOD_CLAMP_NONE)
+                    .min_lod(0.)
+                    .mag_filter(extract_mag_filter(s.mag_filter()))
+                    .min_filter(extract_min_filter(s.min_filter()))
+                    .mipmap_mode(extract_mipmap_mode(s.min_filter()));
+                unsafe { device.create_sampler(&create_info, None).unwrap() }
+            })
+            .collect();
+
+        // TODO: we can estimate closely the needs dependending on the file
+        let sizes = [
+            (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 3.),
+            (vk::DescriptorType::UNIFORM_BUFFER, 3.),
+            (vk::DescriptorType::STORAGE_BUFFER, 1.),
+        ];
+        let descriptor_pool = DescriptorAllocatorGrowable::new(
+            device,
+            document.materials().count() as u32,
+            &sizes[..],
+        );
+
+        // Chargement dans l'ordre des dépendences
+        let images: Vec<Rc<AllocatedImage>> =
+            images.iter().map(|_| error_checkerboard.clone()).collect();
+
+        let mut material_data_buffer = AllocatedBuffer::new(
+            allocator,
+            (size_of::<MaterialConstants>() * document.materials().count()) as u64,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            MyMemoryUsage::CpuToGpu,
+        );
+
+        let scene_material_constants = unsafe {
+            &mut *material_data_buffer
+                .mapped_data()
+                .cast::<MaterialConstants>()
+        };
+
+        document.materials().enumerate().map(|(index, mat)| {
+            todo!();
+        });
+
+        Self {
+            meshes: todo!(),
+            nodes: todo!(),
+            images: todo!(),
+            materials: todo!(),
+            top_nodes: todo!(),
+            samplers,
+            descriptor_pool,
+            material_data_buffer,
+        }
+    }
+}
+
+fn extract_mag_filter(filter: Option<MagFilter>) -> vk::Filter {
+    match filter {
+        Some(MagFilter::Nearest) => vk::Filter::NEAREST,
+        Some(MagFilter::Linear) => vk::Filter::LINEAR,
+        None => vk::Filter::NEAREST,
+    }
+}
+
+fn extract_min_filter(filter: Option<MinFilter>) -> vk::Filter {
+    use MinFilter::*;
+    match filter {
+        Some(Nearest) | Some(NearestMipmapNearest) | Some(NearestMipmapLinear) => {
+            vk::Filter::NEAREST
+        }
+        Some(Linear) | Some(LinearMipmapNearest) | Some(LinearMipmapLinear) => vk::Filter::LINEAR,
+        None => vk::Filter::NEAREST,
+    }
+}
+
+fn extract_mipmap_mode(filter: Option<MinFilter>) -> vk::SamplerMipmapMode {
+    use MinFilter::*;
+    match filter {
+        Some(NearestMipmapNearest) | Some(LinearMipmapNearest) => vk::SamplerMipmapMode::NEAREST,
+        Some(NearestMipmapLinear) | Some(LinearMipmapLinear) => vk::SamplerMipmapMode::LINEAR,
+        _ => vk::SamplerMipmapMode::LINEAR,
     }
 }

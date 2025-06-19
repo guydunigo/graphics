@@ -403,7 +403,7 @@ impl MaterialInstance {
 }
 
 #[repr(C)]
-struct MaterialConstants {
+pub struct MaterialConstants {
     color_factors: Vec4,
     metal_rough_factors: Vec4,
     // padding up to 256 bit alignment, we need it anyway for uniform buffer
