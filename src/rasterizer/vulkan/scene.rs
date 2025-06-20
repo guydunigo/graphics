@@ -66,10 +66,10 @@ impl Scene<'_> {
 
         let nodes = meshes
             .drain(..)
-            .map(|m| {
-                let name = m.name.clone();
+            .filter_map(|m| m.name.clone().map(|n| (n, m)))
+            .map(|(name, m)| {
                 let v: Rc<RefCell<dyn Node>> = Rc::new(RefCell::new(MeshNode::new(
-                    m,
+                    Rc::new(m),
                     Mat4::IDENTITY,
                     Mat4::IDENTITY,
                 )));
@@ -327,13 +327,17 @@ pub struct GeoSurface {
 }
 
 pub struct MeshAsset {
-    pub name: String,
+    pub name: Option<String>,
     pub surfaces: Vec<GeoSurface>,
     mesh_buffers: GpuMeshBuffers,
 }
 
 impl MeshAsset {
-    pub fn new(name: String, surfaces: Vec<GeoSurface>, mesh_buffers: GpuMeshBuffers) -> Self {
+    pub fn new(
+        name: Option<String>,
+        surfaces: Vec<GeoSurface>,
+        mesh_buffers: GpuMeshBuffers,
+    ) -> Self {
         Self {
             name,
             surfaces,
@@ -410,6 +414,18 @@ pub struct NodeData {
     world_transform: Mat4,
 }
 
+impl Default for NodeData {
+    fn default() -> Self {
+        let parent: Weak<RefCell<EmptyNode>> = Weak::new();
+        Self {
+            parent,
+            children: Default::default(),
+            local_transform: Default::default(),
+            world_transform: Default::default(),
+        }
+    }
+}
+
 impl Renderable for NodeData {
     fn draw(&self, top_mat: &Mat4, ctx: &mut DrawContext) {
         self.children
@@ -433,8 +449,17 @@ pub struct MeshNode {
     mesh: Rc<MeshAsset>,
 }
 
+impl From<Rc<MeshAsset>> for MeshNode {
+    fn from(mesh: Rc<MeshAsset>) -> Self {
+        Self {
+            node: Default::default(),
+            mesh,
+        }
+    }
+}
+
 impl MeshNode {
-    pub fn new(mesh: MeshAsset, local_transform: Mat4, world_transform: Mat4) -> Self {
+    pub fn new(mesh: Rc<MeshAsset>, local_transform: Mat4, world_transform: Mat4) -> Self {
         let parent: Weak<RefCell<EmptyNode>> = Weak::new();
         MeshNode {
             node: NodeData {
@@ -443,7 +468,7 @@ impl MeshNode {
                 local_transform,
                 world_transform,
             },
-            mesh: Rc::new(mesh),
+            mesh: mesh,
         }
     }
 }

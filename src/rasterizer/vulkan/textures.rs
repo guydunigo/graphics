@@ -30,7 +30,7 @@ pub struct Textures<'a> {
 
     pub default_material: Rc<MaterialInstance>,
     _material_constants: AllocatedBuffer,
-    _metal_rough_material: GltfMetallicRoughness<'a>,
+    pub metal_rough_material: GltfMetallicRoughness<'a>,
     _global_desc_alloc: DescriptorAllocatorGrowable,
 }
 
@@ -166,7 +166,7 @@ impl Textures<'_> {
 
             default_material: Rc::new(default_material),
             _material_constants: material_constants,
-            _metal_rough_material: metal_rough_material,
+            metal_rough_material,
             _global_desc_alloc: global_desc_alloc,
         }
     }
@@ -187,7 +187,7 @@ impl Drop for Textures<'_> {
 
 /// This struct should be the master of the pipelines and layouts,
 /// it takes care of destroying the layout on drop.
-struct GltfMetallicRoughness<'a> {
+pub struct GltfMetallicRoughness<'a> {
     device_copy: Rc<Device>,
 
     pipeline_opaque: Rc<MaterialPipeline>,
@@ -293,7 +293,7 @@ impl GltfMetallicRoughness<'_> {
         }
     }
 
-    fn write_material(
+    pub fn write_material(
         &mut self,
         pass: MaterialPass,
         resources: &MaterialResources,
