@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
+    iter::zip,
     mem,
     path::Path,
     rc::Rc,
@@ -8,7 +9,7 @@ use std::{
 };
 
 use ash::{Device, util::Align, vk};
-use glam::{Vec3, Vec4, vec4};
+use glam::{Mat4, Vec3, Vec4, vec4};
 use gltf::{
     Document,
     buffer::Data,
@@ -114,13 +115,13 @@ pub fn load_gltf_meshes(
         .collect()
 }
 
-struct LoadedGLTF {
+pub struct LoadedGLTF {
     meshes: HashMap<String, Rc<MeshAsset>>,
     nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
     images: HashMap<String, Rc<AllocatedImage>>,
     materials: HashMap<String, Rc<MaterialInstance>>,
 
-    top_nodes: HashMap<String, Rc<dyn Node>>,
+    top_nodes: Vec<Rc<RefCell<dyn Node>>>,
 
     samplers: Vec<vk::Sampler>,
 
@@ -131,7 +132,9 @@ struct LoadedGLTF {
 
 impl Renderable for LoadedGLTF {
     fn draw(&self, top_mat: &glam::Mat4, ctx: &mut super::scene::DrawContext) {
-        todo!()
+        self.top_nodes
+            .iter()
+            .for_each(|n| n.borrow().draw(top_mat, ctx));
     }
 }
 
@@ -206,18 +209,41 @@ impl LoadedGLTF {
                     nodes.insert(name.into(), new_node.clone());
                 }
 
-                todo!("visit");
+                new_node.borrow_mut().node_data_mut().local_transform =
+                    Mat4::from_cols_array_2d(&node.transform().matrix());
 
                 new_node
             })
             .collect();
 
+        // Parent-children
+        zip(document.nodes(), nodes_vec.iter()).for_each(|(node, new_node)| {
+            new_node
+                .borrow_mut()
+                .node_data_mut()
+                .children
+                .extend(node.children().map(|c| {
+                    let new_c = &nodes_vec[c.index()];
+                    // We hope a node can't be its own parent, otherwise borrow_mut would panic.
+                    new_c.borrow_mut().node_data_mut().parent = Rc::downgrade(new_node);
+                    new_c.clone()
+                }));
+        });
+
+        // Searching for parent-less nodes
+        let top_nodes = nodes_vec
+            .iter()
+            .filter(|n| n.borrow().node_data().parent.upgrade().is_none())
+            .cloned()
+            .inspect(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY))
+            .collect();
+
         Self {
             meshes,
             nodes,
-            images: todo!(),
+            images: Default::default(),
             materials,
-            top_nodes: todo!(),
+            top_nodes,
             samplers,
             descriptor_pool,
             material_data_buffer,
@@ -285,7 +311,7 @@ fn load_materials(
 
     let mut materials = HashMap::new();
     let materials_vec: Vec<Rc<MaterialInstance>> =
-        std::iter::zip(scene_material_constants.iter_mut(), document.materials())
+        zip(scene_material_constants.iter_mut(), document.materials())
             .map(|(buf_slot, mat)| {
                 let pbr_data = mat.pbr_metallic_roughness();
                 *buf_slot = MaterialConstants {

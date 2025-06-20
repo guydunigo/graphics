@@ -11,7 +11,7 @@ use super::{
     commands::VulkanCommands,
     descriptors::{DescriptorLayoutBuilder, DescriptorWriter},
     gfx_pipeline::GpuDrawPushConstants,
-    gltf_loader::load_gltf_meshes,
+    gltf_loader::LoadedGLTF,
     shaders_loader::ShadersLoader,
     swapchain::VulkanSwapchain,
     textures::{MaterialInstance, Textures},
@@ -23,7 +23,8 @@ use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 pub struct Scene<'a> {
     device_copy: Rc<Device>,
 
-    nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
+    loaded_scenes: HashMap<String, Rc<LoadedGLTF>>,
+
     _textures: Textures<'a>,
 
     data: GpuSceneData,
@@ -40,6 +41,7 @@ impl Scene<'_> {
         device: Rc<Device>,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
     ) -> Self {
+        println!("a");
         let data_descriptor_layout = DescriptorLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::UNIFORM_BUFFER)
             .build(
@@ -47,40 +49,43 @@ impl Scene<'_> {
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             );
 
-        let textures = Textures::new(
+        println!("b");
+        let mut textures = Textures::new(
             swapchain,
             commands,
             shaders,
             device.clone(),
-            allocator,
+            allocator.clone(),
             data_descriptor_layout,
         );
 
-        // TODO: proper resource path mngmt and all
-        let mut meshes = load_gltf_meshes(
-            &device,
-            commands,
-            textures.default_material.clone(),
-            "./resources/basicmesh.glb",
-        );
-
-        let nodes = meshes
-            .drain(..)
-            .filter_map(|m| m.name.clone().map(|n| (n, m)))
-            .map(|(name, m)| {
-                let v: Rc<RefCell<dyn Node>> = Rc::new(RefCell::new(MeshNode::new(
-                    Rc::new(m),
-                    Mat4::IDENTITY,
-                    Mat4::IDENTITY,
-                )));
-                (name, v)
-            })
-            .collect();
+        println!("c");
+        let mut loaded_scenes = HashMap::new();
+        if false {
+            // TODO: proper resource path mngmt and all
+            let path = "./resources/basicmesh.glb";
+            let loaded_scene = LoadedGLTF::load(
+                device.clone(),
+                allocator.clone(),
+                commands,
+                &mut textures,
+                path,
+            );
+            loaded_scenes.insert("basicmesh".into(), Rc::new(loaded_scene));
+        }
+        if false {
+            // TODO: proper resource path mngmt and all
+            let path = "./resources/structure.glb";
+            let loaded_scene =
+                LoadedGLTF::load(device.clone(), allocator, commands, &mut textures, path);
+            loaded_scenes.insert("structure".into(), Rc::new(loaded_scene));
+        }
+        println!("d");
 
         Self {
             device_copy: device.clone(),
 
-            nodes,
+            loaded_scenes,
             _textures: textures,
 
             data: Default::default(),
@@ -130,19 +135,9 @@ impl Scene<'_> {
     pub fn update_scene(&mut self, draw_extent: vk::Extent2D, view: Mat4) {
         self.main_draw_ctx.clear();
 
-        self.nodes["Suzanne"]
-            .borrow()
-            .draw(&Mat4::IDENTITY, &mut self.main_draw_ctx);
-
-        {
-            let cube = self.nodes["Cube"].borrow();
-            (-3..3).for_each(|x| {
-                let scale = Mat4::from_scale(Vec3::splat(0.2));
-                let translation = Mat4::from_translation(vec3(x as f32, 1., 0.));
-
-                cube.draw(&(translation * scale), &mut self.main_draw_ctx);
-            });
-        }
+        self.loaded_scenes
+            .values()
+            .for_each(|s| s.draw(&Mat4::IDENTITY, &mut self.main_draw_ctx));
 
         // Camera projection
         let mut proj = Mat4::perspective_rh(
@@ -327,7 +322,8 @@ pub struct GeoSurface {
 }
 
 pub struct MeshAsset {
-    pub name: Option<String>,
+    // TODO: useless ?
+    pub _name: Option<String>,
     pub surfaces: Vec<GeoSurface>,
     mesh_buffers: GpuMeshBuffers,
 }
@@ -339,7 +335,7 @@ impl MeshAsset {
         mesh_buffers: GpuMeshBuffers,
     ) -> Self {
         Self {
-            name,
+            _name: name,
             surfaces,
             mesh_buffers,
         }
@@ -391,6 +387,9 @@ pub trait Renderable {
 
 pub trait Node: Renderable {
     fn refresh_transform(&mut self, parent_mat: &Mat4);
+
+    fn node_data(&self) -> &NodeData;
+    fn node_data_mut(&mut self) -> &mut NodeData;
 }
 
 struct EmptyNode;
@@ -403,14 +402,20 @@ impl Node for EmptyNode {
     fn refresh_transform(&mut self, _parent_mat: &Mat4) {
         unreachable!()
     }
+    fn node_data(&self) -> &NodeData {
+        unreachable!();
+    }
+    fn node_data_mut(&mut self) -> &mut NodeData {
+        unreachable!();
+    }
 }
 
 // TODO: or have Node contain a dyn Renderable/Node like MeshNode
 pub struct NodeData {
     /// If there is no parent or it was destroyed, weak won't upgrade.
-    parent: Weak<RefCell<dyn Node>>,
-    children: Vec<Rc<RefCell<dyn Node>>>,
-    local_transform: Mat4,
+    pub parent: Weak<RefCell<dyn Node>>,
+    pub children: Vec<Rc<RefCell<dyn Node>>>,
+    pub local_transform: Mat4,
     world_transform: Mat4,
 }
 
@@ -441,6 +446,12 @@ impl Node for NodeData {
             .iter()
             .for_each(|c| c.borrow_mut().refresh_transform(parent_mat));
     }
+    fn node_data(&self) -> &NodeData {
+        self
+    }
+    fn node_data_mut(&mut self) -> &mut NodeData {
+        self
+    }
 }
 
 pub struct MeshNode {
@@ -458,20 +469,20 @@ impl From<Rc<MeshAsset>> for MeshNode {
     }
 }
 
-impl MeshNode {
-    pub fn new(mesh: Rc<MeshAsset>, local_transform: Mat4, world_transform: Mat4) -> Self {
-        let parent: Weak<RefCell<EmptyNode>> = Weak::new();
-        MeshNode {
-            node: NodeData {
-                parent,
-                children: Default::default(),
-                local_transform,
-                world_transform,
-            },
-            mesh: mesh,
-        }
-    }
-}
+// impl MeshNode {
+//     pub fn new(mesh: Rc<MeshAsset>, local_transform: Mat4, world_transform: Mat4) -> Self {
+//         let parent: Weak<RefCell<EmptyNode>> = Weak::new();
+//         MeshNode {
+//             node: NodeData {
+//                 parent,
+//                 children: Default::default(),
+//                 local_transform,
+//                 world_transform,
+//             },
+//             mesh: mesh,
+//         }
+//     }
+// }
 
 impl Renderable for MeshNode {
     fn draw(&self, top_mat: &Mat4, ctx: &mut DrawContext) {
@@ -497,5 +508,11 @@ impl Renderable for MeshNode {
 impl Node for MeshNode {
     fn refresh_transform(&mut self, parent_mat: &Mat4) {
         self.node.refresh_transform(parent_mat);
+    }
+    fn node_data(&self) -> &NodeData {
+        &self.node
+    }
+    fn node_data_mut(&mut self) -> &mut NodeData {
+        &mut self.node
     }
 }
