@@ -55,7 +55,18 @@ impl FrameData {
         let fence_render = unsafe { device.create_fence(fence_create_info, None).unwrap() };
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
 
-        let descriptors = RefCell::new(DescriptorAllocatorGrowable::new_frame(device.clone()));
+        // TODO check sizes
+        let sizes = [
+            (vk::DescriptorType::STORAGE_IMAGE, 3.),
+            (vk::DescriptorType::STORAGE_BUFFER, 3.),
+            (vk::DescriptorType::UNIFORM_BUFFER, 3.),
+            (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 4.),
+        ];
+        let descriptors = RefCell::new(DescriptorAllocatorGrowable::new(
+            device.clone(),
+            1000,
+            &sizes[..],
+        ));
 
         Self {
             device_copy: device,

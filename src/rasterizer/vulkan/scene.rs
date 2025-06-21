@@ -41,7 +41,6 @@ impl Scene<'_> {
         device: Rc<Device>,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
     ) -> Self {
-        println!("a");
         let data_descriptor_layout = DescriptorLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::UNIFORM_BUFFER)
             .build(
@@ -49,7 +48,6 @@ impl Scene<'_> {
                 vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
             );
 
-        println!("b");
         let mut textures = Textures::new(
             swapchain,
             commands,
@@ -59,7 +57,6 @@ impl Scene<'_> {
             data_descriptor_layout,
         );
 
-        println!("c");
         let mut loaded_scenes = HashMap::new();
         if false {
             // TODO: proper resource path mngmt and all
@@ -80,7 +77,6 @@ impl Scene<'_> {
                 LoadedGLTF::load(device.clone(), allocator, commands, &mut textures, path);
             loaded_scenes.insert("structure".into(), Rc::new(loaded_scene));
         }
-        println!("d");
 
         Self {
             device_copy: device.clone(),

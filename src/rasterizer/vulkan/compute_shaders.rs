@@ -23,7 +23,8 @@ pub struct Effects {
 
 impl Effects {
     pub fn new(device: Rc<Device>, shaders: &ShadersLoader, draw_img: vk::ImageView) -> Self {
-        let descriptor = DescriptorAllocator::new_global(device.clone());
+        let sizes = [(vk::DescriptorType::STORAGE_IMAGE, 1.)];
+        let descriptor = DescriptorAllocator::new(device.clone(), 10, &sizes[..]);
         let draw_img_desc_layout = DescriptorLayoutBuilder::default()
             .add_binding(0, vk::DescriptorType::STORAGE_IMAGE)
             .build(&device, vk::ShaderStageFlags::COMPUTE);

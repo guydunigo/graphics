@@ -145,7 +145,13 @@ impl Textures<'_> {
             scene_data_descriptor_layout,
         );
 
-        let mut global_desc_alloc = DescriptorAllocatorGrowable::new_global(device.clone());
+        // TODO check sizes
+        let sizes = [
+            (vk::DescriptorType::UNIFORM_BUFFER, 2.),
+            (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 2.),
+        ];
+        let mut global_desc_alloc =
+            DescriptorAllocatorGrowable::new(device.clone(), 10, &sizes[..]);
 
         let (material_constants, default_material) = metal_rough_material.create_material(
             allocator.clone(),

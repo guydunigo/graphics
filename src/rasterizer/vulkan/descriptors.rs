@@ -18,13 +18,7 @@ pub struct DescriptorAllocator {
 }
 
 impl DescriptorAllocator {
-    pub fn new_global(device: Rc<Device>) -> Self {
-        let sizes = [(vk::DescriptorType::STORAGE_IMAGE, 1.)];
-
-        Self::new(device, 10, &sizes[..])
-    }
-
-    fn new(device: Rc<Device>, max_sets: u32, pool_ratios: &[PoolSizeRatio]) -> Self {
+    pub fn new(device: Rc<Device>, max_sets: u32, pool_ratios: &[PoolSizeRatio]) -> Self {
         let pool_sizes: Vec<vk::DescriptorPoolSize> = pool_ratios
             .iter()
             .map(|(ty, ratio)| vk::DescriptorPoolSize {
@@ -89,27 +83,6 @@ pub struct DescriptorAllocatorGrowable {
 }
 
 impl DescriptorAllocatorGrowable {
-    // TODO: adapt numbers in new_global + new_frame ?
-    pub fn new_global(device: Rc<Device>) -> Self {
-        let sizes = [
-            (vk::DescriptorType::STORAGE_IMAGE, 1.),
-            (vk::DescriptorType::UNIFORM_BUFFER, 1.),
-        ];
-
-        Self::new(device, 1000, &sizes[..])
-    }
-
-    pub fn new_frame(device: Rc<Device>) -> Self {
-        let sizes = [
-            (vk::DescriptorType::STORAGE_IMAGE, 3.),
-            (vk::DescriptorType::STORAGE_BUFFER, 3.),
-            (vk::DescriptorType::UNIFORM_BUFFER, 3.),
-            (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 4.),
-        ];
-
-        Self::new(device, 10, &sizes[..])
-    }
-
     pub fn new(device: Rc<Device>, max_sets: u32, pool_ratios: &[PoolSizeRatio]) -> Self {
         let mut res = Self {
             device_copy: device,
@@ -163,6 +136,7 @@ impl DescriptorAllocatorGrowable {
         let ds = match res {
             Ok(ds) => ds,
             Err(vk::Result::ERROR_OUT_OF_POOL_MEMORY) | Err(vk::Result::ERROR_FRAGMENTED_POOL) => {
+                eprintln!("Will grow : DescriptorAllocatorGrowable {pool:?}");
                 self.full.push(pool);
                 pool = self.get_pool();
                 unsafe {
