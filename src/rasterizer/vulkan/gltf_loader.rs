@@ -394,6 +394,7 @@ fn load_meshes(
                     .primitives()
                     .filter_map(|p| p.indices().map(|i| (p, i)))
                     .map(|(primitive, index_accessor)| {
+                        let start_index = indices.len() as u32;
                         let count = index_accessor.count();
 
                         let initial_vtx = vertices.len();
@@ -435,7 +436,7 @@ fn load_meshes(
                         }
 
                         GeoSurface {
-                            start_index: indices.len() as u32,
+                            start_index,
                             count: count as u32,
                             material: materials_vec[primitive.material().index().unwrap_or(0)]
                                 .clone(),

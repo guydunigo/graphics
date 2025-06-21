@@ -29,7 +29,8 @@ pub struct Scene<'a> {
 
     data: GpuSceneData,
     pub data_descriptor_layout: vk::DescriptorSetLayout,
-    // gpu_scene_data_buffer: Option<AllocatedBuffer>,
+    // TODO: store one per Frame ?
+    gpu_scene_data_buffer: Vec<AllocatedBuffer>,
     pub main_draw_ctx: DrawContext,
 }
 
@@ -70,7 +71,7 @@ impl Scene<'_> {
             );
             loaded_scenes.insert("basicmesh".into(), Rc::new(loaded_scene));
         }
-        if false {
+        if true {
             // TODO: proper resource path mngmt and all
             let path = "./resources/structure.glb";
             let loaded_scene =
@@ -86,13 +87,13 @@ impl Scene<'_> {
 
             data: Default::default(),
             data_descriptor_layout,
-            // gpu_scene_data_buffer: Default::default(),
+            gpu_scene_data_buffer: Default::default(),
             main_draw_ctx: Default::default(),
         }
     }
 
     pub fn upload_data(
-        &self,
+        &mut self,
         device: &Device,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
         global_desc: vk::DescriptorSet,
@@ -123,8 +124,12 @@ impl Scene<'_> {
         );
         writer.update_set(device, global_desc);
 
-        // TODO: store until next frame so GPU has time to use it ?
-        // self.gpu_scene_data_buffer = Some(gpu_scene_data_buffer);
+        // Store it until next call, so it is not freed before being used.
+        // TODO: self.gpu_scene_data_buffer = Some(gpu_scene_data_buffer);
+        if self.gpu_scene_data_buffer.len() > 1000 {
+            todo!("Clean !!!");
+        }
+        self.gpu_scene_data_buffer.push(gpu_scene_data_buffer);
     }
 
     /// Clears the `main_draw_ctx` and fills it with the meshes to render.
