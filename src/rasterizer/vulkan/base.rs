@@ -66,6 +66,16 @@ impl VulkanBase {
         let (surface_loader, chosen_gpu, queue_family_index) =
             find_physical_device(&entry, &instance, &app_info, &surface);
 
+        {
+            let props = unsafe { instance.get_physical_device_properties(chosen_gpu) };
+            // https://registry.khronos.org/vulkan/specs/latest/man/html/VkPhysicalDeviceLimits.html
+            // https://vulkan.gpuinfo.org/displaydevicelimit.php?platform=linux&name=minUniformBufferOffsetAlignment
+            eprintln!(
+                "TODO: min_uniform_buffer_offset_alignment : {}",
+                props.limits.min_uniform_buffer_offset_alignment
+            );
+        }
+
         let device = device(&instance, chosen_gpu, queue_family_index);
 
         VulkanBase {

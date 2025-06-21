@@ -1,7 +1,6 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    mem,
     rc::{Rc, Weak},
     sync::{Arc, Mutex},
 };
@@ -17,7 +16,7 @@ use super::{
     textures::{MaterialInstance, Textures},
 };
 
-use ash::{Device, util::Align, vk};
+use ash::{Device, vk};
 use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 
 pub struct Scene<'a> {
@@ -29,8 +28,6 @@ pub struct Scene<'a> {
 
     data: GpuSceneData,
     pub data_descriptor_layout: vk::DescriptorSetLayout,
-    // TODO: store one per Frame ?
-    gpu_scene_data_buffer: Vec<AllocatedBuffer>,
     pub main_draw_ctx: DrawContext,
 }
 
@@ -87,17 +84,17 @@ impl Scene<'_> {
 
             data: Default::default(),
             data_descriptor_layout,
-            gpu_scene_data_buffer: Default::default(),
             main_draw_ctx: Default::default(),
         }
     }
 
+    /// Returns an allocated buffer that should be kept until the end of the render.
     pub fn upload_data(
         &mut self,
         device: &Device,
         allocator: Arc<Mutex<vk_mem::Allocator>>,
         global_desc: vk::DescriptorSet,
-    ) {
+    ) -> AllocatedBuffer {
         // We will also dynamically allocate the uniform buffer itself as a way to
         // showcase how you could do temporal per-frame data that is dynamically created.
         // It would be better to hold the buffers cached in our FrameData structure,
@@ -124,12 +121,7 @@ impl Scene<'_> {
         );
         writer.update_set(device, global_desc);
 
-        // Store it until next call, so it is not freed before being used.
-        // TODO: self.gpu_scene_data_buffer = Some(gpu_scene_data_buffer);
-        if self.gpu_scene_data_buffer.len() > 1000 {
-            todo!("Clean !!!");
-        }
-        self.gpu_scene_data_buffer.push(gpu_scene_data_buffer);
+        gpu_scene_data_buffer
     }
 
     /// Clears the `main_draw_ctx` and fills it with the meshes to render.
@@ -260,18 +252,22 @@ impl GpuMeshBuffers {
         );
 
         let data = staging.mapped_data();
-        let mut align =
-            unsafe { Align::new(data, mem::align_of::<Vertex>() as _, vertex_buffer_size) };
-        align.copy_from_slice(vertices);
+        // TODO: alignment ?
+        {
+            let vertices_dst: &mut [Vertex] =
+                unsafe { std::slice::from_raw_parts_mut(data as *mut Vertex, vertices.len()) };
+            vertices_dst.copy_from_slice(vertices);
+        }
         // TODO: can alignment break sizes ?
-        let mut align = unsafe {
-            Align::new(
-                data.add(vertex_buffer_size as usize),
-                mem::align_of::<u32>() as _,
-                index_buffer_size,
-            )
-        };
-        align.copy_from_slice(indices);
+        {
+            let indices_dst: &mut [u32] = unsafe {
+                std::slice::from_raw_parts_mut(
+                    data.add(vertex_buffer_size as usize) as *mut u32,
+                    indices.len(),
+                )
+            };
+            indices_dst.copy_from_slice(indices);
+        }
 
         // TODO: can be sent to background thread to avoid blocking
         commands.immediate_submit(|device, cmd| {

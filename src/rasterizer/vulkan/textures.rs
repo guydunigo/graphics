@@ -410,6 +410,8 @@ impl MaterialInstance {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
+// TODO: align 256, and in copy slices, ... ?
+// #[repr(align(256))]
 pub struct MaterialConstants {
     pub color_factors: Vec4,
     pub metal_rough_factors: Vec4,

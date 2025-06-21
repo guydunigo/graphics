@@ -7,6 +7,7 @@ use std::{
 use ash::{Device, vk};
 
 use super::{
+    allocated::AllocatedBuffer,
     base::VulkanBase,
     compute_shaders::ComputePushConstants,
     descriptors::DescriptorAllocatorGrowable,
@@ -28,6 +29,9 @@ pub struct FrameData {
     pub sem_swapchain: vk::Semaphore,
 
     descriptors: RefCell<DescriptorAllocatorGrowable>,
+
+    /// Buffers used in current rendering which need to be released before beginning next one.
+    buffers_in_use: Vec<AllocatedBuffer>,
 }
 
 impl Drop for FrameData {
@@ -75,6 +79,7 @@ impl FrameData {
             fence_render,
             sem_swapchain,
             descriptors,
+            buffers_in_use: Default::default(),
         }
     }
 
@@ -95,6 +100,14 @@ impl FrameData {
 
     pub fn clear_descriptors(&mut self) {
         self.descriptors.borrow_mut().clear_pools();
+    }
+
+    pub fn clear_buffers_in_use(&mut self) {
+        self.buffers_in_use.clear();
+    }
+
+    pub fn push_buffer_in_use(&mut self, buffer_in_use: AllocatedBuffer) {
+        self.buffers_in_use.push(buffer_in_use);
     }
 
     pub fn wait_for_fences(&self) {

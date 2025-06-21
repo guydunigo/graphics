@@ -147,6 +147,7 @@ impl VulkanEngine<'_> {
 
         let current_frame = self.commands.current_frame_mut();
         current_frame.clear_descriptors();
+        current_frame.clear_buffers_in_use();
         let global_desc = current_frame
             .descriptors_mut()
             .allocate(self.scene.data_descriptor_layout);
@@ -186,8 +187,9 @@ impl VulkanEngine<'_> {
             vk::ImageLayout::DEPTH_ATTACHMENT_OPTIMAL,
         );
 
-        self.scene
-            .upload_data(&self.base.device, self.allocator.clone(), global_desc);
+        let buffer_in_use =
+            self.scene
+                .upload_data(&self.base.device, self.allocator.clone(), global_desc);
 
         current_frame.draw_geometries(&self.swapchain, &self.scene.main_draw_ctx, global_desc);
 
@@ -233,6 +235,9 @@ impl VulkanEngine<'_> {
         self.swapchain
             .present(swapchain_img_index, sem_render, self.commands.queue);
 
+        self.commands
+            .current_frame_mut()
+            .push_buffer_in_use(buffer_in_use);
         self.commands.frame_number += 1;
     }
 
@@ -315,7 +320,8 @@ impl Default for Camera {
             pitch: Default::default(),
             yaw: Default::default(),
 
-            pos: vec3(0., 0., 5.),
+            // pos: vec3(0., 0., 5.),
+            pos: vec3(30., -0., -85.),
         }
     }
 }
@@ -346,8 +352,7 @@ impl Camera {
     }
 
     fn on_window_event(&mut self, event: &WindowEvent) {
-        match event {
-            WindowEvent::KeyboardInput {
+        if let WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
                         physical_key: PhysicalKey::Code(key),
@@ -355,24 +360,22 @@ impl Camera {
                         ..
                     },
                 ..
-            } => match state {
-                ElementState::Pressed => match key {
-                    KeyCode::KeyW => self.vel.z = -1.,
-                    KeyCode::KeyS => self.vel.z = 1.,
-                    KeyCode::KeyA => self.vel.x = -1.,
-                    KeyCode::KeyD => self.vel.x = 1.,
-                    _ => (),
-                },
-                ElementState::Released => match key {
-                    KeyCode::KeyW => self.vel.z = 0.,
-                    KeyCode::KeyS => self.vel.z = 0.,
-                    KeyCode::KeyA => self.vel.x = 0.,
-                    KeyCode::KeyD => self.vel.x = 0.,
-                    _ => (),
-                },
+            } = event { match state {
+            ElementState::Pressed => match key {
+                KeyCode::KeyW => self.vel.z = -1.,
+                KeyCode::KeyS => self.vel.z = 1.,
+                KeyCode::KeyA => self.vel.x = -1.,
+                KeyCode::KeyD => self.vel.x = 1.,
+                _ => (),
             },
-            _ => (),
-        }
+            ElementState::Released => match key {
+                KeyCode::KeyW => self.vel.z = 0.,
+                KeyCode::KeyS => self.vel.z = 0.,
+                KeyCode::KeyA => self.vel.x = 0.,
+                KeyCode::KeyD => self.vel.x = 0.,
+                _ => (),
+            },
+        } }
     }
 
     fn on_mouse_motion(&mut self, (delta_x, delta_y): (f64, f64), cursor_grabbed: bool) {

@@ -2,13 +2,12 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     iter::zip,
-    mem,
     path::Path,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 
-use ash::{Device, util::Align, vk};
+use ash::{Device, vk};
 use glam::{Mat4, Vec3, Vec4, vec4};
 use gltf::{
     Document,
@@ -116,6 +115,8 @@ pub fn load_gltf_meshes(
 }
 
 pub struct LoadedGLTF {
+    device_copy: Rc<Device>,
+
     meshes: HashMap<String, Rc<MeshAsset>>,
     nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
     images: HashMap<String, Rc<AllocatedImage>>,
@@ -128,6 +129,18 @@ pub struct LoadedGLTF {
     descriptor_pool: DescriptorAllocatorGrowable,
 
     material_data_buffer: AllocatedBuffer,
+}
+
+impl Drop for LoadedGLTF {
+    fn drop(&mut self) {
+        #[cfg(feature = "dbg_mem")]
+        println!("drop LoadedGLTF");
+        unsafe {
+            self.samplers
+                .drain(..)
+                .for_each(|s| self.device_copy.destroy_sampler(s, None));
+        }
+    }
 }
 
 impl Renderable for LoadedGLTF {
@@ -240,6 +253,7 @@ impl LoadedGLTF {
             .collect();
 
         Self {
+            device_copy: device.clone(),
             meshes,
             nodes,
             images: Default::default(),
@@ -302,13 +316,9 @@ fn load_materials(
     );
 
     let data = material_data_buffer.mapped_data();
-    let mut scene_material_constants = unsafe {
-        Align::new(
-            data,
-            mem::align_of::<MaterialConstants>() as _,
-            material_data_buffer_size,
-        )
-    };
+    // TODO: alignment ?
+    let scene_material_constants: &mut [MaterialConstants] =
+        unsafe { std::slice::from_raw_parts_mut(data as *mut MaterialConstants, materials_len) };
 
     let mut materials = HashMap::new();
     let materials_vec: Vec<Rc<MaterialInstance>> =
@@ -348,9 +358,7 @@ fn load_materials(
                     metal_rough_img: &textures.white,
                     metal_rough_sampler: textures.default_sampler_linear,
                     data_buffer: material_data_buffer.buffer,
-                    data_buffer_offset: dbg!(
-                        (buf_slot as *const MaterialConstants) as u32 - data as u32
-                    ),
+                    data_buffer_offset: (buf_slot as *const MaterialConstants) as u32 - data as u32,
                 };
 
                 let new_mat = textures.metal_rough_material.write_material(
