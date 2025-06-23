@@ -10,8 +10,7 @@ use std::{
 use ash::{Device, vk};
 use glam::{Mat4, Vec3, Vec4, vec4};
 use gltf::{
-    Document,
-    buffer::Data,
+    Document, buffer, image,
     material::AlphaMode,
     texture::{MagFilter, MinFilter},
 };
@@ -189,9 +188,10 @@ impl LoadedGLTF {
             DescriptorAllocatorGrowable::new(device.clone(), materials_len as u32, &sizes[..]);
 
         // Chargement dans l'ordre des dépendences
+
         let images: Vec<Rc<AllocatedImage>> = images
             .iter()
-            .map(|_| textures.error_checkerboard.clone())
+            .map(|i| Rc::new(load_image(commands, device.clone(), allocator.clone(), i)))
             .collect();
 
         let (material_data_buffer, materials_vec, materials) = load_materials(
@@ -384,7 +384,7 @@ fn load_meshes(
     device: &Device,
     commands: &VulkanCommands,
     document: &Document,
-    buffers: Vec<Data>,
+    buffers: Vec<buffer::Data>,
     materials_vec: Vec<Rc<MaterialInstance>>,
 ) -> (HashMap<String, Rc<MeshAsset>>, Vec<Rc<MeshAsset>>) {
     let mut meshes = HashMap::new();
@@ -470,4 +470,54 @@ fn load_meshes(
     };
 
     (meshes, meshes_vec)
+}
+
+fn load_image(
+    commands: &VulkanCommands,
+    device: Rc<Device>,
+    allocator: Arc<Mutex<Allocator>>,
+    image: &image::Data,
+) -> AllocatedImage {
+    let extent = vk::Extent3D {
+        width: image.width,
+        height: image.height,
+        depth: 1,
+    };
+
+    println!(
+        "{}*{}={} | {} | {} | {}",
+        image.width,
+        image.height,
+        image.width * image.height,
+        image.pixels.len(),
+        image.pixels.len() / image.width as usize / image.height as usize,
+        image.pixels.len() % (image.width as usize * image.height as usize),
+    );
+
+    // TODO: unorm ?
+    let format = match image.format {
+        image::Format::R8 => vk::Format::R8_UNORM,
+        image::Format::R8G8 => vk::Format::R8G8_UNORM,
+        image::Format::R8G8B8 => vk::Format::R8G8B8_UNORM,
+        image::Format::R8G8B8A8 => vk::Format::R8G8B8A8_UNORM,
+        image::Format::R16 => vk::Format::R16_UNORM,
+        image::Format::R16G16 => vk::Format::R16G16_UNORM,
+        image::Format::R16G16B16 => vk::Format::R16G16B16_UNORM,
+        image::Format::R16G16B16A16 => vk::Format::R16G16B16A16_UNORM,
+        image::Format::R32G32B32FLOAT => vk::Format::R32G32B32_SFLOAT,
+        image::Format::R32G32B32A32FLOAT => vk::Format::R32G32B32A32_SFLOAT,
+    };
+
+    println!("img.format {:?}, format {format:?}", image.format);
+
+    AllocatedImage::new_and_upload(
+        commands,
+        device,
+        allocator,
+        extent,
+        format,
+        vk::ImageUsageFlags::SAMPLED,
+        false,
+        &image.pixels[..],
+    )
 }
