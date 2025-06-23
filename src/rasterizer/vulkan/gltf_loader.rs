@@ -191,6 +191,7 @@ impl LoadedGLTF {
 
         let images: Vec<Rc<AllocatedImage>> = images
             .iter()
+            .take(1) // TODO: more
             .map(|i| Rc::new(load_image(commands, device.clone(), allocator.clone(), i)))
             .collect();
 
@@ -509,6 +510,8 @@ fn load_image(
     };
 
     println!("img.format {:?}, format {format:?}", image.format);
+    todo!("convert to R8G8B8A8, or better, load it directly");
+    // TODO: file:///home/gguy/trash/build_dirs/graphics/doc/src/gltf/image.rs.html#157
 
     AllocatedImage::new_and_upload(
         commands,

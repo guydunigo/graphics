@@ -254,6 +254,7 @@ impl AllocatedImage {
         };
 
         let data_size = (extent.depth * extent.width * extent.height * pixel as u32) as usize;
+        assert!(data_size <= data.len());
         println!(
             "depth {} width {} height {} = {}",
             extent.depth,
