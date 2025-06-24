@@ -26,8 +26,9 @@ use super::{
 };
 
 /// Override colors with normal value
-const OVERRIDE_COLORS: bool = true;
+const OVERRIDE_COLORS: bool = false;
 
+/*
 /// Loads the glTF file and uploads it to GPU memory
 pub fn load_gltf_meshes(
     device: &Device,
@@ -113,6 +114,7 @@ pub fn load_gltf_meshes(
         })
         .collect()
 }
+*/
 
 pub struct LoadedGLTF {
     device_copy: Rc<Device>,

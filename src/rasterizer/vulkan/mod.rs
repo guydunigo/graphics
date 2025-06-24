@@ -51,6 +51,7 @@ pub struct VulkanEngine<'a> {
     current_bg_effect: usize,
     bg_effects_data: Vec<ComputePushConstants>,
     camera: Camera,
+    current_scene: String,
 }
 
 impl Drop for VulkanEngine<'_> {
@@ -108,6 +109,7 @@ impl VulkanEngine<'_> {
             current_bg_effect: 0,
             bg_effects_data,
             camera: Default::default(),
+            current_scene: "structure".into(),
         }
     }
 
@@ -136,6 +138,8 @@ impl VulkanEngine<'_> {
                 &mut self.swapchain.render_scale,
                 &self.swapchain.effects.bg_effects[..],
                 &mut self.bg_effects_data,
+                &mut self.current_scene,
+                self.scene.loaded_scenes.keys(),
             )
         });
 
@@ -253,18 +257,23 @@ impl VulkanEngine<'_> {
 
     fn update_scene(&mut self) {
         self.camera.update();
-        self.scene
-            .update_scene(self.swapchain.draw_extent(), self.camera.view_mat());
+        self.scene.update_scene(
+            self.swapchain.draw_extent(),
+            self.camera.view_mat(),
+            &self.current_scene,
+        );
     }
 }
 
-fn ui(
+fn ui<'a>(
     ctx: &egui::Context,
     debug: String,
     current_bg_effect: &mut usize,
     render_scale: &mut f32,
     bg_effects: &[ComputeEffect],
     bg_effects_data: &mut [ComputePushConstants],
+    current_scene: &mut String,
+    scenes: impl Iterator<Item = &'a String>,
 ) {
     egui::Window::new("debug").show(ctx, |ui| ui.label(debug));
     egui::Window::new("Background").show(ctx, |ui| {
@@ -301,6 +310,12 @@ fn ui(
                 });
             });
         }
+    });
+    egui::Window::new("Scene").show(ctx, |ui| {
+        ui.label("Selected scene :");
+        scenes.for_each(|n| {
+            ui.radio_value(current_scene, n.clone(), n);
+        });
     });
 }
 

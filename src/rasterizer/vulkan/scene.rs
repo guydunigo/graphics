@@ -19,10 +19,20 @@ use super::{
 use ash::{Device, vk};
 use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 
+// TODO: proper resource path mngmt and all
+const SCENES: [(&str, &str); 6] = [
+    ("basicmesh", "./resources/basicmesh.glb"),
+    ("structure", "./resources/structure.glb"),
+    ("helmet", "./resources/DamagedHelmet.glb"),
+    ("corridor", "./resources/Sponza/Sponza.gltf"),
+    ("structure_mat", "./resources/structure_mat.glb"),
+    ("house2", "./resources/house2.glb"),
+];
+
 pub struct Scene<'a> {
     device_copy: Rc<Device>,
 
-    loaded_scenes: HashMap<String, Rc<LoadedGLTF>>,
+    pub loaded_scenes: HashMap<String, LoadedGLTF>,
 
     _textures: Textures<'a>,
 
@@ -55,30 +65,21 @@ impl Scene<'_> {
             data_descriptor_layout,
         );
 
-        let mut loaded_scenes = HashMap::new();
-        // TODO: proper resource path mngmt and all
-        if false {
-            let path = "./resources/basicmesh.glb";
-            let loaded_scene = LoadedGLTF::load(
-                device.clone(),
-                allocator.clone(),
-                commands,
-                &mut textures,
-                path,
-            );
-            loaded_scenes.insert("basicmesh".into(), Rc::new(loaded_scene));
-        }
-        if true {
-            let path = "./resources/structure.glb";
-            let loaded_scene = LoadedGLTF::load(
-                device.clone(),
-                allocator.clone(),
-                commands,
-                &mut textures,
-                path,
-            );
-            loaded_scenes.insert("structure".into(), Rc::new(loaded_scene));
-        }
+        let loaded_scenes = SCENES
+            .iter()
+            .map(|(n, p)| {
+                (
+                    String::from(*n),
+                    LoadedGLTF::load(
+                        device.clone(),
+                        allocator.clone(),
+                        commands,
+                        &mut textures,
+                        p,
+                    ),
+                )
+            })
+            .collect();
 
         Self {
             device_copy: device.clone(),
@@ -129,11 +130,12 @@ impl Scene<'_> {
     }
 
     /// Clears the `main_draw_ctx` and fills it with the meshes to render.
-    pub fn update_scene(&mut self, draw_extent: vk::Extent2D, view: Mat4) {
+    pub fn update_scene(&mut self, draw_extent: vk::Extent2D, view: Mat4, scene: &String) {
         self.main_draw_ctx.clear();
 
         self.loaded_scenes
-            .values()
+            .get(scene)
+            .iter()
             .for_each(|s| s.draw(&Mat4::IDENTITY, &mut self.main_draw_ctx));
 
         // Camera projection
