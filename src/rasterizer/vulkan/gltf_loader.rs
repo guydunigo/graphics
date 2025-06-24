@@ -7,6 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ::image::{DynamicImage, GrayImage, RgbImage};
 use ash::{Device, vk};
 use glam::{Mat4, Vec3, Vec4, vec4};
 use gltf::{
@@ -25,7 +26,7 @@ use super::{
 };
 
 /// Override colors with normal value
-const OVERRIDE_COLORS: bool = false;
+const OVERRIDE_COLORS: bool = true;
 
 /// Loads the glTF file and uploads it to GPU memory
 pub fn load_gltf_meshes(
@@ -118,7 +119,8 @@ pub struct LoadedGLTF {
 
     meshes: HashMap<String, Rc<MeshAsset>>,
     nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
-    images: HashMap<String, Rc<AllocatedImage>>,
+    // images: HashMap<String, Rc<AllocatedImage>>,
+    images: Vec<Rc<AllocatedImage>>,
     materials: HashMap<String, Rc<MaterialInstance>>,
 
     top_nodes: Vec<Rc<RefCell<dyn Node>>>,
@@ -160,7 +162,7 @@ impl LoadedGLTF {
     ) -> Self {
         println!("Loading glTF : {}", path.as_ref().to_string_lossy());
 
-        let (document, buffers, images) = gltf::import(path).unwrap();
+        let (document, buffers, mut images_data) = gltf::import(path).unwrap();
 
         let samplers: Vec<vk::Sampler> = document
             .samplers()
@@ -189,10 +191,36 @@ impl LoadedGLTF {
 
         // Chargement dans l'ordre des dépendences
 
-        let images: Vec<Rc<AllocatedImage>> = images
-            .iter()
-            .take(1) // TODO: more
-            .map(|i| Rc::new(load_image(commands, device.clone(), allocator.clone(), i)))
+        // TODO: parallel loading/converting images ?
+
+        // let mut images = HashMap::new();
+        // let images_vec: Vec<Rc<AllocatedImage>> = zip(images_data.drain(..), document.images())
+        //     .enumerate()
+        //     .map(|(i, (img_data, img))| {
+        //         load_image(commands, device.clone(), allocator.clone(), img_data)
+        //             .map(Rc::new)
+        //             .inspect(|img_data| {
+        //                 if let Some(name) = img.name() {
+        //                     images.insert(name.into(), img_data.clone());
+        //                 }
+        //             })
+        //             .unwrap_or_else(|err| {
+        //                 eprintln!("Failed to load image #{i}, using default : {err}");
+        //                 textures.error_checkerboard.clone()
+        //             })
+        //     })
+        //     .collect();
+        let images: Vec<Rc<AllocatedImage>> = images_data
+            .drain(..)
+            .enumerate()
+            .map(|(i, img_data)| {
+                load_image(commands, device.clone(), allocator.clone(), img_data)
+                    .map(Rc::new)
+                    .unwrap_or_else(|err| {
+                        eprintln!("Failed to load image #{i}, using default : {err}");
+                        textures.error_checkerboard.clone()
+                    })
+            })
             .collect();
 
         let (material_data_buffer, materials_vec, materials) = load_materials(
@@ -257,7 +285,7 @@ impl LoadedGLTF {
             device_copy: device.clone(),
             meshes,
             nodes,
-            images: Default::default(),
+            images,
             materials,
             top_nodes,
             samplers,
@@ -438,7 +466,11 @@ fn load_meshes(
                             });
                         }
 
-                        if let Some(iter) = reader.read_colors(0) {
+                        if OVERRIDE_COLORS {
+                            vertices[initial_vtx..]
+                                .iter_mut()
+                                .for_each(|v| v.color = v.normal.extend(1.));
+                        } else if let Some(iter) = reader.read_colors(0) {
                             iter.into_rgba_f32().enumerate().for_each(|(i, c)| {
                                 vertices[initial_vtx + i].color = Vec4::from_array(c)
                             });
@@ -477,43 +509,69 @@ fn load_image(
     commands: &VulkanCommands,
     device: Rc<Device>,
     allocator: Arc<Mutex<Allocator>>,
-    image: &image::Data,
-) -> AllocatedImage {
+    image: image::Data,
+) -> Result<AllocatedImage, String> {
     let extent = vk::Extent3D {
         width: image.width,
         height: image.height,
         depth: 1,
     };
 
-    println!(
-        "{}*{}={} | {} | {} | {}",
-        image.width,
-        image.height,
-        image.width * image.height,
-        image.pixels.len(),
-        image.pixels.len() / image.width as usize / image.height as usize,
-        image.pixels.len() % (image.width as usize * image.height as usize),
-    );
+    let (format, data) = match image.format {
+        image::Format::R8 => {
+            println!(
+                "Image has format {:?}, converting it to R8G8B8A8.",
+                image.format
+            );
+            let pixels = DynamicImage::ImageLuma8(
+                GrayImage::from_raw(image.width, image.height, image.pixels).unwrap(),
+            )
+            .to_rgba8()
+            .into_raw();
 
-    // TODO: unorm ?
-    let format = match image.format {
-        image::Format::R8 => vk::Format::R8_UNORM,
-        image::Format::R8G8 => vk::Format::R8G8_UNORM,
-        image::Format::R8G8B8 => vk::Format::R8G8B8_UNORM,
-        image::Format::R8G8B8A8 => vk::Format::R8G8B8A8_UNORM,
-        image::Format::R16 => vk::Format::R16_UNORM,
-        image::Format::R16G16 => vk::Format::R16G16_UNORM,
-        image::Format::R16G16B16 => vk::Format::R16G16B16_UNORM,
-        image::Format::R16G16B16A16 => vk::Format::R16G16B16A16_UNORM,
-        image::Format::R32G32B32FLOAT => vk::Format::R32G32B32_SFLOAT,
-        image::Format::R32G32B32A32FLOAT => vk::Format::R32G32B32A32_SFLOAT,
+            (vk::Format::R8G8B8A8_UNORM, pixels)
+        }
+        // Not supported for other operations, needs converting to RGBA8
+        image::Format::R8G8B8 => {
+            let pixels = DynamicImage::ImageRgb8(
+                RgbImage::from_raw(image.width, image.height, image.pixels).unwrap(),
+            )
+            .to_rgba8()
+            .into_raw();
+
+            (vk::Format::R8G8B8A8_UNORM, pixels)
+        }
+        image::Format::R8G8B8A8 => (vk::Format::R8G8B8A8_UNORM, image.pixels),
+        // image::Format::R8 => vk::Format::R8_UNORM,
+        // image::Format::R8G8 => vk::Format::R8G8_UNORM,
+        // image::Format::R16 => vk::Format::R16_UNORM,
+        // image::Format::R16G16 => vk::Format::R16G16_UNORM,
+        // image::Format::R16G16B16 => vk::Format::R16G16B16_UNORM,
+        // image::Format::R16G16B16A16 => vk::Format::R16G16B16A16_UNORM,
+        // image::Format::R32G32B32FLOAT => vk::Format::R32G32B32_SFLOAT,
+        // image::Format::R32G32B32A32FLOAT => vk::Format::R32G32B32A32_SFLOAT,
+        _ => return Err(format!("Unsupported image format : {:?} !", image.format)),
     };
 
-    println!("img.format {:?}, format {format:?}", image.format);
-    todo!("convert to R8G8B8A8, or better, load it directly");
-    // TODO: file:///home/gguy/trash/build_dirs/graphics/doc/src/gltf/image.rs.html#157
+    /*
+    // From [`gltf::image::Data`] : file:///home/Guillaume.Goni/workspace/rust/graphics/target/doc/src/gltf/image.rs.html#85-97
+    // Conversion from `image` crate format :
+    let format = match image {
+        DynamicImage::ImageLuma8(_) => Format::R8,
+        DynamicImage::ImageLumaA8(_) => Format::R8G8,
+        DynamicImage::ImageRgb8(_) => Format::R8G8B8,
+        DynamicImage::ImageRgba8(_) => Format::R8G8B8A8,
+        DynamicImage::ImageLuma16(_) => Format::R16,
+        DynamicImage::ImageLumaA16(_) => Format::R16G16,
+        DynamicImage::ImageRgb16(_) => Format::R16G16B16,
+        DynamicImage::ImageRgba16(_) => Format::R16G16B16A16,
+        DynamicImage::ImageRgb32F(_) => Format::R32G32B32FLOAT,
+        DynamicImage::ImageRgba32F(_) => Format::R32G32B32A32FLOAT,
+        image => return Err(Error::UnsupportedImageFormat(image)),
+    };
+    */
 
-    AllocatedImage::new_and_upload(
+    Ok(AllocatedImage::new_and_upload(
         commands,
         device,
         allocator,
@@ -521,6 +579,6 @@ fn load_image(
         format,
         vk::ImageUsageFlags::SAMPLED,
         false,
-        &image.pixels[..],
-    )
+        &data[..],
+    ))
 }

@@ -242,6 +242,11 @@ impl SwapchainData {
         //     .unwrap_or(vk::PresentModeKHR::FIFO);
 
         let surface_format = unsafe {
+            // base.surface_loader
+            //     .get_physical_device_surface_formats(base.chosen_gpu, base.surface)
+            //     .unwrap()
+            //     .iter()
+            //     .for_each(|f| eprintln!("Supported device surface format : {f:?}."));
             base.surface_loader
                 .get_physical_device_surface_formats(base.chosen_gpu, base.surface)
                 .unwrap()[0]

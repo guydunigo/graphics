@@ -240,28 +240,22 @@ impl AllocatedImage {
         data: &[u8],
     ) -> Self {
         let pixel = match format {
-            vk::Format::R8_UNORM => size_of::<u8>() * 1,
-            vk::Format::R8G8_UNORM => size_of::<u8>() * 2,
-            vk::Format::R8G8B8_UNORM => size_of::<u8>() * 3,
             vk::Format::R8G8B8A8_UNORM => size_of::<u8>() * 4,
-            vk::Format::R16_UNORM => size_of::<u16>() * 1,
-            vk::Format::R16G16_UNORM => size_of::<u16>() * 2,
-            vk::Format::R16G16B16_UNORM => size_of::<u16>() * 3,
-            vk::Format::R16G16B16A16_UNORM => size_of::<u16>() * 4,
-            vk::Format::R32G32B32_SFLOAT => size_of::<f32>() * 3,
-            vk::Format::R32G32B32A32_SFLOAT => size_of::<f32>() * 4,
-            _ => unimplemented!(),
+            // vk::Format::R8_UNORM => size_of::<u8>() * 1,
+            // vk::Format::R8G8_UNORM => size_of::<u8>() * 2,
+            // vk::Format::R8G8B8_UNORM => size_of::<u8>() * 3,
+            // vk::Format::R8G8B8A8_UNORM => size_of::<u8>() * 4,
+            // vk::Format::R16_UNORM => size_of::<u16>() * 1,
+            // vk::Format::R16G16_UNORM => size_of::<u16>() * 2,
+            // vk::Format::R16G16B16_UNORM => size_of::<u16>() * 3,
+            // vk::Format::R16G16B16A16_UNORM => size_of::<u16>() * 4,
+            // vk::Format::R32G32B32_SFLOAT => size_of::<f32>() * 3,
+            // vk::Format::R32G32B32A32_SFLOAT => size_of::<f32>() * 4,
+            _ => unimplemented!("Unsupported image format : {format:?} !"),
         };
 
         let data_size = (extent.depth * extent.width * extent.height * pixel as u32) as usize;
         assert!(data_size <= data.len());
-        println!(
-            "depth {} width {} height {} = {}",
-            extent.depth,
-            extent.width,
-            extent.height,
-            extent.depth * extent.width * extent.height
-        );
 
         let buffer = AllocatedBuffer::new(
             allocator.clone(),

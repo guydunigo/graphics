@@ -56,8 +56,8 @@ impl Scene<'_> {
         );
 
         let mut loaded_scenes = HashMap::new();
+        // TODO: proper resource path mngmt and all
         if false {
-            // TODO: proper resource path mngmt and all
             let path = "./resources/basicmesh.glb";
             let loaded_scene = LoadedGLTF::load(
                 device.clone(),
@@ -69,10 +69,14 @@ impl Scene<'_> {
             loaded_scenes.insert("basicmesh".into(), Rc::new(loaded_scene));
         }
         if true {
-            // TODO: proper resource path mngmt and all
             let path = "./resources/structure.glb";
-            let loaded_scene =
-                LoadedGLTF::load(device.clone(), allocator, commands, &mut textures, path);
+            let loaded_scene = LoadedGLTF::load(
+                device.clone(),
+                allocator.clone(),
+                commands,
+                &mut textures,
+                path,
+            );
             loaded_scenes.insert("structure".into(), Rc::new(loaded_scene));
         }
 

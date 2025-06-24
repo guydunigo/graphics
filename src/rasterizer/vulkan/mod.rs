@@ -353,29 +353,32 @@ impl Camera {
 
     fn on_window_event(&mut self, event: &WindowEvent) {
         if let WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(key),
-                        state,
-                        ..
-                    },
-                ..
-            } = event { match state {
-            ElementState::Pressed => match key {
-                KeyCode::KeyW => self.vel.z = -1.,
-                KeyCode::KeyS => self.vel.z = 1.,
-                KeyCode::KeyA => self.vel.x = -1.,
-                KeyCode::KeyD => self.vel.x = 1.,
-                _ => (),
-            },
-            ElementState::Released => match key {
-                KeyCode::KeyW => self.vel.z = 0.,
-                KeyCode::KeyS => self.vel.z = 0.,
-                KeyCode::KeyA => self.vel.x = 0.,
-                KeyCode::KeyD => self.vel.x = 0.,
-                _ => (),
-            },
-        } }
+            event:
+                KeyEvent {
+                    physical_key: PhysicalKey::Code(key),
+                    state,
+                    ..
+                },
+            ..
+        } = event
+        {
+            match state {
+                ElementState::Pressed => match key {
+                    KeyCode::KeyW => self.vel.z = -1.,
+                    KeyCode::KeyS => self.vel.z = 1.,
+                    KeyCode::KeyA => self.vel.x = -1.,
+                    KeyCode::KeyD => self.vel.x = 1.,
+                    _ => (),
+                },
+                ElementState::Released => match key {
+                    KeyCode::KeyW => self.vel.z = 0.,
+                    KeyCode::KeyS => self.vel.z = 0.,
+                    KeyCode::KeyA => self.vel.x = 0.,
+                    KeyCode::KeyD => self.vel.x = 0.,
+                    _ => (),
+                },
+            }
+        }
     }
 
     fn on_mouse_motion(&mut self, (delta_x, delta_y): (f64, f64), cursor_grabbed: bool) {
