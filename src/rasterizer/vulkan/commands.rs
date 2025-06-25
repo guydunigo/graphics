@@ -317,17 +317,20 @@ impl FrameData {
             }
         }
 
+        // Transparent objects don't write to depth buffer.
+        // To avoid clipping with them, we draw them after.
         draw_ctx
             .opaque_surfaces
             .iter()
-            .for_each(|d| self.draw_render_obj(global_desc, d));
+            .chain(draw_ctx.transparent_surfaces.iter())
+            .for_each(|d| self.draw_mesh(global_desc, d));
 
         unsafe {
             self.device_copy.cmd_end_rendering(self.cmd_buf);
         }
     }
 
-    fn draw_render_obj(&self, global_desc: vk::DescriptorSet, d: &RenderObject) {
+    fn draw_mesh(&self, global_desc: vk::DescriptorSet, d: &RenderObject) {
         unsafe {
             let mat_pip = d.material.pipeline();
             self.device_copy.cmd_bind_pipeline(

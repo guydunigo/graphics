@@ -406,6 +406,10 @@ impl MaterialInstance {
     pub fn pipeline(&self) -> impl Deref<Target = MaterialPipeline> {
         self.pipeline.upgrade().unwrap()
     }
+
+    pub fn pass_type(&self) -> &MaterialPass {
+        &self.pass_type
+    }
 }
 
 #[derive(Clone, Copy)]

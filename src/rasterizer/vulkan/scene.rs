@@ -13,7 +13,7 @@ use super::{
     gltf_loader::LoadedGLTF,
     shaders_loader::ShadersLoader,
     swapchain::VulkanSwapchain,
-    textures::{MaterialInstance, Textures},
+    textures::{MaterialInstance, MaterialPass, Textures},
 };
 
 use ash::{Device, vk};
@@ -376,11 +376,13 @@ impl From<&RenderObject> for GpuDrawPushConstants {
 #[derive(Default)]
 pub struct DrawContext {
     pub opaque_surfaces: Vec<RenderObject>,
+    pub transparent_surfaces: Vec<RenderObject>,
 }
 
 impl DrawContext {
     pub fn clear(&mut self) {
         self.opaque_surfaces.clear();
+        self.transparent_surfaces.clear();
     }
 }
 
@@ -501,7 +503,11 @@ impl Renderable for MeshNode {
                 vertex_buffer_addr: self.mesh.vertex_buffer_address(),
             };
 
-            ctx.opaque_surfaces.push(def);
+            if let MaterialPass::Transparent = s.material.pass_type() {
+                ctx.transparent_surfaces.push(def);
+            } else {
+                ctx.opaque_surfaces.push(def);
+            }
         });
 
         self.node.draw(top_mat, ctx);
