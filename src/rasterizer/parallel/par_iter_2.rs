@@ -65,7 +65,7 @@ impl ParIterEngine2 {
             );
             #[cfg(feature = "stats")]
             par_stats.update_stats(stats);
-            app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
+            app.last_rendering_micros = t.elapsed().as_micros();
         }
 
         {
@@ -87,7 +87,7 @@ impl ParIterEngine2 {
         (0..(size.width * size.height) as usize).for_each(|i| {
             buffer[i] = u64_to_color(self.depth_color_buffer[i].load(Ordering::Relaxed));
         });
-        app.last_buffer_copy_micros = Instant::now().duration_since(t).as_micros();
+        app.last_buffer_copy_micros = t.elapsed().as_micros();
     }
 }
 

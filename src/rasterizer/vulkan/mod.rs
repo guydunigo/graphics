@@ -1,3 +1,5 @@
+#[cfg(feature = "vulkan_stats")]
+use std::time::Instant;
 use std::{
     rc::Rc,
     sync::{Arc, Mutex},
@@ -6,12 +8,13 @@ use std::{
 use ash::vk;
 use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles, vec3};
 use winit::{
+    dpi::PhysicalSize,
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
     window::Window,
 };
 
-use super::{format_debug, settings::Settings};
+use super::settings::Settings;
 use crate::{scene::World, window::AppObserver};
 
 mod base;
@@ -37,6 +40,32 @@ use scene::Scene;
 #[cfg(feature = "stats")]
 use super::Stats;
 
+// TODO: merge with stats + AppObserver ?
+#[cfg(feature = "vulkan_stats")]
+#[derive(Default, Debug, Clone, Copy)]
+struct EngineStats {
+    triangle_count: u32,
+    drawcall_count: u32,
+    resize_micros: u128,
+    ui_micros: u128,
+    wait_fence_micros: u128,
+    compute_shaders_micros: u128,
+    scene_update_micros: u128,
+    mesh_draw_micros: u128,
+    start: EngineStartStats,
+}
+
+#[cfg(feature = "vulkan_stats")]
+#[derive(Default, Debug, Clone, Copy)]
+struct EngineStartStats {
+    base_micros: u128,
+    shaders_micros: u128,
+    swapchain_micros: u128,
+    commands_micros: u128,
+    scene_micros: u128,
+    gui_micros: u128,
+}
+
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
 pub struct VulkanEngine<'a> {
     // Elements are placed in the order they should be dropped, so inverse order of creation.
@@ -52,6 +81,8 @@ pub struct VulkanEngine<'a> {
     bg_effects_data: Vec<ComputePushConstants>,
     camera: Camera,
     current_scene: String,
+    #[cfg(feature = "vulkan_stats")]
+    stats: EngineStats,
 }
 
 impl Drop for VulkanEngine<'_> {
@@ -66,8 +97,16 @@ impl Drop for VulkanEngine<'_> {
 
 impl VulkanEngine<'_> {
     pub fn new(window: Rc<Window>) -> Self {
-        // panic!("{}", size_of::<vk::DescriptorBufferInfo>());
+        #[cfg(feature = "vulkan_stats")]
+        let mut stats = EngineStats::default();
+
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         let base = VulkanBase::new(window);
+        #[cfg(feature = "vulkan_stats")]
+        {
+            stats.start.base_micros = t.elapsed().as_micros();
+        }
 
         let allocator = {
             let mut create_info =
@@ -77,8 +116,20 @@ impl VulkanEngine<'_> {
             Arc::new(Mutex::new(allocator))
         };
 
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         let shaders = ShadersLoader::new(base.device.clone());
+        #[cfg(feature = "vulkan_stats")]
+        {
+            stats.start.shaders_micros = t.elapsed().as_micros();
+        }
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         let swapchain = VulkanSwapchain::new(&base, &shaders, allocator.clone(), None);
+        #[cfg(feature = "vulkan_stats")]
+        {
+            stats.start.swapchain_micros = t.elapsed().as_micros();
+        }
 
         let bg_effects_data = swapchain
             .effects
@@ -87,8 +138,16 @@ impl VulkanEngine<'_> {
             .map(|b| *b.default_data())
             .collect();
 
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         let commands = VulkanCommands::new(&base, allocator.clone());
+        #[cfg(feature = "vulkan_stats")]
+        {
+            stats.start.commands_micros = t.elapsed().as_micros();
+        }
 
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         let scene = Scene::new(
             &swapchain,
             &commands,
@@ -96,10 +155,22 @@ impl VulkanEngine<'_> {
             base.device.clone(),
             allocator.clone(),
         );
+        #[cfg(feature = "vulkan_stats")]
+        {
+            stats.start.scene_micros = t.elapsed().as_micros();
+        }
+
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
+        let gui = VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format());
+        #[cfg(feature = "vulkan_stats")]
+        {
+            stats.start.gui_micros = t.elapsed().as_micros();
+        }
 
         Self {
             scene,
-            gui: VulkanGui::new(&base, allocator.clone(), swapchain.swapchain_img_format()),
+            gui,
             commands,
             swapchain,
             shaders,
@@ -110,6 +181,9 @@ impl VulkanEngine<'_> {
             bg_effects_data,
             camera: Default::default(),
             current_scene: "structure".into(),
+
+            #[cfg(feature = "vulkan_stats")]
+            stats,
         }
     }
 
@@ -119,21 +193,34 @@ impl VulkanEngine<'_> {
 
     pub fn rasterize(
         &mut self,
-        settings: &Settings,
-        world: &World,
+        _settings: &Settings,
+        _world: &World,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         self.swapchain.resize_if_necessary(
             &self.base,
             &self.shaders,
             self.commands.allocator.clone(),
         );
+        #[cfg(feature = "vulkan_stats")]
+        {
+            self.stats.resize_micros = t.elapsed().as_micros();
+        }
 
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         let generated_ui = self.gui.generate(|ctx| {
             ui(
                 ctx,
-                format_debug(settings, world, app, self.base.window.inner_size(), None),
+                format_debug(
+                    app,
+                    self.base.window.inner_size(),
+                    #[cfg(feature = "vulkan_stats")]
+                    self.stats,
+                ),
                 &mut self.current_bg_effect,
                 &mut self.swapchain.render_scale,
                 &self.swapchain.effects.bg_effects[..],
@@ -142,12 +229,28 @@ impl VulkanEngine<'_> {
                 self.scene.loaded_scenes.keys(),
             )
         });
+        #[cfg(feature = "vulkan_stats")]
+        {
+            self.stats.ui_micros = t.elapsed().as_micros();
+        }
 
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         self.update_scene();
+        #[cfg(feature = "vulkan_stats")]
+        {
+            self.stats.scene_update_micros = t.elapsed().as_micros();
+        }
 
         let image = self.swapchain.draw_img();
 
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         self.commands.current_frame().wait_for_fences();
+        #[cfg(feature = "vulkan_stats")]
+        {
+            self.stats.wait_fence_micros = t.elapsed().as_micros();
+        }
 
         let current_frame = self.commands.current_frame_mut();
         current_frame.clear_descriptors();
@@ -173,11 +276,17 @@ impl VulkanEngine<'_> {
             vk::ImageLayout::GENERAL,
         );
 
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
         current_frame.draw_background(
             &self.swapchain,
             self.current_bg_effect,
             &self.bg_effects_data[self.current_bg_effect],
         );
+        #[cfg(feature = "vulkan_stats")]
+        {
+            self.stats.compute_shaders_micros = t.elapsed().as_micros();
+        }
 
         current_frame.transition_image(
             *image,
@@ -195,7 +304,24 @@ impl VulkanEngine<'_> {
             self.scene
                 .upload_data(&self.base.device, self.allocator.clone(), global_desc);
 
-        current_frame.draw_geometries(&self.swapchain, &self.scene.main_draw_ctx, global_desc);
+        #[cfg(feature = "vulkan_stats")]
+        {
+            self.stats.drawcall_count = 0;
+            self.stats.triangle_count = 0;
+        }
+        #[cfg(feature = "vulkan_stats")]
+        let t = Instant::now();
+        current_frame.draw_geometries(
+            &self.swapchain,
+            &self.scene.main_draw_ctx,
+            global_desc,
+            #[cfg(feature = "vulkan_stats")]
+            &mut self.stats,
+        );
+        #[cfg(feature = "vulkan_stats")]
+        {
+            self.stats.mesh_draw_micros = t.elapsed().as_micros();
+        }
 
         current_frame.transition_image(
             *image,
@@ -276,47 +402,51 @@ fn ui<'a>(
     scenes: impl Iterator<Item = &'a String>,
 ) {
     egui::Window::new("debug").show(ctx, |ui| ui.label(debug));
-    egui::Window::new("Background").show(ctx, |ui| {
-        ui.add(egui::Slider::new(render_scale, 0.3..=1.).text("Render scale"));
-        if !bg_effects.is_empty() {
-            ui.label("Selected effect :");
-            bg_effects.iter().enumerate().for_each(|(i, n)| {
-                ui.radio_value(current_bg_effect, i, n.name.into_str());
-            });
-
-            let current_bg_effect_data = &mut bg_effects_data[*current_bg_effect];
-            egui::Grid::new("data").num_columns(5).show(ui, |ui| {
-                ui.label("Data 0");
-                current_bg_effect_data.data0.iter_mut().for_each(|d| {
-                    ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+    egui::Window::new("Background")
+        .default_open(false)
+        .show(ctx, |ui| {
+            ui.add(egui::Slider::new(render_scale, 0.3..=1.).text("Render scale"));
+            if !bg_effects.is_empty() {
+                ui.label("Selected effect :");
+                bg_effects.iter().enumerate().for_each(|(i, n)| {
+                    ui.radio_value(current_bg_effect, i, n.name.into_str());
                 });
-                ui.end_row();
 
-                ui.label("Data 1");
-                current_bg_effect_data.data1.iter_mut().for_each(|d| {
-                    ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
-                });
-                ui.end_row();
+                let current_bg_effect_data = &mut bg_effects_data[*current_bg_effect];
+                egui::Grid::new("data").num_columns(5).show(ui, |ui| {
+                    ui.label("Data 0");
+                    current_bg_effect_data.data0.iter_mut().for_each(|d| {
+                        ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+                    });
+                    ui.end_row();
 
-                ui.label("Data 2");
-                current_bg_effect_data.data2.iter_mut().for_each(|d| {
-                    ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
-                });
-                ui.end_row();
+                    ui.label("Data 1");
+                    current_bg_effect_data.data1.iter_mut().for_each(|d| {
+                        ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+                    });
+                    ui.end_row();
 
-                ui.label("Data 3");
-                current_bg_effect_data.data3.iter_mut().for_each(|d| {
-                    ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+                    ui.label("Data 2");
+                    current_bg_effect_data.data2.iter_mut().for_each(|d| {
+                        ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+                    });
+                    ui.end_row();
+
+                    ui.label("Data 3");
+                    current_bg_effect_data.data3.iter_mut().for_each(|d| {
+                        ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+                    });
                 });
-            });
-        }
-    });
-    egui::Window::new("Scene").show(ctx, |ui| {
-        ui.label("Selected scene :");
-        scenes.for_each(|n| {
-            ui.radio_value(current_scene, n.clone(), n);
+            }
         });
-    });
+    egui::Window::new("Scene")
+        .default_open(false)
+        .show(ctx, |ui| {
+            ui.label("Selected scene :");
+            scenes.for_each(|n| {
+                ui.radio_value(current_scene, n.clone(), n);
+            });
+        });
 }
 
 // TODO: merge camera with general engine
@@ -402,4 +532,25 @@ impl Camera {
             self.pitch -= delta_y as f32 / 200.;
         }
     }
+}
+
+fn format_debug(
+    app: &AppObserver,
+    size: PhysicalSize<u32>,
+    #[cfg(feature = "vulkan_stats")] stats: EngineStats,
+) -> String {
+    #[cfg(feature = "vulkan_stats")]
+    let stats = format!("{:#?}", stats);
+    #[cfg(not(feature = "vulkan_stats"))]
+    let stats = "Stats disabled";
+    format!(
+        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\n{}",
+        app.fps_avg().round(),
+        app.last_full_render_loop_micros(),
+        app.frame_avg_micros(),
+        size.width,
+        size.height,
+        // TODO: camera pas + rot
+        stats,
+    )
 }

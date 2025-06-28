@@ -90,7 +90,7 @@ pub trait ParIterEngine {
             );
             #[cfg(feature = "stats")]
             par_stats.update_stats(stats);
-            app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
+            app.last_rendering_micros = t.elapsed().as_micros();
         }
 
         if settings.parallel_text {
@@ -147,7 +147,7 @@ pub trait ParIterEngine {
                 buffer[i] = u64_to_color(depth_color_buffer[i].load(Ordering::Relaxed));
             });
         }
-        app.last_buffer_copy_micros = Instant::now().duration_since(t).as_micros();
+        app.last_buffer_copy_micros = t.elapsed().as_micros();
 
         if !settings.parallel_text {
             let cursor_color =
@@ -300,7 +300,7 @@ fn clean_resize_buffer(depth_color_buffer: &mut Arc<[AtomicU64]>, size: Physical
     } else {
         *depth_color_buffer = init_buffer(tot_size, || AtomicU64::new(DEFAULT_DEPTH_COLOR));
     }
-    Instant::now().duration_since(t).as_micros()
+    t.elapsed().as_micros()
 }
 
 const fn depth_to_u64(depth: f32) -> u64 {
@@ -361,22 +361,26 @@ fn draw_vertice_basic(
     v: Vec3f,
     texture: &Texture,
 ) {
-    if v.x >= 1. && v.x < (size.width as f32) - 1. && v.y >= 1. && v.y < (size.height as f32) - 1.
-        && let Some(i) = buffer_index(v, size) {
-            let color = match texture {
-                Texture::Color(col) => *col,
-                // TODO: Better color calculus
-                Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
-                    + Vec4u::from_color_u32(*c1)
-                    + Vec4u::from_color_u32(*c2))
-                    / 3.)
-                    .as_color_u32(),
-            } as u64;
+    if v.x >= 1.
+        && v.x < (size.width as f32) - 1.
+        && v.y >= 1.
+        && v.y < (size.height as f32) - 1.
+        && let Some(i) = buffer_index(v, size)
+    {
+        let color = match texture {
+            Texture::Color(col) => *col,
+            // TODO: Better color calculus
+            Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
+                + Vec4u::from_color_u32(*c1)
+                + Vec4u::from_color_u32(*c2))
+                / 3.)
+                .as_color_u32(),
+        } as u64;
 
-            depth_color_buffer[i].store(color, Ordering::Relaxed);
-            depth_color_buffer[i - 1].store(color, Ordering::Relaxed);
-            depth_color_buffer[i + 1].store(color, Ordering::Relaxed);
-            depth_color_buffer[i - (size.width as usize)].store(color, Ordering::Relaxed);
-            depth_color_buffer[i + (size.width as usize)].store(color, Ordering::Relaxed);
-        }
+        depth_color_buffer[i].store(color, Ordering::Relaxed);
+        depth_color_buffer[i - 1].store(color, Ordering::Relaxed);
+        depth_color_buffer[i + 1].store(color, Ordering::Relaxed);
+        depth_color_buffer[i - (size.width as usize)].store(color, Ordering::Relaxed);
+        depth_color_buffer[i + (size.width as usize)].store(color, Ordering::Relaxed);
+    }
 }

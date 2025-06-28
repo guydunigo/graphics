@@ -214,6 +214,7 @@ fn format_debug(
     #[cfg(not(feature = "stats"))]
     let stats = "Stats disabled";
 
+    // TODO: describe each numbers
     format!(
         "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\n{}x{}\n{} {} {} {}\n{:?}\n{}",
         app.fps_avg().round(),

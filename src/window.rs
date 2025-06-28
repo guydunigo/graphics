@@ -100,7 +100,13 @@ impl InitializedWindow<'_> {
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        self.engine.rasterize(&self.settings, world, app);
+        self.engine.rasterize(
+            &self.settings,
+            world,
+            app,
+            #[cfg(feature = "stats")]
+            stats,
+        );
     }
 
     pub fn set_next_engine(&mut self) {
@@ -338,9 +344,8 @@ impl ApplicationHandler for App<'_> {
 
                 obs.update_app(self);
 
-                self.last_full_render_loop_micros = Instant::now()
-                    .duration_since(self.last_frame_start_time)
-                    .as_micros();
+                self.last_full_render_loop_micros =
+                    self.last_frame_start_time.elapsed().as_micros();
             }
             _ => (),
         }

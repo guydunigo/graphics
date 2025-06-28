@@ -6,6 +6,9 @@ use std::{
 
 use ash::{Device, vk};
 
+#[cfg(feature = "vulkan_stats")]
+use super::EngineStats;
+
 use super::{
     allocated::AllocatedBuffer,
     base::VulkanBase,
@@ -275,6 +278,7 @@ impl FrameData {
         swapchain: &VulkanSwapchain,
         draw_ctx: &DrawContext,
         global_desc: vk::DescriptorSet,
+        #[cfg(feature = "vulkan_stats")] stats: &mut EngineStats,
     ) {
         let color_attachments = [attachment_info(
             *swapchain.draw_img_view(),
@@ -323,6 +327,13 @@ impl FrameData {
             .opaque_surfaces
             .iter()
             .chain(draw_ctx.transparent_surfaces.iter())
+            .inspect(|d| {
+                #[cfg(feature = "vulkan_stats")]
+                {
+                    stats.drawcall_count += 1;
+                    stats.triangle_count += d.index_count / 3;
+                }
+            })
             .for_each(|d| self.draw_mesh(global_desc, d));
 
         unsafe {

@@ -55,7 +55,7 @@ pub trait SingleThreadedEngine {
             #[cfg(feature = "stats")]
             stats,
         );
-        app.last_rendering_micros = Instant::now().duration_since(t).as_micros();
+        app.last_rendering_micros = t.elapsed().as_micros();
 
         {
             let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
@@ -88,7 +88,7 @@ fn clean_resize_buffers<B: DerefMut<Target = [u32]>>(
     depth_buffer.resize(size.width as usize * size.height as usize, f32::INFINITY);
     depth_buffer.fill(f32::INFINITY);
 
-    Instant::now().duration_since(t).as_micros()
+    t.elapsed().as_micros()
 }
 
 fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
