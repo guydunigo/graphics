@@ -34,4 +34,7 @@ stats = []
 dbg_mem = []
 vulkan_linked = ["ash/linked", "shaderc/prefer-static-linking", "vk-mem/linked"]
 vulkan_stats = []
-default = ["vulkan_stats"]
+validation_layers = []
+
+# default = ["vulkan_stats"]
+default = ["vulkan_stats", "validation_layers"]

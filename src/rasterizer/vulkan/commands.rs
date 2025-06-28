@@ -1,5 +1,7 @@
 use std::{
     cell::{RefCell, RefMut},
+    ops::Deref,
+    ptr,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -7,9 +9,10 @@ use std::{
 use ash::{Device, vk};
 
 #[cfg(feature = "vulkan_stats")]
-use super::EngineStats;
+use super::VulkanStatsCounts;
 
 use super::{
+    VulkanSettings,
     allocated::AllocatedBuffer,
     base::VulkanBase,
     compute_shaders::ComputePushConstants,
@@ -18,6 +21,7 @@ use super::{
     gui::{GeneratedUi, VulkanGui},
     scene::{DrawContext, RenderObject},
     swapchain::VulkanSwapchain,
+    textures::{MaterialInstance, MaterialPipeline},
 };
 
 pub const FRAME_OVERLAP: usize = 2;
@@ -275,10 +279,11 @@ impl FrameData {
 
     pub fn draw_geometries(
         &self,
+        settings: &VulkanSettings,
         swapchain: &VulkanSwapchain,
         draw_ctx: &DrawContext,
         global_desc: vk::DescriptorSet,
-        #[cfg(feature = "vulkan_stats")] stats: &mut EngineStats,
+        #[cfg(feature = "vulkan_stats")] stats: &mut VulkanStatsCounts,
     ) {
         let color_attachments = [attachment_info(
             *swapchain.draw_img_view(),
@@ -321,62 +326,141 @@ impl FrameData {
             }
         }
 
-        // Transparent objects don't write to depth buffer.
-        // To avoid clipping with them, we draw them after.
-        draw_ctx
-            .opaque_surfaces
-            .iter()
-            .chain(draw_ctx.transparent_surfaces.iter())
-            .inspect(|d| {
-                #[cfg(feature = "vulkan_stats")]
-                {
-                    stats.drawcall_count += 1;
-                    stats.triangle_count += d.index_count / 3;
-                }
-            })
-            .for_each(|d| self.draw_mesh(global_desc, d));
+        {
+            let mut last_pip = None;
+            let mut last_mat = None;
+            let mut last_index_buffer = None;
+            // Transparent objects don't write to depth buffer.
+            // To avoid clipping with them, we draw them after.
+            draw_ctx
+                .opaque_surfaces
+                .iter()
+                .chain(draw_ctx.transparent_surfaces.iter())
+                .for_each(|d| {
+                    #[cfg(feature = "vulkan_stats")]
+                    {
+                        stats.drawcall_count += 1;
+                        stats.triangle_count += d.index_count / 3;
+                    }
+                    self.draw_mesh(
+                        settings,
+                        /* draw_extent, */
+                        global_desc,
+                        d,
+                        &mut last_pip,
+                        &mut last_mat,
+                        &mut last_index_buffer,
+                        stats,
+                    )
+                });
+        }
 
         unsafe {
             self.device_copy.cmd_end_rendering(self.cmd_buf);
         }
     }
 
-    fn draw_mesh(&self, global_desc: vk::DescriptorSet, d: &RenderObject) {
-        unsafe {
-            let mat_pip = d.material.pipeline();
-            self.device_copy.cmd_bind_pipeline(
-                self.cmd_buf,
-                vk::PipelineBindPoint::GRAPHICS,
-                mat_pip.pipeline,
-            );
+    fn draw_mesh(
+        &self,
+        settings: &VulkanSettings,
+        // draw_extent: vk::Extent2D,
+        global_desc: vk::DescriptorSet,
+        d: &RenderObject,
+        last_pip: &mut Option<*const MaterialPipeline>,
+        last_mat: &mut Option<*const MaterialInstance>,
+        last_index_buffer: &mut Option<vk::Buffer>,
+        stats: &mut VulkanStatsCounts,
+    ) {
+        let mat_pip = d.material.pipeline();
+        if settings.rebinding
+            || last_mat
+                .map(|l| !ptr::eq(l, d.material.deref()))
+                .unwrap_or(true)
+        {
+            stats.bound_mat += 1;
+            *last_mat = Some(Rc::as_ptr(&d.material));
 
-            let descs = [global_desc];
-            self.device_copy.cmd_bind_descriptor_sets(
-                self.cmd_buf,
-                vk::PipelineBindPoint::GRAPHICS,
-                mat_pip.layout,
-                0,
-                &descs[..],
-                &[],
-            );
+            if settings.rebinding
+                || last_pip
+                    .map(|l| !ptr::eq(l, mat_pip.deref()))
+                    .unwrap_or(true)
+            {
+                stats.bound_mat_pip += 1;
+                *last_pip = Some(mat_pip.deref());
+
+                unsafe {
+                    self.device_copy.cmd_bind_pipeline(
+                        self.cmd_buf,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        mat_pip.pipeline,
+                    );
+
+                    let descs = [global_desc];
+                    self.device_copy.cmd_bind_descriptor_sets(
+                        self.cmd_buf,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        mat_pip.layout,
+                        0,
+                        &descs[..],
+                        &[],
+                    );
+                }
+
+                /*
+                // Why the need to do it here ?
+                {
+                    let viewports = [vk::Viewport::default()
+                        .width(draw_extent.width as f32)
+                        .height(draw_extent.height as f32)
+                        .min_depth(0.)
+                        .max_depth(1.)];
+                    unsafe {
+                        self.device_copy
+                            .cmd_set_viewport(self.cmd_buf, 0, &viewports[..]);
+                    }
+                }
+                {
+                    let scissors = [vk::Rect2D::default().extent(draw_extent)];
+                    unsafe {
+                        self.device_copy
+                            .cmd_set_scissor(self.cmd_buf, 0, &scissors[..]);
+                    }
+                }
+                */
+            }
 
             let descs = [d.material.material_set];
-            self.device_copy.cmd_bind_descriptor_sets(
-                self.cmd_buf,
-                vk::PipelineBindPoint::GRAPHICS,
-                mat_pip.layout,
-                1,
-                &descs[..],
-                &[],
-            );
+            unsafe {
+                self.device_copy.cmd_bind_descriptor_sets(
+                    self.cmd_buf,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    mat_pip.layout,
+                    1,
+                    &descs[..],
+                    &[],
+                );
+            }
+        }
 
-            self.device_copy.cmd_bind_index_buffer(
-                self.cmd_buf,
-                d.index_buffer,
-                0,
-                vk::IndexType::UINT32,
-            );
+        if settings.rebinding
+            || last_index_buffer
+                .map(|l| l != d.index_buffer)
+                .unwrap_or(true)
+        {
+            stats.bound_index_buf += 1;
+            *last_index_buffer = Some(d.index_buffer);
 
+            unsafe {
+                self.device_copy.cmd_bind_index_buffer(
+                    self.cmd_buf,
+                    d.index_buffer,
+                    0,
+                    vk::IndexType::UINT32,
+                );
+            }
+        }
+
+        unsafe {
             self.device_copy.cmd_push_constants(
                 self.cmd_buf,
                 mat_pip.layout,
@@ -387,7 +471,7 @@ impl FrameData {
 
             self.device_copy
                 .cmd_draw_indexed(self.cmd_buf, d.index_count, 1, d.first_index, 0, 0);
-        };
+        }
     }
 
     pub fn descriptors_mut<'a>(&'a self) -> RefMut<'a, DescriptorAllocatorGrowable> {

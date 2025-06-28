@@ -43,27 +43,54 @@ use super::Stats;
 // TODO: merge with stats + AppObserver ?
 #[cfg(feature = "vulkan_stats")]
 #[derive(Default, Debug, Clone, Copy)]
-struct EngineStats {
-    triangle_count: u32,
-    drawcall_count: u32,
+struct VulkanStats {
+    counts: VulkanStatsCounts,
+
     resize_micros: u128,
     ui_micros: u128,
     wait_fence_micros: u128,
     compute_shaders_micros: u128,
     scene_update_micros: u128,
     mesh_draw_micros: u128,
-    start: EngineStartStats,
+    start: VulkanStatsStart,
 }
 
 #[cfg(feature = "vulkan_stats")]
 #[derive(Default, Debug, Clone, Copy)]
-struct EngineStartStats {
+struct VulkanStatsStart {
     base_micros: u128,
     shaders_micros: u128,
     swapchain_micros: u128,
     commands_micros: u128,
     scene_micros: u128,
     gui_micros: u128,
+}
+
+#[cfg(feature = "vulkan_stats")]
+#[derive(Default, Debug, Clone, Copy)]
+pub struct VulkanStatsCounts {
+    triangle_count: u32,
+    drawcall_count: u32,
+    bound_mat: u32,
+    bound_mat_pip: u32,
+    bound_index_buf: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct VulkanSettings {
+    _validation_layers: bool,
+    rebinding: bool,
+    sorting: bool,
+}
+
+impl Default for VulkanSettings {
+    fn default() -> Self {
+        Self {
+            _validation_layers: cfg!(feature = "validation_layers"),
+            rebinding: false,
+            sorting: false,
+        }
+    }
 }
 
 /// Inspired from vkguide.dev and ash-examples/src/lib.rs since we don't have VkBootstrap
@@ -81,8 +108,10 @@ pub struct VulkanEngine<'a> {
     bg_effects_data: Vec<ComputePushConstants>,
     camera: Camera,
     current_scene: String,
+
+    settings: VulkanSettings,
     #[cfg(feature = "vulkan_stats")]
-    stats: EngineStats,
+    stats: VulkanStats,
 }
 
 impl Drop for VulkanEngine<'_> {
@@ -98,7 +127,7 @@ impl Drop for VulkanEngine<'_> {
 impl VulkanEngine<'_> {
     pub fn new(window: Rc<Window>) -> Self {
         #[cfg(feature = "vulkan_stats")]
-        let mut stats = EngineStats::default();
+        let mut stats = VulkanStats::default();
 
         #[cfg(feature = "vulkan_stats")]
         let t = Instant::now();
@@ -182,6 +211,7 @@ impl VulkanEngine<'_> {
             camera: Default::default(),
             current_scene: "structure".into(),
 
+            settings: Default::default(),
             #[cfg(feature = "vulkan_stats")]
             stats,
         }
@@ -227,6 +257,7 @@ impl VulkanEngine<'_> {
                 &mut self.bg_effects_data,
                 &mut self.current_scene,
                 self.scene.loaded_scenes.keys(),
+                &mut self.settings,
             )
         });
         #[cfg(feature = "vulkan_stats")]
@@ -306,17 +337,17 @@ impl VulkanEngine<'_> {
 
         #[cfg(feature = "vulkan_stats")]
         {
-            self.stats.drawcall_count = 0;
-            self.stats.triangle_count = 0;
+            self.stats.counts = Default::default();
         }
         #[cfg(feature = "vulkan_stats")]
         let t = Instant::now();
         current_frame.draw_geometries(
+            &self.settings,
             &self.swapchain,
             &self.scene.main_draw_ctx,
             global_desc,
             #[cfg(feature = "vulkan_stats")]
-            &mut self.stats,
+            &mut self.stats.counts,
         );
         #[cfg(feature = "vulkan_stats")]
         {
@@ -400,8 +431,20 @@ fn ui<'a>(
     bg_effects_data: &mut [ComputePushConstants],
     current_scene: &mut String,
     scenes: impl Iterator<Item = &'a String>,
+    settings: &mut VulkanSettings,
 ) {
-    egui::Window::new("debug").show(ctx, |ui| ui.label(debug));
+    egui::Window::new("Debug").show(ctx, |ui| ui.label(debug));
+    egui::Window::new("Settings").show(ctx, |ui| {
+        ui.add_enabled(
+            false,
+            egui::Checkbox::new(
+                &mut cfg!(feature = "validation_layers"),
+                "Validation layers",
+            ),
+        );
+        ui.checkbox(&mut settings.rebinding, "Rebinding");
+        ui.checkbox(&mut settings.sorting, "Sorting");
+    });
     egui::Window::new("Background")
         .default_open(false)
         .show(ctx, |ui| {
@@ -537,7 +580,7 @@ impl Camera {
 fn format_debug(
     app: &AppObserver,
     size: PhysicalSize<u32>,
-    #[cfg(feature = "vulkan_stats")] stats: EngineStats,
+    #[cfg(feature = "vulkan_stats")] stats: VulkanStats,
 ) -> String {
     #[cfg(feature = "vulkan_stats")]
     let stats = format!("{:#?}", stats);
