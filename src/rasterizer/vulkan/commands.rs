@@ -1,5 +1,6 @@
 use std::{
     cell::{RefCell, RefMut},
+    cmp::Ordering,
     ops::Deref,
     ptr,
     rc::Rc,
@@ -326,15 +327,37 @@ impl FrameData {
             }
         }
 
+        // Sorting by material and index_buffer to minimize rebinding
+        // Binding material is longer, so we order by it first.
         {
+            let mut opaque_draws = Vec::with_capacity(draw_ctx.opaque_surfaces.len());
+            (0..draw_ctx.opaque_surfaces.len()).for_each(|i| opaque_draws.push(i));
+            if settings.sorting {
+                // TODO: use key/hash for faster comp ? (20bits index, 44 for key/hash)
+                opaque_draws.sort_by(|a, b| {
+                    let a = &draw_ctx.opaque_surfaces[*a];
+                    let b = &draw_ctx.opaque_surfaces[*b];
+
+                    let cmp_mat = Rc::as_ptr(&a.material).cmp(&Rc::as_ptr(&b.material));
+
+                    if let Ordering::Equal = cmp_mat {
+                        vk::Buffer::cmp(&a.index_buffer, &b.index_buffer)
+                    } else {
+                        cmp_mat
+                    }
+                });
+            }
+
+            // TODO: for transparent, order by depth of center ?
+
             let mut last_pip = None;
             let mut last_mat = None;
             let mut last_index_buffer = None;
             // Transparent objects don't write to depth buffer.
             // To avoid clipping with them, we draw them after.
-            draw_ctx
-                .opaque_surfaces
+            opaque_draws
                 .iter()
+                .map(|i| &draw_ctx.opaque_surfaces[*i])
                 .chain(draw_ctx.transparent_surfaces.iter())
                 .for_each(|d| {
                     #[cfg(feature = "vulkan_stats")]

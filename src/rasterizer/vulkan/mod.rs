@@ -88,7 +88,7 @@ impl Default for VulkanSettings {
         Self {
             _validation_layers: cfg!(feature = "validation_layers"),
             rebinding: false,
-            sorting: false,
+            sorting: true,
         }
     }
 }
