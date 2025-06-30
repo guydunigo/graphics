@@ -732,18 +732,29 @@ pub fn transition_image(
 
     // TODO: replace ALL_COMMANDS by more accurate masks to not stop whole GPU pipeline
     // https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples
-    let image_barrier = vk::ImageMemoryBarrier2::default()
-        .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
-        .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
-        .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
-        .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ)
+    // TODO: let image_barrier = vk::ImageMemoryBarrier2::default()
+    //   .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+    //   .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+    let image_barrier = vk::ImageMemoryBarrier::default()
+        .src_access_mask(vk::AccessFlags::MEMORY_WRITE)
+        .dst_access_mask(vk::AccessFlags::MEMORY_WRITE | vk::AccessFlags::MEMORY_READ)
         .old_layout(current_layout)
         .new_layout(new_layout)
         .subresource_range(sub_image)
         .image(image);
 
     let ibs = [image_barrier];
-    let dep_info = vk::DependencyInfo::default().image_memory_barriers(&ibs);
-
-    unsafe { device.cmd_pipeline_barrier2(cmd_buf, &dep_info) };
+    // TODO: let dep_info = vk::DependencyInfo::default().image_memory_barriers(&ibs);
+    // TODO: unsafe { device.cmd_pipeline_barrier2(cmd_buf, &dep_info) };
+    unsafe {
+        device.cmd_pipeline_barrier(
+            cmd_buf,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::PipelineStageFlags::ALL_COMMANDS,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &ibs,
+        );
+    };
 }

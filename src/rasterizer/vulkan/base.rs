@@ -281,7 +281,8 @@ fn find_physical_device(
                     vk::api_version_patch(app_info.api_version),
                 );
 
-                false
+                // TODO : false
+                true
             } else {
                 true
             }
@@ -313,7 +314,8 @@ fn find_physical_device(
                 has_features = false;
             }
 
-            has_features
+            // TODO: has_features
+            true
         })
         .filter(|pdevice| {
             let available_exts: Vec<vk::ExtensionProperties> = unsafe {
@@ -384,8 +386,8 @@ fn device(instance: &Instance, chosen_gpu: vk::PhysicalDevice, queue_family_inde
         .queue_priorities(&[1.0]);
 
     let mut features12 = vk::PhysicalDeviceVulkan12Features::default()
-        .buffer_device_address(true)
-        .descriptor_indexing(true);
+        .buffer_device_address(false)
+        .descriptor_indexing(false);
     let mut features13 = vk::PhysicalDeviceVulkan13Features::default()
         .dynamic_rendering(true)
         .synchronization2(true);
