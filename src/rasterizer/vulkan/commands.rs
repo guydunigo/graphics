@@ -332,7 +332,7 @@ impl FrameData {
         {
             let mut opaque_draws = Vec::with_capacity(draw_ctx.opaque_surfaces.len());
             (0..draw_ctx.opaque_surfaces.len()).for_each(|i| opaque_draws.push(i));
-            if settings.sorting {
+            if settings.bind_sorting {
                 // TODO: use key/hash for faster comp ? (20bits index, 44 for key/hash)
                 opaque_draws.sort_by(|a, b| {
                     let a = &draw_ctx.opaque_surfaces[*a];

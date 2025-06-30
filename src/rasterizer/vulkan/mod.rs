@@ -80,7 +80,7 @@ pub struct VulkanStatsCounts {
 struct VulkanSettings {
     _validation_layers: bool,
     rebinding: bool,
-    sorting: bool,
+    bind_sorting: bool,
 }
 
 impl Default for VulkanSettings {
@@ -88,7 +88,7 @@ impl Default for VulkanSettings {
         Self {
             _validation_layers: cfg!(feature = "validation_layers"),
             rebinding: false,
-            sorting: true,
+            bind_sorting: true,
         }
     }
 }
@@ -443,7 +443,7 @@ fn ui<'a>(
             ),
         );
         ui.checkbox(&mut settings.rebinding, "Rebinding");
-        ui.checkbox(&mut settings.sorting, "Sorting");
+        ui.checkbox(&mut settings.bind_sorting, "Bind sorting");
     });
     egui::Window::new("Background")
         .default_open(false)
