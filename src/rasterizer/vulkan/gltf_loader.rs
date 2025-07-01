@@ -21,7 +21,9 @@ use super::{
     allocated::{AllocatedBuffer, AllocatedImage, MyMemoryUsage},
     commands::VulkanCommands,
     descriptors::DescriptorAllocatorGrowable,
-    scene::{GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable, Vertex},
+    scene::{
+        Bounds, GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable, Vertex,
+    },
     textures::{MaterialConstants, MaterialInstance, MaterialPass, MaterialResources, Textures},
 };
 
@@ -483,6 +485,8 @@ fn load_meshes(
                             count: count as u32,
                             material: materials_vec[primitive.material().index().unwrap_or(0)]
                                 .clone(),
+
+                            bounds: Bounds::new(&vertices[initial_vtx..]),
                         }
                     })
                     .collect();

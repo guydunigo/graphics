@@ -17,7 +17,7 @@ use super::{
 };
 
 use ash::{Device, vk};
-use glam::{Mat4, Vec3, Vec4, vec3, vec4};
+use glam::{Mat4, Vec3, Vec4, Vec4Swizzles, vec3, vec4};
 
 // TODO: proper resource path mngmt and all
 const SCENES: [(&str, &str); 6] = [
@@ -318,10 +318,65 @@ impl GpuMeshBuffers {
     // }
 }
 
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Bounds {
+    pub origin: Vec3,
+    pub extents: Vec3,
+    // pub sphere_radius: f32,
+}
+
+impl Bounds {
+    pub fn new(vertices: &[Vertex]) -> Self {
+        let (min, max) = vertices.iter().fold(
+            (vertices[0].position, vertices[0].position),
+            |(min, max), p| (min.min(p.position), max.max(p.position)),
+        );
+
+        let extents = (max - min) / 2.;
+        Self {
+            origin: (max + min) / 2.,
+            extents,
+            // sphere_radius: extents.length(),
+        }
+    }
+
+    // TODO: is it optimal ?
+    pub fn is_visible(&self, view_proj: &Mat4, transform: &Mat4) -> bool {
+        let corners = [
+            vec3(1., 1., 1.),
+            vec3(1., 1., -1.),
+            vec3(1., -1., 1.),
+            vec3(1., -1., -1.),
+            vec3(-1., 1., 1.),
+            vec3(-1., 1., -1.),
+            vec3(-1., -1., 1.),
+            vec3(-1., -1., -1.),
+        ];
+
+        let matrix = view_proj * transform;
+
+        let min = vec3(1.5, 1.5, 1.5);
+        let max = vec3(-1.5, -1.5, -1.5);
+
+        let (min, max) = corners.iter().fold((min, max), |(min, max), c| {
+            let mut v = matrix * (self.origin + c * self.extents).extend(1.);
+            v.x = v.x / v.w;
+            v.y = v.y / v.w;
+            v.z = v.z / v.w;
+
+            (min.min(v.xyz()), max.max(v.xyz()))
+        });
+
+        min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.
+    }
+}
+
 pub struct GeoSurface {
     pub start_index: u32,
     pub count: u32,
     pub material: Rc<MaterialInstance>,
+
+    pub bounds: Bounds,
 }
 
 pub struct MeshAsset {
@@ -360,6 +415,8 @@ pub struct RenderObject {
 
     pub material: Rc<MaterialInstance>,
 
+    bounds: Bounds,
+
     transform: Mat4,
     vertex_buffer_addr: vk::DeviceAddress,
 }
@@ -370,6 +427,12 @@ impl From<&RenderObject> for GpuDrawPushConstants {
             world_mat: value.transform,
             vertex_buffer: value.vertex_buffer_addr,
         }
+    }
+}
+
+impl RenderObject {
+    pub fn is_visible(&self, view_proj: &Mat4) -> bool {
+        self.bounds.is_visible(view_proj, &self.transform)
     }
 }
 
@@ -499,6 +562,9 @@ impl Renderable for MeshNode {
                 first_index: s.start_index,
                 index_buffer: *self.mesh.index_buffer(),
                 material: s.material.clone(),
+
+                bounds: s.bounds,
+
                 transform: node_mat,
                 vertex_buffer_addr: self.mesh.vertex_buffer_address(),
             };
