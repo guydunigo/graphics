@@ -8,6 +8,7 @@ use std::{
 };
 
 use ash::{Device, vk};
+use glam::Mat4;
 
 #[cfg(feature = "vulkan_stats")]
 use super::VulkanStatsCounts;
@@ -282,6 +283,7 @@ impl FrameData {
         &self,
         settings: &VulkanSettings,
         swapchain: &VulkanSwapchain,
+        view_proj: &Mat4,
         draw_ctx: &DrawContext,
         global_desc: vk::DescriptorSet,
         #[cfg(feature = "vulkan_stats")] stats: &mut VulkanStatsCounts,
@@ -331,7 +333,11 @@ impl FrameData {
         // Binding material is longer, so we order by it first.
         {
             let mut opaque_draws = Vec::with_capacity(draw_ctx.opaque_surfaces.len());
-            (0..draw_ctx.opaque_surfaces.len()).for_each(|i| opaque_draws.push(i));
+            (0..draw_ctx.opaque_surfaces.len())
+                .filter(|i| {
+                    !settings.fustrum_culling || draw_ctx.opaque_surfaces[*i].is_visible(view_proj)
+                })
+                .for_each(|i| opaque_draws.push(i));
             if settings.bind_sorting {
                 // TODO: use key/hash for faster comp ? (20bits index, 44 for key/hash)
                 opaque_draws.sort_by(|a, b| {
@@ -348,7 +354,7 @@ impl FrameData {
                 });
             }
 
-            // TODO: for transparent, order by depth of center ?
+            // TODO: for transparent, order by depth of bounding or pipelines (fewer?) ?
 
             let mut last_pip = None;
             let mut last_mat = None;
@@ -358,7 +364,12 @@ impl FrameData {
             opaque_draws
                 .iter()
                 .map(|i| &draw_ctx.opaque_surfaces[*i])
-                .chain(draw_ctx.transparent_surfaces.iter())
+                .chain(
+                    draw_ctx
+                        .transparent_surfaces
+                        .iter()
+                        .filter(|s| !settings.fustrum_culling || s.is_visible(view_proj)),
+                )
                 .for_each(|d| {
                     #[cfg(feature = "vulkan_stats")]
                     {

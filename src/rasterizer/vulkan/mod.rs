@@ -81,6 +81,7 @@ struct VulkanSettings {
     _validation_layers: bool,
     rebinding: bool,
     bind_sorting: bool,
+    fustrum_culling: bool,
 }
 
 impl Default for VulkanSettings {
@@ -89,6 +90,7 @@ impl Default for VulkanSettings {
             _validation_layers: cfg!(feature = "validation_layers"),
             rebinding: false,
             bind_sorting: true,
+            fustrum_culling: true,
         }
     }
 }
@@ -209,7 +211,7 @@ impl VulkanEngine<'_> {
             current_bg_effect: 0,
             bg_effects_data,
             camera: Default::default(),
-            current_scene: "structure".into(),
+            current_scene: "corridor".into(),
 
             settings: Default::default(),
             #[cfg(feature = "vulkan_stats")]
@@ -248,6 +250,7 @@ impl VulkanEngine<'_> {
                 format_debug(
                     app,
                     self.base.window.inner_size(),
+                    &self.camera,
                     #[cfg(feature = "vulkan_stats")]
                     self.stats,
                 ),
@@ -344,6 +347,7 @@ impl VulkanEngine<'_> {
         current_frame.draw_geometries(
             &self.settings,
             &self.swapchain,
+            &self.scene.view_proj(),
             &self.scene.main_draw_ctx,
             global_desc,
             #[cfg(feature = "vulkan_stats")]
@@ -444,55 +448,57 @@ fn ui<'a>(
         );
         ui.checkbox(&mut settings.rebinding, "Rebinding");
         ui.checkbox(&mut settings.bind_sorting, "Bind sorting");
+        ui.checkbox(&mut settings.fustrum_culling, "Fustrum culling");
     });
-    egui::Window::new("Background")
-        .default_open(false)
-        .show(ctx, |ui| {
-            ui.add(egui::Slider::new(render_scale, 0.3..=1.).text("Render scale"));
-            if !bg_effects.is_empty() {
-                ui.label("Selected effect :");
-                bg_effects.iter().enumerate().for_each(|(i, n)| {
-                    ui.radio_value(current_bg_effect, i, n.name.into_str());
-                });
+    // egui::Window::new("Background")
+    //     .default_open(false)
+    //     .show(ctx, |ui| {
+    //         ui.add(egui::Slider::new(render_scale, 0.3..=1.).text("Render scale"));
+    //         if !bg_effects.is_empty() {
+    //             ui.label("Selected effect :");
+    //             bg_effects.iter().enumerate().for_each(|(i, n)| {
+    //                 ui.radio_value(current_bg_effect, i, n.name.into_str());
+    //             });
 
-                let current_bg_effect_data = &mut bg_effects_data[*current_bg_effect];
-                egui::Grid::new("data").num_columns(5).show(ui, |ui| {
-                    ui.label("Data 0");
-                    current_bg_effect_data.data0.iter_mut().for_each(|d| {
-                        ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
-                    });
-                    ui.end_row();
+    //             let current_bg_effect_data = &mut bg_effects_data[*current_bg_effect];
+    //             egui::Grid::new("data").num_columns(5).show(ui, |ui| {
+    //                 ui.label("Data 0");
+    //                 current_bg_effect_data.data0.iter_mut().for_each(|d| {
+    //                     ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+    //                 });
+    //                 ui.end_row();
 
-                    ui.label("Data 1");
-                    current_bg_effect_data.data1.iter_mut().for_each(|d| {
-                        ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
-                    });
-                    ui.end_row();
+    //                 ui.label("Data 1");
+    //                 current_bg_effect_data.data1.iter_mut().for_each(|d| {
+    //                     ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+    //                 });
+    //                 ui.end_row();
 
-                    ui.label("Data 2");
-                    current_bg_effect_data.data2.iter_mut().for_each(|d| {
-                        ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
-                    });
-                    ui.end_row();
+    //                 ui.label("Data 2");
+    //                 current_bg_effect_data.data2.iter_mut().for_each(|d| {
+    //                     ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+    //                 });
+    //                 ui.end_row();
 
-                    ui.label("Data 3");
-                    current_bg_effect_data.data3.iter_mut().for_each(|d| {
-                        ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
-                    });
-                });
-            }
-        });
-    egui::Window::new("Scene")
-        .default_open(false)
-        .show(ctx, |ui| {
-            ui.label("Selected scene :");
-            scenes.for_each(|n| {
-                ui.radio_value(current_scene, n.clone(), n);
-            });
-        });
+    //                 ui.label("Data 3");
+    //                 current_bg_effect_data.data3.iter_mut().for_each(|d| {
+    //                     ui.add(egui::DragValue::new(d).speed(0.01).range(0.0..=1.0));
+    //                 });
+    //             });
+    //         }
+    //     });
+    // egui::Window::new("Scene")
+    //     .default_open(false)
+    //     .show(ctx, |ui| {
+    //         ui.label("Selected scene :");
+    //         scenes.for_each(|n| {
+    //             ui.radio_value(current_scene, n.clone(), n);
+    //         });
+    //     });
 }
 
 // TODO: merge camera with general engine
+#[derive(Debug, Clone, Copy)]
 struct Camera {
     vel: Vec3,
     pitch: f32,
@@ -503,13 +509,21 @@ struct Camera {
 
 impl Default for Camera {
     fn default() -> Self {
+        // Self {
+        //     vel: Default::default(),
+        //     pitch: Default::default(),
+        //     yaw: Default::default(),
+
+        //     // pos: vec3(0., 0., 5.),
+        //     pos: vec3(30., -0., -85.),
+        // }
         Self {
             vel: Default::default(),
-            pitch: Default::default(),
-            yaw: Default::default(),
+            pitch: -0.509,
+            yaw: -1.5799,
 
             // pos: vec3(0., 0., 5.),
-            pos: vec3(30., -0., -85.),
+            pos: vec3(0.94, 1.01, 0.808),
         }
     }
 }
@@ -580,6 +594,7 @@ impl Camera {
 fn format_debug(
     app: &AppObserver,
     size: PhysicalSize<u32>,
+    camera: &Camera,
     #[cfg(feature = "vulkan_stats")] stats: VulkanStats,
 ) -> String {
     #[cfg(feature = "vulkan_stats")]
@@ -587,12 +602,13 @@ fn format_debug(
     #[cfg(not(feature = "vulkan_stats"))]
     let stats = "Stats disabled";
     format!(
-        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\n{}",
+        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\nCamera : {:?}\n{}",
         app.fps_avg().round(),
         app.last_full_render_loop_micros(),
         app.frame_avg_micros(),
         size.width,
         size.height,
+        camera,
         // TODO: camera pas + rot
         stats,
     )
