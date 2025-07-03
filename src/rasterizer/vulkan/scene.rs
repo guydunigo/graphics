@@ -17,15 +17,14 @@ use super::{
 };
 
 use ash::{Device, vk};
-use glam::{Mat4, Vec3, Vec4, Vec4Swizzles, vec3, vec4};
+use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 
 // TODO: proper resource path mngmt and all
-const SCENES: [(&str, &str); 6] = [
+const SCENES: [(&str, &str); 5] = [
     ("basicmesh", "./resources/basicmesh.glb"),
     ("structure", "./resources/structure.glb"),
     ("helmet", "./resources/DamagedHelmet.glb"),
     ("corridor", "./resources/Sponza/Sponza.gltf"),
-    ("structure_mat", "./resources/structure_mat.glb"),
     ("house2", "./resources/house2.glb"),
 ];
 
@@ -154,6 +153,10 @@ impl Scene<'_> {
             sunlight_direction: vec4(0., 1., 0.5, 1.),
             sunlight_color: Vec4::splat(1.),
         };
+    }
+
+    pub fn view_proj(&self) -> &Mat4 {
+        &self.data.view_proj
     }
 }
 
@@ -341,6 +344,7 @@ impl Bounds {
     }
 
     // TODO: is it optimal ?
+    // TODO: glitchy for large objects in front and behind camera
     pub fn is_visible(&self, view_proj: &Mat4, transform: &Mat4) -> bool {
         let corners = [
             vec3(1., 1., 1.),
@@ -359,14 +363,16 @@ impl Bounds {
         let max = vec3(-1.5, -1.5, -1.5);
 
         let (min, max) = corners.iter().fold((min, max), |(min, max), c| {
-            let mut v = matrix * (self.origin + c * self.extents).extend(1.);
-            v.x = v.x / v.w;
-            v.y = v.y / v.w;
-            v.z = v.z / v.w;
-
-            (min.min(v.xyz()), max.max(v.xyz()))
+            let v = matrix * (self.origin + c * self.extents).extend(1.);
+            let v = Vec3 {
+                x: v.x / v.w,
+                y: v.y / v.w,
+                z: v.z / v.w,
+            };
+            (min.min(v), max.max(v))
         });
 
+        // Clip space box in view
         min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.
     }
 }

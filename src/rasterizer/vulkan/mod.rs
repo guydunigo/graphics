@@ -81,6 +81,7 @@ struct VulkanSettings {
     _validation_layers: bool,
     rebinding: bool,
     bind_sorting: bool,
+    frustum_culling: bool,
 }
 
 impl Default for VulkanSettings {
@@ -89,6 +90,7 @@ impl Default for VulkanSettings {
             _validation_layers: cfg!(feature = "validation_layers"),
             rebinding: false,
             bind_sorting: true,
+            frustum_culling: true,
         }
     }
 }
@@ -248,6 +250,7 @@ impl VulkanEngine<'_> {
                 format_debug(
                     app,
                     self.base.window.inner_size(),
+                    &self.camera,
                     #[cfg(feature = "vulkan_stats")]
                     self.stats,
                 ),
@@ -344,6 +347,7 @@ impl VulkanEngine<'_> {
         current_frame.draw_geometries(
             &self.settings,
             &self.swapchain,
+            &self.scene.view_proj(),
             &self.scene.main_draw_ctx,
             global_desc,
             #[cfg(feature = "vulkan_stats")]
@@ -433,22 +437,27 @@ fn ui<'a>(
     scenes: impl Iterator<Item = &'a String>,
     settings: &mut VulkanSettings,
 ) {
-    egui::Window::new("Debug").show(ctx, |ui| ui.label(debug));
-    egui::Window::new("Settings").show(ctx, |ui| {
-        ui.add_enabled(
-            false,
-            egui::Checkbox::new(
-                &mut cfg!(feature = "validation_layers"),
-                "Validation layers",
-            ),
-        );
-        ui.checkbox(&mut settings.rebinding, "Rebinding");
-        ui.checkbox(&mut settings.bind_sorting, "Bind sorting");
-    });
+    egui::Window::new("Debug")
+        .default_open(false)
+        .show(ctx, |ui| ui.label(debug));
+    egui::Window::new("Settings")
+        .default_open(false)
+        .show(ctx, |ui| {
+            ui.add_enabled(
+                false,
+                egui::Checkbox::new(
+                    &mut cfg!(feature = "validation_layers"),
+                    "Validation layers",
+                ),
+            );
+            ui.add(egui::Slider::new(render_scale, 0.3..=1.).text("Render scale"));
+            ui.checkbox(&mut settings.rebinding, "Rebinding");
+            ui.checkbox(&mut settings.bind_sorting, "Bind sorting");
+            ui.checkbox(&mut settings.frustum_culling, "Frustum culling");
+        });
     egui::Window::new("Background")
         .default_open(false)
         .show(ctx, |ui| {
-            ui.add(egui::Slider::new(render_scale, 0.3..=1.).text("Render scale"));
             if !bg_effects.is_empty() {
                 ui.label("Selected effect :");
                 bg_effects.iter().enumerate().for_each(|(i, n)| {
@@ -493,6 +502,7 @@ fn ui<'a>(
 }
 
 // TODO: merge camera with general engine
+#[derive(Debug, Clone, Copy)]
 struct Camera {
     vel: Vec3,
     pitch: f32,
@@ -508,8 +518,8 @@ impl Default for Camera {
             pitch: Default::default(),
             yaw: Default::default(),
 
-            // pos: vec3(0., 0., 5.),
-            pos: vec3(30., -0., -85.),
+            pos: vec3(0., 0., 5.),
+            // pos: vec3(30., -0., -85.),
         }
     }
 }
@@ -580,6 +590,7 @@ impl Camera {
 fn format_debug(
     app: &AppObserver,
     size: PhysicalSize<u32>,
+    camera: &Camera,
     #[cfg(feature = "vulkan_stats")] stats: VulkanStats,
 ) -> String {
     #[cfg(feature = "vulkan_stats")]
@@ -587,13 +598,13 @@ fn format_debug(
     #[cfg(not(feature = "vulkan_stats"))]
     let stats = "Stats disabled";
     format!(
-        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\n{}",
+        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\nCamera : {:?}\n{}",
         app.fps_avg().round(),
         app.last_full_render_loop_micros(),
         app.frame_avg_micros(),
         size.width,
         size.height,
-        // TODO: camera pas + rot
+        camera,
         stats,
     )
 }
