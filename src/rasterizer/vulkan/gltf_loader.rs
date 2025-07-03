@@ -9,7 +9,7 @@ use std::{
 
 use ::image::{DynamicImage, GrayImage, RgbImage};
 use ash::{Device, vk};
-use glam::{Mat4, Vec3, Vec4, vec4};
+use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 use gltf::{
     Document, buffer, image,
     material::AlphaMode,
@@ -431,10 +431,13 @@ fn load_meshes(
                 indices.clear();
                 vertices.clear();
 
-                let surfaces = mesh
+                let mut surface_up = Vec::new();
+
+                let mut surfaces: Vec<GeoSurface> = mesh
                     .primitives()
                     .filter_map(|p| p.indices().map(|i| (p, i)))
-                    .map(|(primitive, index_accessor)| {
+                    .enumerate()
+                    .filter_map(|(i, (primitive, index_accessor))| {
                         let start_index = indices.len() as u32;
                         let count = index_accessor.count();
 
@@ -480,16 +483,78 @@ fn load_meshes(
                             });
                         }
 
-                        GeoSurface {
+                        // TODO
+                        if vertices[initial_vtx].normal == glam::vec3(0., 1., 0.) {
+                            println!("Up facing : {i}");
+                            surface_up.push(i);
+                        }
+
+                        // TODO
+                        Some(GeoSurface {
                             start_index,
                             count: count as u32,
                             material: materials_vec[primitive.material().index().unwrap_or(0)]
                                 .clone(),
 
                             bounds: Bounds::new(&vertices[initial_vtx..]),
-                        }
+                        })
                     })
                     .collect();
+
+                surface_up.iter().filter(|i| (**i) == 46).for_each(|si| {
+                    let s = &surfaces[*si];
+                    let start_index = indices.len() as u32;
+                    let initial_vtx = vertices.len();
+
+                    let corners = [
+                        vec3(1., 1., 1.),
+                        vec3(1., 1., -1.),
+                        vec3(1., -1., 1.),
+                        vec3(1., -1., -1.),
+                        vec3(-1., 1., 1.),
+                        vec3(-1., 1., -1.),
+                        vec3(-1., -1., 1.),
+                        vec3(-1., -1., -1.),
+                    ];
+
+                    let base = *vertices.last().unwrap();
+
+                    corners
+                        .iter()
+                        .enumerate()
+                        .map(|(_, c)| Vertex {
+                            position: s.bounds.origin + c * s.bounds.extents,
+                            color: vec4(*si as f32 / 50., 0., 0., 0.5),
+                            ..base
+                        })
+                        .for_each(|v| vertices.push(v));
+
+                    #[rustfmt::skip]
+                    [
+                        // 0, 1, 2, 1, 2, 3,
+                        // 4, 5, 6, 5, 6, 7,
+                        // 0, 1, 4, 1, 4, 5,
+                        2, 3, 6, 3, 6, 7,
+                        // 0, 5, 6, 1, 5, 6,
+                    ]
+                        .iter()
+                        .map(|i| initial_vtx + i)
+                        .for_each(|i| indices.push(i as u32));
+
+                    let bounds = Bounds::new(&vertices[initial_vtx..]);
+
+                    println!("{:?} \n{:?}", s.bounds, bounds);
+
+                    // TODO: transparent
+                    let res = GeoSurface {
+                        start_index,
+                        count: indices.len() as u32 - start_index,
+                        material: s.material.clone(),
+                        bounds: Bounds::new(&vertices[initial_vtx..]),
+                    };
+                    // surfaces.push(res);
+                    surfaces[*si] = res;
+                });
 
                 let mesh_buffers =
                     GpuMeshBuffers::new(device, commands, &indices[..], &vertices[..]);

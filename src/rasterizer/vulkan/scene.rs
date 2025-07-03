@@ -373,11 +373,39 @@ impl Bounds {
             (min.min(v), max.max(v))
         });
 
+        if self.origin.x.ceil() == -63. && self.origin.y.ceil() == -2. {
+            println!(
+                "{:.3}\t{:.3}\t{:.3}\t\t{:.3}\t{:.3}\t{:.3}
+{},\t{},\t{}\t\t{},\t{},\t{}\t= {}",
+                min.x,
+                min.y,
+                min.z,
+                max.x,
+                max.y,
+                max.z,
+                min.x <= 1.,
+                min.y <= 1.,
+                min.z <= 1.,
+                max.x >= -1.,
+                max.y >= -1.,
+                max.z >= 0.,
+                min.z <= 1.
+                    && max.z >= 0.
+                    && min.x <= 1.
+                    && max.x >= -1.
+                    && min.y <= 1.
+                    && max.y >= -1.
+            );
+        } else {
+            return false;
+        }
+
         // Clip space box in view
         min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.
     }
 }
 
+#[derive(Clone)]
 pub struct GeoSurface {
     pub start_index: u32,
     pub count: u32,

@@ -335,7 +335,7 @@ impl FrameData {
             let mut opaque_draws = Vec::with_capacity(draw_ctx.opaque_surfaces.len());
             (0..draw_ctx.opaque_surfaces.len())
                 .filter(|i| {
-                    !settings.fustrum_culling || draw_ctx.opaque_surfaces[*i].is_visible(view_proj)
+                    !settings.frustum_culling || draw_ctx.opaque_surfaces[*i].is_visible(view_proj)
                 })
                 .for_each(|i| opaque_draws.push(i));
             if settings.bind_sorting {
@@ -368,7 +368,7 @@ impl FrameData {
                     draw_ctx
                         .transparent_surfaces
                         .iter()
-                        .filter(|s| !settings.fustrum_culling || s.is_visible(view_proj)),
+                        .filter(|s| !settings.frustum_culling || s.is_visible(view_proj)),
                 )
                 .for_each(|d| {
                     #[cfg(feature = "vulkan_stats")]

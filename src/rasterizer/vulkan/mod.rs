@@ -81,7 +81,7 @@ struct VulkanSettings {
     _validation_layers: bool,
     rebinding: bool,
     bind_sorting: bool,
-    fustrum_culling: bool,
+    frustum_culling: bool,
 }
 
 impl Default for VulkanSettings {
@@ -90,7 +90,7 @@ impl Default for VulkanSettings {
             _validation_layers: cfg!(feature = "validation_layers"),
             rebinding: false,
             bind_sorting: true,
-            fustrum_culling: true,
+            frustum_culling: true,
         }
     }
 }
@@ -382,13 +382,13 @@ impl VulkanEngine<'_> {
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
         );
 
-        current_frame.draw_gui(
-            &self.swapchain,
-            &self.gui,
-            self.commands.queue,
-            *swapchain_image_view,
-            generated_ui,
-        );
+        // current_frame.draw_gui(
+        //     &self.swapchain,
+        //     &self.gui,
+        //     self.commands.queue,
+        //     *swapchain_image_view,
+        //     generated_ui,
+        // );
 
         current_frame.transition_image(
             *swapchain_image,
@@ -448,7 +448,7 @@ fn ui<'a>(
         );
         ui.checkbox(&mut settings.rebinding, "Rebinding");
         ui.checkbox(&mut settings.bind_sorting, "Bind sorting");
-        ui.checkbox(&mut settings.fustrum_culling, "Fustrum culling");
+        ui.checkbox(&mut settings.frustum_culling, "Frustum culling");
     });
     // egui::Window::new("Background")
     //     .default_open(false)
