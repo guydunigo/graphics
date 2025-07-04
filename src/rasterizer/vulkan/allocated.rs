@@ -8,7 +8,7 @@ use std::{
 use vk_mem::Alloc;
 use winit::dpi::PhysicalSize;
 
-use super::commands::{VulkanCommands, transition_image};
+use super::commands::{VulkanCommands, image_subresource_range, transition_image};
 
 pub struct AllocatedBuffer {
     allocator_copy: Arc<Mutex<vk_mem::Allocator>>,
@@ -310,13 +310,25 @@ impl AllocatedImage {
                 );
             }
 
-            transition_image(
-                device,
-                cmd_buf,
-                new_image.img,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            );
+            if mipmapped {
+                generate_mipmaps(
+                    device,
+                    cmd_buf,
+                    new_image.img,
+                    vk::Extent2D {
+                        width: extent.width,
+                        height: extent.height,
+                    },
+                );
+            } else {
+                transition_image(
+                    device,
+                    cmd_buf,
+                    new_image.img,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                );
+            }
         });
 
         new_image
@@ -386,4 +398,87 @@ pub fn image_view_create_info<'a>(
                 .aspect_mask(aspect_flags),
         )
         .image(image)
+}
+
+// TODO: in parallel, in a compute shader, ...
+fn generate_mipmaps(
+    device: &Device,
+    cmd_buf: vk::CommandBuffer,
+    image: vk::Image,
+    mut extent: vk::Extent2D,
+) {
+    let mip_levels = f32::log2(u32::max(extent.width, extent.height) as f32) as u32 + 1;
+
+    for mip in 0..mip_levels {
+        let half_extent = vk::Extent2D {
+            width: extent.width / 2,
+            height: extent.height / 2,
+        };
+
+        let aspect_mask = vk::ImageAspectFlags::COLOR;
+
+        let image_barrier = vk::ImageMemoryBarrier2::default()
+            .src_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+            .src_access_mask(vk::AccessFlags2::MEMORY_WRITE)
+            .dst_stage_mask(vk::PipelineStageFlags2::ALL_COMMANDS)
+            .dst_access_mask(vk::AccessFlags2::MEMORY_WRITE | vk::AccessFlags2::MEMORY_READ)
+            .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .new_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .subresource_range(image_subresource_range(aspect_mask, 1, mip))
+            .image(image);
+
+        let img_barriers = [image_barrier];
+        let dep_info = vk::DependencyInfo::default().image_memory_barriers(&img_barriers[..]);
+
+        unsafe {
+            device.cmd_pipeline_barrier2(cmd_buf, &dep_info);
+        }
+
+        if mip < mip_levels - 1 {
+            let mut blit_region = vk::ImageBlit2::default()
+                .src_subresource(vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: mip,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .dst_subresource(vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: mip + 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+            blit_region.src_offsets[1] = vk::Offset3D {
+                x: extent.width as i32,
+                y: extent.height as i32,
+                z: 1,
+            };
+            blit_region.dst_offsets[1] = vk::Offset3D {
+                x: half_extent.width as i32,
+                y: half_extent.height as i32,
+                z: 1,
+            };
+
+            let regions = [blit_region];
+
+            let blit_info = vk::BlitImageInfo2::default()
+                .dst_image(image)
+                .dst_image_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                .src_image(image)
+                .src_image_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+                .regions(&regions[..]);
+
+            unsafe { device.cmd_blit_image2(cmd_buf, &blit_info) };
+
+            extent = half_extent;
+        }
+    }
+
+    transition_image(
+        device,
+        cmd_buf,
+        image,
+        vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+    );
 }

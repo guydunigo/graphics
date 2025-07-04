@@ -584,7 +584,7 @@ fn load_image(
         extent,
         format,
         vk::ImageUsageFlags::SAMPLED,
-        false,
+        true,
         &data[..],
     ))
 }

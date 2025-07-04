@@ -665,11 +665,21 @@ fn end_cmd_buf(device: &Device, cmd_buf: vk::CommandBuffer) {
     unsafe { device.end_command_buffer(cmd_buf).unwrap() };
 }
 
-fn image_subresource_range(aspect_mask: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
+pub fn image_subresource_range_default(
+    aspect_mask: vk::ImageAspectFlags,
+) -> vk::ImageSubresourceRange {
+    image_subresource_range(aspect_mask, vk::REMAINING_MIP_LEVELS, 0)
+}
+
+pub fn image_subresource_range(
+    aspect_mask: vk::ImageAspectFlags,
+    level_count: u32,
+    base_mip_level: u32,
+) -> vk::ImageSubresourceRange {
     vk::ImageSubresourceRange::default()
         .aspect_mask(aspect_mask)
-        .base_mip_level(0)
-        .level_count(vk::REMAINING_MIP_LEVELS)
+        .base_mip_level(base_mip_level)
+        .level_count(level_count)
         .base_array_layer(0)
         .layer_count(vk::REMAINING_ARRAY_LAYERS)
 }
@@ -747,7 +757,7 @@ pub fn transition_image(
         vk::ImageAspectFlags::COLOR
     };
 
-    let sub_image = image_subresource_range(aspect_mask);
+    let sub_image = image_subresource_range_default(aspect_mask);
 
     // TODO: replace ALL_COMMANDS by more accurate masks to not stop whole GPU pipeline
     // https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples
