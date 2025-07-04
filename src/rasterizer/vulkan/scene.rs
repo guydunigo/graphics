@@ -375,6 +375,11 @@ impl Bounds {
         // Clip space box in view
         min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.
     }
+
+    pub fn clip_space_origin_depth(&self, view_proj: &Mat4, transform: &Mat4) -> f32 {
+        let projected_origin = view_proj * transform * self.origin.extend(1.);
+        projected_origin.z
+    }
 }
 
 pub struct GeoSurface {
@@ -439,6 +444,11 @@ impl From<&RenderObject> for GpuDrawPushConstants {
 impl RenderObject {
     pub fn is_visible(&self, view_proj: &Mat4) -> bool {
         self.bounds.is_visible(view_proj, &self.transform)
+    }
+
+    pub fn clip_space_origin_depth(&self, view_proj: &Mat4) -> f32 {
+        self.bounds
+            .clip_space_origin_depth(view_proj, &self.transform)
     }
 }
 

@@ -51,6 +51,8 @@ struct VulkanStats {
     wait_fence_micros: u128,
     compute_shaders_micros: u128,
     scene_update_micros: u128,
+    opaque_sort_micros: u128,
+    transparent_sort_micros: u128,
     mesh_draw_micros: u128,
     start: VulkanStatsStart,
 }
@@ -76,11 +78,19 @@ pub struct VulkanStatsCounts {
     bound_index_buf: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MeshSorting {
+    Off,
+    Binding,
+    Depth,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct VulkanSettings {
     _validation_layers: bool,
     rebinding: bool,
-    bind_sorting: bool,
+    opaque_sorting: MeshSorting,
+    transparent_sorting: MeshSorting,
     frustum_culling: bool,
 }
 
@@ -89,7 +99,10 @@ impl Default for VulkanSettings {
         Self {
             _validation_layers: cfg!(feature = "validation_layers"),
             rebinding: false,
-            bind_sorting: true,
+            // Rebinding is expensive, so we trying to minimize it.
+            opaque_sorting: MeshSorting::Binding,
+            // Not enough transparent meshes to justify sorting
+            transparent_sorting: MeshSorting::Off,
             frustum_culling: true,
         }
     }
@@ -342,8 +355,6 @@ impl VulkanEngine<'_> {
         {
             self.stats.counts = Default::default();
         }
-        #[cfg(feature = "vulkan_stats")]
-        let t = Instant::now();
         current_frame.draw_geometries(
             &self.settings,
             &self.swapchain,
@@ -351,12 +362,8 @@ impl VulkanEngine<'_> {
             &self.scene.main_draw_ctx,
             global_desc,
             #[cfg(feature = "vulkan_stats")]
-            &mut self.stats.counts,
+            &mut self.stats,
         );
-        #[cfg(feature = "vulkan_stats")]
-        {
-            self.stats.mesh_draw_micros = t.elapsed().as_micros();
-        }
 
         current_frame.transition_image(
             *image,
@@ -452,8 +459,31 @@ fn ui<'a>(
             );
             ui.add(egui::Slider::new(render_scale, 0.3..=1.).text("Render scale"));
             ui.checkbox(&mut settings.rebinding, "Rebinding");
-            ui.checkbox(&mut settings.bind_sorting, "Bind sorting");
             ui.checkbox(&mut settings.frustum_culling, "Frustum culling");
+            {
+                ui.label("Opaque sorting :");
+                ui.radio_value(&mut settings.opaque_sorting, MeshSorting::Off, "off");
+                ui.radio_value(
+                    &mut settings.opaque_sorting,
+                    MeshSorting::Binding,
+                    "binding",
+                );
+                ui.radio_value(&mut settings.opaque_sorting, MeshSorting::Depth, "depth");
+            }
+            {
+                ui.label("Transparent sorting :");
+                ui.radio_value(&mut settings.transparent_sorting, MeshSorting::Off, "off");
+                ui.radio_value(
+                    &mut settings.transparent_sorting,
+                    MeshSorting::Binding,
+                    "binding",
+                );
+                ui.radio_value(
+                    &mut settings.transparent_sorting,
+                    MeshSorting::Depth,
+                    "depth",
+                );
+            }
         });
     egui::Window::new("Background")
         .default_open(false)

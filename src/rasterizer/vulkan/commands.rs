@@ -5,16 +5,17 @@ use std::{
     ptr,
     rc::Rc,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use ash::{Device, vk};
 use glam::Mat4;
 
 #[cfg(feature = "vulkan_stats")]
-use super::VulkanStatsCounts;
+use super::{VulkanStats, VulkanStatsCounts};
 
 use super::{
-    VulkanSettings,
+    MeshSorting, VulkanSettings,
     allocated::AllocatedBuffer,
     base::VulkanBase,
     compute_shaders::ComputePushConstants,
@@ -286,7 +287,7 @@ impl FrameData {
         view_proj: &Mat4,
         draw_ctx: &DrawContext,
         global_desc: vk::DescriptorSet,
-        #[cfg(feature = "vulkan_stats")] stats: &mut VulkanStatsCounts,
+        #[cfg(feature = "vulkan_stats")] stats: &mut VulkanStats,
     ) {
         let color_attachments = [attachment_info(
             *swapchain.draw_img_view(),
@@ -332,29 +333,33 @@ impl FrameData {
         // Sorting by material and index_buffer to minimize rebinding
         // Binding material is longer, so we order by it first.
         {
-            let mut opaque_draws = Vec::with_capacity(draw_ctx.opaque_surfaces.len());
-            (0..draw_ctx.opaque_surfaces.len())
-                .filter(|i| {
-                    !settings.frustum_culling || draw_ctx.opaque_surfaces[*i].is_visible(view_proj)
-                })
-                .for_each(|i| opaque_draws.push(i));
-            if settings.bind_sorting {
-                // TODO: use key/hash for faster comp ? (20bits index, 44 for key/hash)
-                opaque_draws.sort_by(|a, b| {
-                    let a = &draw_ctx.opaque_surfaces[*a];
-                    let b = &draw_ctx.opaque_surfaces[*b];
-
-                    let cmp_mat = Rc::as_ptr(&a.material).cmp(&Rc::as_ptr(&b.material));
-
-                    if let Ordering::Equal = cmp_mat {
-                        vk::Buffer::cmp(&a.index_buffer, &b.index_buffer)
-                    } else {
-                        cmp_mat
-                    }
-                });
+            #[cfg(feature = "vulkan_stats")]
+            let t = Instant::now();
+            let opaque_draws = create_list(
+                settings.opaque_sorting,
+                settings.frustum_culling,
+                view_proj,
+                &draw_ctx.opaque_surfaces[..],
+            );
+            #[cfg(feature = "vulkan_stats")]
+            {
+                stats.opaque_sort_micros = t.elapsed().as_micros();
+            }
+            #[cfg(feature = "vulkan_stats")]
+            let t = Instant::now();
+            let transparent_draws = create_list(
+                settings.transparent_sorting,
+                settings.frustum_culling,
+                view_proj,
+                &draw_ctx.transparent_surfaces[..],
+            );
+            #[cfg(feature = "vulkan_stats")]
+            {
+                stats.transparent_sort_micros = t.elapsed().as_micros();
             }
 
-            // TODO: for transparent, order by depth of bounding or pipelines (fewer?) ?
+            #[cfg(feature = "vulkan_stats")]
+            let t = Instant::now();
 
             let mut last_pip = None;
             let mut last_mat = None;
@@ -365,16 +370,15 @@ impl FrameData {
                 .iter()
                 .map(|i| &draw_ctx.opaque_surfaces[*i])
                 .chain(
-                    draw_ctx
-                        .transparent_surfaces
+                    transparent_draws
                         .iter()
-                        .filter(|s| !settings.frustum_culling || s.is_visible(view_proj)),
+                        .map(|i| &draw_ctx.transparent_surfaces[*i]),
                 )
                 .for_each(|d| {
                     #[cfg(feature = "vulkan_stats")]
                     {
-                        stats.drawcall_count += 1;
-                        stats.triangle_count += d.index_count / 3;
+                        stats.counts.drawcall_count += 1;
+                        stats.counts.triangle_count += d.index_count / 3;
                     }
                     self.draw_mesh(
                         settings,
@@ -384,9 +388,13 @@ impl FrameData {
                         &mut last_pip,
                         &mut last_mat,
                         &mut last_index_buffer,
-                        stats,
+                        &mut stats.counts,
                     )
                 });
+            #[cfg(feature = "vulkan_stats")]
+            {
+                stats.mesh_draw_micros = t.elapsed().as_micros();
+            }
         }
 
         unsafe {
@@ -757,4 +765,49 @@ pub fn transition_image(
     let dep_info = vk::DependencyInfo::default().image_memory_barriers(&ibs);
 
     unsafe { device.cmd_pipeline_barrier2(cmd_buf, &dep_info) };
+}
+
+fn create_list(
+    sorting: MeshSorting,
+    frustum_culling: bool,
+    view_proj: &Mat4,
+    meshes: &[RenderObject],
+) -> Vec<usize> {
+    let meshes_len = meshes.len();
+    let mut mesh_indices = Vec::with_capacity(meshes_len);
+    (0..meshes_len)
+        .filter(|i| !frustum_culling || meshes[*i].is_visible(view_proj))
+        .for_each(|i| mesh_indices.push(i));
+
+    // TODO: use key/hash for faster comp ? (20bits index, 44 for key/hash)
+    match sorting {
+        MeshSorting::Off => (),
+        MeshSorting::Binding => {
+            mesh_indices.sort_by(|a, b| {
+                let a = &meshes[*a];
+                let b = &meshes[*b];
+
+                let cmp_mat = Rc::as_ptr(&a.material).cmp(&Rc::as_ptr(&b.material));
+
+                if let Ordering::Equal = cmp_mat {
+                    vk::Buffer::cmp(&a.index_buffer, &b.index_buffer)
+                } else {
+                    cmp_mat
+                }
+            });
+        }
+        MeshSorting::Depth => {
+            mesh_indices.sort_by(|a, b| {
+                let a = &meshes[*a];
+                let b = &meshes[*b];
+                f32::total_cmp(
+                    // TODO: calculation duplicates
+                    &a.clip_space_origin_depth(view_proj),
+                    &b.clip_space_origin_depth(view_proj),
+                )
+            });
+        }
+    }
+
+    mesh_indices
 }
