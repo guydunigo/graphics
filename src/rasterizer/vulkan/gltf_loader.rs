@@ -138,7 +138,7 @@ pub struct LoadedGLTF {
 
 impl Drop for LoadedGLTF {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop LoadedGLTF");
         unsafe {
             self.samplers

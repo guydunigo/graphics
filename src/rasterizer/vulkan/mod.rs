@@ -97,7 +97,7 @@ struct VulkanSettings {
 impl Default for VulkanSettings {
     fn default() -> Self {
         Self {
-            _validation_layers: cfg!(feature = "validation_layers"),
+            _validation_layers: cfg!(feature = "vulkan_validation_layers"),
             rebinding: false,
             // Rebinding is expensive, so we trying to minimize it.
             opaque_sorting: MeshSorting::Binding,
@@ -131,7 +131,7 @@ pub struct VulkanEngine<'a> {
 
 impl Drop for VulkanEngine<'_> {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop VulkanEngine");
         unsafe {
             self.base.device.device_wait_idle().unwrap();
@@ -453,7 +453,7 @@ fn ui<'a>(
             ui.add_enabled(
                 false,
                 egui::Checkbox::new(
-                    &mut cfg!(feature = "validation_layers"),
+                    &mut cfg!(feature = "vulkan_validation_layers"),
                     "Validation layers",
                 ),
             );

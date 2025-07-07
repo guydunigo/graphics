@@ -44,7 +44,7 @@ impl ShadersLoader {
 
 // impl Drop for ShadersLoader {
 //     fn drop(&mut self) {
-//         #[cfg(feature = "dbg_mem")]
+//         #[cfg(feature = "vulkan_dbg_mem")]
 //         println!("drop VulkanShaders");
 //         // println!("drop VulkanShaders : {} shaders", shaders.len());
 //         // unsafe {
@@ -205,7 +205,7 @@ impl ShaderModule {
 
 impl Drop for ShaderModule {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         {
             let kind: ShaderKind = self.name.into();
             println!("drop ShaderModule {:?}, kind {:?}", self.name, kind);

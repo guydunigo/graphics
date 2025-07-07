@@ -185,7 +185,7 @@ impl VulkanGuiMutable {
 
 // impl Drop for VulkanGuiMutable {
 //     fn drop(&mut self) {
-//         #[cfg(feature = "dbg_mem")]
+//         #[cfg(feature = "vulkan_dbg_mem")]
 //         println!("drop VulkanGui");
 //         // unsafe {
 //         // }

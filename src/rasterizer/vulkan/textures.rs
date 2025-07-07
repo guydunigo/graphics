@@ -180,7 +180,7 @@ impl Textures<'_> {
 
 impl Drop for Textures<'_> {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop Textures");
         unsafe {
             self.device_copy
@@ -206,7 +206,7 @@ pub struct GltfMetallicRoughness<'a> {
 
 impl Drop for GltfMetallicRoughness<'_> {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop GltfMetallicRoughness");
         unsafe {
             self.device_copy

@@ -64,7 +64,7 @@ impl DescriptorAllocator {
 
 impl Drop for DescriptorAllocator {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop DescriptorAllocator");
         unsafe { self.device_copy.destroy_descriptor_pool(self.pool, None) };
     }
@@ -190,7 +190,7 @@ impl DescriptorAllocatorGrowable {
 
 impl Drop for DescriptorAllocatorGrowable {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!(
             "drop DescriptorAllocatorGrowable : {} full, {} ready descriptor pools",
             self.full.len(),

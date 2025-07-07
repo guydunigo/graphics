@@ -62,7 +62,7 @@ impl AllocatedBuffer {
                 let (buffer, allocation) =
                     allocator.create_buffer(&buffer_info, &alloc_info).unwrap();
                 let info = allocator.get_allocation_info(&allocation);
-                #[cfg(feature = "dbg_mem")]
+                #[cfg(feature = "vulkan_dbg_mem")]
                 println!("{info:?}");
                 (buffer, allocation, info)
             }
@@ -83,7 +83,7 @@ impl AllocatedBuffer {
 
 impl Drop for AllocatedBuffer {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop AllocatedBuffer");
         unsafe {
             self.allocator_copy
@@ -337,7 +337,7 @@ impl AllocatedImage {
 
 impl Drop for AllocatedImage {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop AllocatedImage");
         unsafe {
             self.device_copy.device_wait_idle().unwrap();

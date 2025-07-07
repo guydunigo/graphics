@@ -32,9 +32,9 @@ pub struct VulkanBase {
     pub window: Rc<Window>,
 
     pub instance: Instance,
-    #[cfg(feature = "validation_layers")]
+    #[cfg(feature = "vulkan_validation_layers")]
     debug_utils_loader: debug_utils::Instance,
-    #[cfg(feature = "validation_layers")]
+    #[cfg(feature = "vulkan_validation_layers")]
     debug_messenger: vk::DebugUtilsMessengerEXT,
     pub surface_loader: surface::Instance,
     pub chosen_gpu: vk::PhysicalDevice,
@@ -58,14 +58,14 @@ impl VulkanBase {
             .enabled_extension_names(&extension_names)
             .flags(create_flags);
 
-        #[cfg(feature = "validation_layers")]
+        #[cfg(feature = "vulkan_validation_layers")]
         let validation_layers = validation_layers();
-        #[cfg(feature = "validation_layers")]
+        #[cfg(feature = "vulkan_validation_layers")]
         let create_info = { create_info.enabled_layer_names(&validation_layers) };
 
         let instance = unsafe { entry.create_instance(&create_info, None).unwrap() };
 
-        #[cfg(feature = "validation_layers")]
+        #[cfg(feature = "vulkan_validation_layers")]
         let (debug_utils_loader, debug_messenger) = debug_messenger(&entry, &instance);
         let surface = surface(&window, &entry, &instance);
 
@@ -90,9 +90,9 @@ impl VulkanBase {
             window,
 
             instance,
-            #[cfg(feature = "validation_layers")]
+            #[cfg(feature = "vulkan_validation_layers")]
             debug_utils_loader,
-            #[cfg(feature = "validation_layers")]
+            #[cfg(feature = "vulkan_validation_layers")]
             debug_messenger,
             surface_loader,
             chosen_gpu,
@@ -106,7 +106,7 @@ impl VulkanBase {
 
 impl Drop for VulkanBase {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop VulkanBase");
         unsafe {
             self.device.device_wait_idle().unwrap();
@@ -116,7 +116,7 @@ impl Drop for VulkanBase {
             );
             self.device.destroy_device(None);
             self.surface_loader.destroy_surface(self.surface, None);
-            #[cfg(feature = "validation_layers")]
+            #[cfg(feature = "vulkan_validation_layers")]
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_messenger, None);
             self.instance.destroy_instance(None);
@@ -125,7 +125,7 @@ impl Drop for VulkanBase {
 }
 
 /// From ash-examples/src/lib.rs
-#[cfg(feature = "validation_layers")]
+#[cfg(feature = "vulkan_validation_layers")]
 unsafe extern "system" fn vulkan_debug_callback(
     message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     message_type: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -173,7 +173,7 @@ fn extension_names<W: Deref<Target = Window>>(window: &W) -> Vec<*const c_char> 
     extension_names
 }
 
-#[cfg(feature = "validation_layers")]
+#[cfg(feature = "vulkan_validation_layers")]
 fn validation_layers() -> Vec<*const c_char> {
     let layer_names = [c"VK_LAYER_KHRONOS_validation"];
     layer_names
@@ -200,7 +200,7 @@ fn instance_create_flags() -> vk::InstanceCreateFlags {
     }
 }
 
-#[cfg(feature = "validation_layers")]
+#[cfg(feature = "vulkan_validation_layers")]
 fn debug_messenger(
     entry: &Entry,
     instance: &Instance,

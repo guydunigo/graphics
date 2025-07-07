@@ -46,7 +46,7 @@ pub struct FrameData {
 
 impl Drop for FrameData {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop FrameData");
         unsafe {
             self.device_copy.destroy_command_pool(self.cmd_pool, None);
@@ -615,7 +615,7 @@ impl VulkanCommands {
 
 impl Drop for VulkanCommands {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop VulkanCommands");
         unsafe {
             self.device_copy.destroy_fence(self.imm_fence, None);

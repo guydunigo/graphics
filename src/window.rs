@@ -10,6 +10,9 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
+#[cfg(target_os = "android")]
+use winit::platform::android::{EventLoopBuilderExtAndroid, activity::AndroidApp};
+
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
 use crate::{
@@ -152,6 +155,20 @@ impl Default for App<'_> {
 impl App<'_> {
     pub fn run() {
         let event_loop = EventLoop::new().unwrap();
+        // ControlFlow::Poll : Run in a loop (game)
+        // Wait : Runs only on event (apps)
+        event_loop.set_control_flow(ControlFlow::Poll);
+
+        let mut app = App::default();
+        event_loop.run_app(&mut app).unwrap();
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn run_android(app: AndroidApp) {
+        let mut event_loop = EventLoop::builder();
+        event_loop.with_android_app(app);
+        let event_loop = event_loop.build().unwrap();
+
         // ControlFlow::Poll : Run in a loop (game)
         // Wait : Runs only on event (apps)
         event_loop.set_control_flow(ControlFlow::Poll);

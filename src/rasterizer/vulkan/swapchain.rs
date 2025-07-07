@@ -342,7 +342,7 @@ impl SwapchainData {
 
 impl Drop for SwapchainData {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop SwapchainData");
         unsafe {
             self.device_copy.device_wait_idle().unwrap();

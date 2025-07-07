@@ -68,7 +68,7 @@ impl Effects {
 
 impl Drop for Effects {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop Effects");
         unsafe {
             self.device_copy
@@ -176,7 +176,7 @@ impl ComputeEffect {
 
 impl Drop for ComputeEffect {
     fn drop(&mut self) {
-        #[cfg(feature = "dbg_mem")]
+        #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop ComputeEffect");
         unsafe {
             self.device_copy.destroy_pipeline(self.pipeline, None);
