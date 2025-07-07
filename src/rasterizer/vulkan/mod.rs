@@ -239,7 +239,7 @@ impl VulkanEngine<'_> {
     pub fn rasterize(
         &mut self,
         _settings: &Settings,
-        _world: &World,
+        #[cfg(feature = "cpu")] _world: &World,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {

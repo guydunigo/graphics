@@ -161,6 +161,8 @@ fn extension_names<W: Deref<Target = Window>>(window: &W) -> Vec<*const c_char> 
         ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw())
             .unwrap()
             .to_vec();
+
+    #[cfg(feature = "vulkan_validation_layers")]
     extension_names.push(debug_utils::NAME.as_ptr());
 
     #[cfg(any(target_os = "macos", target_os = "ios"))]

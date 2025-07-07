@@ -110,7 +110,7 @@ impl Engine<'_> {
     pub fn rasterize(
         &mut self,
         settings: &Settings,
-        world: &World,
+        #[cfg(feature = "cpu")] world: &World,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
@@ -126,6 +126,7 @@ impl Engine<'_> {
             #[cfg(feature = "vulkan")]
             Self::Vulkan(e) => e.rasterize(
                 settings,
+                #[cfg(feature = "cpu")]
                 world,
                 app,
                 #[cfg(feature = "stats")]

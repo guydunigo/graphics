@@ -101,12 +101,13 @@ impl InitializedWindow<'_> {
 
     pub fn rasterize(
         &mut self,
-        world: &World,
+        #[cfg(feature = "cpu")] world: &World,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         self.engine.rasterize(
             &self.settings,
+            #[cfg(feature = "cpu")]
             world,
             app,
             #[cfg(feature = "stats")]
@@ -122,6 +123,7 @@ impl InitializedWindow<'_> {
 
 pub struct App<'a> {
     window: Option<InitializedWindow<'a>>,
+    #[cfg(feature = "cpu")]
     world: World,
     cursor: Option<PhysicalPosition<f64>>,
     cursor_grabbed: bool,
@@ -139,6 +141,7 @@ impl Default for App<'_> {
     fn default() -> Self {
         Self {
             window: Default::default(),
+            #[cfg(feature = "cpu")]
             world: Default::default(),
             cursor: Default::default(),
             cursor_grabbed: Default::default(),
@@ -274,27 +277,37 @@ impl ApplicationHandler for App<'_> {
                             self.cursor_grabbed = false;
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::ControlLeft => self.world.camera.move_sight(0., 1., 0.),
+                    #[cfg(feature = "cpu")]
                     KeyCode::ShiftLeft => self.world.camera.move_sight(0., -1., 0.),
+                    #[cfg(feature = "cpu")]
                     KeyCode::KeyW => self.world.camera.move_sight(0., 0., 1.),
+                    #[cfg(feature = "cpu")]
                     KeyCode::KeyS => self.world.camera.move_sight(0., 0., -1.),
+                    #[cfg(feature = "cpu")]
                     KeyCode::KeyA => self.world.camera.move_sight(-1., 0., 0.),
+                    #[cfg(feature = "cpu")]
                     KeyCode::KeyD => self.world.camera.move_sight(1., 0., 0.),
+                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowLeft => self
                         .world
                         .meshes
                         .iter_mut()
                         .for_each(|m| m.rot *= &Rotation::from_angles(0., -0.1, 0.)),
+                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowRight => self
                         .world
                         .meshes
                         .iter_mut()
                         .for_each(|m| m.rot *= &Rotation::from_angles(0., 0.1, 0.)),
+                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowUp => self
                         .world
                         .meshes
                         .iter_mut()
                         .for_each(|m| m.rot *= &Rotation::from_angles(-0.1, 0., 0.)),
+                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowDown => self
                         .world
                         .meshes
@@ -318,12 +331,14 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::Digit2 => w.settings.sort_triangles.next(),
                     KeyCode::Digit3 => w.settings.parallel_text = !w.settings.parallel_text,
                     KeyCode::Digit4 => w.settings.next_oversampling(),
+                    #[cfg(feature = "cpu")]
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
                     _ => (),
                 }
             }
+            #[cfg(feature = "cpu")]
             WindowEvent::MouseInput {
                 button: MouseButton::Right,
                 state: ElementState::Pressed,
@@ -349,6 +364,7 @@ impl ApplicationHandler for App<'_> {
                 let w = self.window.as_mut().unwrap();
 
                 w.rasterize(
+                    #[cfg(feature = "cpu")]
                     &self.world,
                     &mut obs,
                     #[cfg(feature = "stats")]
@@ -383,6 +399,7 @@ impl ApplicationHandler for App<'_> {
                 .unwrap()
                 .engine
                 .on_mouse_motion(delta, self.cursor_grabbed);
+            #[cfg(feature = "cpu")]
             if self.cursor_grabbed {
                 self.world
                     .camera
