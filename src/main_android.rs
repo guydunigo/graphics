@@ -1,5 +1,10 @@
+mod font;
+mod maths;
+mod rasterizer;
+mod scene;
 mod window;
 
+#[cfg(target_os = "android")]
 use window::App;
 
 #[cfg(target_os = "android")]

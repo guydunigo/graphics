@@ -1,10 +1,17 @@
+#[cfg(feature = "cpu")]
 mod cpu_engine;
+#[cfg(feature = "cpu")]
 mod parallel;
 mod settings;
+#[cfg(feature = "cpu")]
 mod single_threaded;
+#[cfg(feature = "vulkan")]
 mod vulkan;
 
+#[cfg(feature = "cpu")]
+use std::marker::PhantomData;
 use std::rc::Rc;
+#[cfg(feature = "vulkan")]
 use vulkan::VulkanEngine;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
@@ -18,6 +25,7 @@ use crate::{
     window::AppObserver,
 };
 
+#[cfg(feature = "cpu")]
 use cpu_engine::CPUEngine;
 use settings::EngineType;
 pub use settings::Settings;
@@ -39,29 +47,59 @@ pub struct Stats {
 }
 
 pub enum Engine<'a> {
-    Cpu(Box<CPUEngine>),
+    #[cfg(feature = "cpu")]
+    Cpu(Box<CPUEngine>, PhantomData<&'a ()>),
+    #[cfg(feature = "vulkan")]
     Vulkan(Box<VulkanEngine<'a>>),
 }
 
 impl Engine<'_> {
+    #[cfg(feature = "vulkan")]
     pub fn new(window: Rc<Window>) -> Self {
         Self::Vulkan(Box::new(VulkanEngine::new(window)))
     }
 
+    #[cfg(all(feature = "cpu", not(feature = "vulkan")))]
+    pub fn new(window: Rc<Window>) -> Self {
+        Self::Cpu(Box::new(CPUEngine::new(window)), Default::default())
+    }
+
+    #[cfg(all(feature = "vulkan", not(feature = "cpu")))]
+    pub fn set_next(&mut self) {}
+
+    #[cfg(all(not(feature = "vulkan"), feature = "cpu"))]
     pub fn set_next(&mut self) {
         match self {
-            Engine::Cpu(e) => {
+            Engine::Cpu(e, d) => {
+                if e.set_next() {
+                    *self = Engine::Cpu(Box::new(CPUEngine::new(e.window().clone())), *d);
+                }
+            }
+        }
+    }
+
+    #[cfg(all(feature = "vulkan", feature = "cpu"))]
+    pub fn set_next(&mut self) {
+        match self {
+            Engine::Cpu(e, _) => {
                 if e.set_next() {
                     *self = Engine::Vulkan(Box::new(VulkanEngine::new(e.window().clone())));
                 }
             }
-            Engine::Vulkan(e) => *self = Engine::Cpu(Box::new(CPUEngine::new(e.window().clone()))),
+            Engine::Vulkan(e) => {
+                *self = Engine::Cpu(
+                    Box::new(CPUEngine::new(e.window().clone())),
+                    Default::default(),
+                )
+            }
         }
     }
 
     pub fn as_engine_type(&self) -> EngineType {
         match self {
-            Self::Cpu(e) => e.as_engine_type(),
+            #[cfg(feature = "cpu")]
+            Self::Cpu(e, _) => e.as_engine_type(),
+            #[cfg(feature = "vulkan")]
             Self::Vulkan(_) => EngineType::Vulkan,
         }
     }
@@ -74,13 +112,15 @@ impl Engine<'_> {
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         match self {
-            Self::Cpu(e) => e.rasterize(
+            #[cfg(feature = "cpu")]
+            Self::Cpu(e, _) => e.rasterize(
                 settings,
                 world,
                 app,
                 #[cfg(feature = "stats")]
                 stats,
             ),
+            #[cfg(feature = "vulkan")]
             Self::Vulkan(e) => e.rasterize(
                 settings,
                 world,
@@ -93,14 +133,18 @@ impl Engine<'_> {
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
         match self {
-            Self::Cpu(_) => (),
+            #[cfg(feature = "cpu")]
+            Self::Cpu(_, _) => (),
+            #[cfg(feature = "vulkan")]
             Self::Vulkan(e) => e.on_window_event(event),
         }
     }
 
     pub fn on_mouse_motion(&mut self, delta: (f64, f64), cursor_grabbed: bool) {
         match self {
-            Self::Cpu(_) => (),
+            #[cfg(feature = "cpu")]
+            Self::Cpu(_, _) => (),
+            #[cfg(feature = "vulkan")]
             Self::Vulkan(e) => e.on_mouse_motion(delta, cursor_grabbed),
         }
     }

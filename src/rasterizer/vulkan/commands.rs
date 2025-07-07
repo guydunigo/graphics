@@ -5,8 +5,10 @@ use std::{
     ptr,
     rc::Rc,
     sync::{Arc, Mutex},
-    time::Instant,
 };
+
+#[cfg(feature = "vulkan_stats")]
+use std::time::Instant;
 
 use ash::{Device, vk};
 use glam::Mat4;
@@ -388,6 +390,7 @@ impl FrameData {
                         &mut last_pip,
                         &mut last_mat,
                         &mut last_index_buffer,
+                        #[cfg(feature = "vulkan_stats")]
                         &mut stats.counts,
                     )
                 });
@@ -411,7 +414,7 @@ impl FrameData {
         last_pip: &mut Option<*const MaterialPipeline>,
         last_mat: &mut Option<*const MaterialInstance>,
         last_index_buffer: &mut Option<vk::Buffer>,
-        stats: &mut VulkanStatsCounts,
+        #[cfg(feature = "vulkan_stats")] stats: &mut VulkanStatsCounts,
     ) {
         let mat_pip = d.material.pipeline();
         if settings.rebinding
@@ -419,7 +422,10 @@ impl FrameData {
                 .map(|l| !ptr::eq(l, d.material.deref()))
                 .unwrap_or(true)
         {
-            stats.bound_mat += 1;
+            #[cfg(feature = "vulkan_stats")]
+            {
+                stats.bound_mat += 1;
+            }
             *last_mat = Some(Rc::as_ptr(&d.material));
 
             if settings.rebinding
@@ -427,7 +433,10 @@ impl FrameData {
                     .map(|l| !ptr::eq(l, mat_pip.deref()))
                     .unwrap_or(true)
             {
-                stats.bound_mat_pip += 1;
+                #[cfg(feature = "vulkan_stats")]
+                {
+                    stats.bound_mat_pip += 1;
+                }
                 *last_pip = Some(mat_pip.deref());
 
                 unsafe {
@@ -489,7 +498,10 @@ impl FrameData {
                 .map(|l| l != d.index_buffer)
                 .unwrap_or(true)
         {
-            stats.bound_index_buf += 1;
+            #[cfg(feature = "vulkan_stats")]
+            {
+                stats.bound_index_buf += 1;
+            }
             *last_index_buffer = Some(d.index_buffer);
 
             unsafe {

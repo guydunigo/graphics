@@ -5,32 +5,23 @@ edition = "2024"
 include = ["src/**/*"]
 
 [dependencies]
-ash = "0.38.0"
-ash-window = "0.13.0"
-egui = { version = "0.31.1" }
-egui-ash-renderer = { version = "0.8.0", features = ["vk-mem", "dynamic-rendering"] }
-egui-winit = { version = "0.31.1", default-features = false }
-fontdue = { version = "0.9.3", features = ["std"] }
-glam = "0.30.3"
+ash = { version = "0.38.0", optional = true }
+ash-window = { version = "0.13.0", optional = true }
+egui = { version = "0.31.1", optional = true }
+egui-ash-renderer = { version = "0.8.0", features = ["vk-mem", "dynamic-rendering"], optional = true }
+egui-winit = { version = "0.31.1", default-features = false, optional = true }
+fontdue = { version = "0.9.3", features = ["std"], optional = true }
+glam = { version = "0.30.3", optional = true }
 obj-rs = "0.7.4"
 rand = "0.9.1"
-rayon = "1.10.0"
-softbuffer = "0.4.6"
-vk-mem = "0.4.0"
+rayon = { version = "1.10.0", optional = true }
+softbuffer = { version = "0.4.6", optional = true }
+vk-mem = { version = "0.4.0", optional = true }
 winit = "0.30.11"
-shaderc = "0.9.1"
+shaderc = { version = "0.9.1", optional = true }
 # TODO: gltf features ?
-gltf = { version = "1.4.1" }
-image = { version = "0.25.6", default-features = false }
-
-[target.'cfg(target_os = "android")'.dependencies.winit]
-version = "0.30.11"
-features = ["android-native-activity"]
-
-[target.'cfg(target_os = "android")'.lib]
-path = "src/main_android.rs"
-name = "graphics"
-crate-type = ["cdylib"]
+gltf = { version = "1.4.1", optional = true }
+image = { version = "0.25.6", default-features = false, optional = true }
 
 [profile.dev.package."*"]
 opt-level = 3
@@ -38,14 +29,32 @@ opt-level = 3
 [profile.dev]
 debug = true
 
+[lib]
+path = "src/main_android.rs"
+name = "graphics"
+crate-type = ["cdylib"]
+
+# [target.'cfg(target_os = "android")'.dependencies.winit]
+# version = "0.30.11"
+# features = ["android-native-activity"]
+
 [features]
 stats = []
-cpu
-gpu=["vulkan_stats", "validation_layers"]
+cpu=[
+    "softbuffer", "rayon", "fontdue"
+]
+android = ["winit/android-native-activity"]
+vulkan=[
+    "ash", "ash-window", "egui", "egui-ash-renderer", "egui-winit", "glam",
+    "gltf", "image",
+    "vk-mem", "shaderc",
+]
+# All vulkan_* features need vulkan
+# TODO: compilation error
 vulkan_linked = ["ash/linked", "shaderc/prefer-static-linking", "vk-mem/linked"]
 vulkan_dbg_mem = []
 vulkan_stats = []
-validation_layers = []
+vulkan_validation_layers = []
 
-# default = ["vulkan_stats"]
-default = ["vulkan_stats", "validation_layers"]
+# default = ["cpu"]
+default = ["vulkan", "vulkan_stats", "vulkan_validation_layers"]
