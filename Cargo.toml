@@ -4,4 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-winit = "0.30.9"
+winit = { version = "0.30.11", features = ["android-native-activity"] }
+
+[lib]
+name = "main"
+crate-type = ["cdylib"]
