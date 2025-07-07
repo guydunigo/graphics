@@ -19,9 +19,11 @@ use winit::{
     window::Window,
 };
 
+#[cfg(feature = "cpu")]
+use crate::scene::Camera;
 use crate::{
     maths::Vec3f,
-    scene::{Camera, Triangle, World},
+    scene::{Triangle, World},
     window::AppObserver,
 };
 
@@ -30,6 +32,7 @@ use cpu_engine::CPUEngine;
 use settings::EngineType;
 pub use settings::Settings;
 
+#[cfg(feature = "cpu")]
 const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
 #[cfg(feature = "stats")]
@@ -150,6 +153,7 @@ impl Engine<'_> {
     }
 }
 
+#[cfg(feature = "cpu")]
 fn world_to_raster(p_world: Vec3f, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3f {
     // Camera space
     let mut p = cam.world_to_sight(p_world);
@@ -184,6 +188,7 @@ fn world_to_raster(p_world: Vec3f, cam: &Camera, size: PhysicalSize<u32>, ratio_
     p
 }
 
+#[cfg(feature = "cpu")]
 fn world_to_raster_triangle(
     triangle: &Triangle,
     cam: &Camera,

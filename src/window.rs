@@ -6,9 +6,11 @@ use winit::{
     event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, KeyCode, PhysicalKey},
-    platform::x11::ActiveEventLoopExtX11,
     window::{CursorGrabMode, Window, WindowId},
 };
+
+#[cfg(target_os = "linux")]
+use winit::platform::x11::ActiveEventLoopExtX11;
 
 #[cfg(target_os = "android")]
 use winit::platform::android::{EventLoopBuilderExtAndroid, activity::AndroidApp};
@@ -253,6 +255,7 @@ impl ApplicationHandler for App<'_> {
                             // X11 doesn't support Locked and Wayland doesn't support setting cursor position without locking
                             // .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
 
+                            #[cfg(target_os = "linux")]
                             if event_loop.is_x11() {
                                 let size = w.window.inner_size();
                                 w.window

@@ -14,9 +14,10 @@ use super::{mesh::Mesh, triangle::Texture, triangle::Triangle};
 
 // TODO: better error handling
 pub fn import_triangles_and_diffuse<P: AsRef<Path>>(obj_path: P) -> Mesh {
-    let obj = parse_obj(BufReader::new(
-        File::open(&obj_path).expect("Couldn't load path"),
-    ))
+    let obj = parse_obj(BufReader::new(File::open(&obj_path).expect(&format!(
+        "Couldn't load path : {}",
+        obj_path.as_ref().to_string_lossy()
+    ))))
     .expect("Couldn't load .obj");
 
     println!(

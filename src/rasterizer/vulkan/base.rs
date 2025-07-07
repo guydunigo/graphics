@@ -393,7 +393,7 @@ fn device(instance: &Instance, chosen_gpu: vk::PhysicalDevice, queue_family_inde
         .push_next(&mut features12)
         .push_next(&mut features13);
 
-    let device_extension_names_raw: Vec<*const i8> =
+    let device_extension_names_raw: Vec<*const _> =
         DEVICE_EXTENSION_NAMES.iter().map(|e| e.as_ptr()).collect();
 
     let device_create_info = vk::DeviceCreateInfo::default()
