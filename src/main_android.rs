@@ -1,13 +1,13 @@
+#![cfg(target_os = "android")]
+
 mod font;
 mod maths;
 mod rasterizer;
 mod scene;
 mod window;
 
-#[cfg(target_os = "android")]
 use winit::platform::android::activity::AndroidApp;
 
-#[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 fn android_main(app: AndroidApp) {
     use std::ffi::CString;
