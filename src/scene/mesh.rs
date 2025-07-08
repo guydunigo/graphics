@@ -41,9 +41,9 @@ use glam::{Mat4, Vec3, vec3};
 use super::Texture;
 
 pub struct MeshAsset {
-    vertices: Vec<Vertex>,
-    indices: Vec<usize>,
-    surfaces: Vec<GeoSurface<Texture>>,
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<usize>,
+    pub surfaces: Vec<GeoSurface<Texture>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -72,6 +72,17 @@ pub struct GeoSurface<T> {
     pub count: u32,
     pub material: T,
     pub bounds: Bounds,
+}
+
+impl<T> GeoSurface<T> {
+    pub fn new(vertices: &[Vertex], start_index: usize, count: usize, material: T) -> Self {
+        GeoSurface {
+            start_index: start_index as u32,
+            count: count as u32,
+            material,
+            bounds: Bounds::new(&mut vertices[start_index..start_index + count].iter()),
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, Copy)]

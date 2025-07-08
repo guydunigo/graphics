@@ -8,36 +8,26 @@ use std::{
 
 pub use camera::Camera;
 mod mesh;
-use glam::Mat4;
+use glam::{Mat4, Vec3, vec3};
 pub use mesh::*;
 mod mesh_library;
 pub mod obj_file;
 
-use crate::maths::Vec3f;
-
 pub const DEFAULT_BACKGROUND_COLOR: u32 = 0xff181818;
 
 pub struct World {
-    pub meshes: Vec<MeshAsset>,
+    pub scene: Scene,
     // TODO: copy vulkan camera and world info
     pub camera: Camera,
-    pub sun_direction: Vec3f,
+    pub sun_direction: Vec3,
 }
 
 impl Default for World {
     fn default() -> Self {
         World {
-            meshes: vec![
-                mesh_library::base_triangle(),
-                mesh_library::base_pyramid(),
-                obj_file::import_mesh_and_diffuse(obj_file::SUZANNE_OBJ_PATH),
-                mesh_library::floor(),
-                mesh_library::back_wall(),
-                mesh_library::left_wall(),
-                mesh_library::right_wall(),
-            ],
+            scene: mesh_library::base_scene(),
             camera: Default::default(),
-            sun_direction: Vec3f::new(-1., -1., -1.).normalize(),
+            sun_direction: vec3(-1., -1., -1.).normalize(),
         }
     }
 }
@@ -63,10 +53,47 @@ pub struct Node {
     /// If there is no parent or it was destroyed, weak won't upgrade.
     pub parent: Weak<RefCell<Node>>,
     pub children: Vec<Rc<RefCell<Node>>>,
+
     pub local_transform: Mat4,
     /// Cache :
     world_transform: Mat4,
+
+    /// Actual mesh if any at this node
     mesh: Option<Rc<MeshAsset>>,
+}
+
+impl Node {
+    pub fn parent_of(children: Vec<Rc<RefCell<Node>>>) -> Rc<RefCell<Self>> {
+        Rc::new_cyclic(|f| {
+            children
+                .iter()
+                .for_each(|c| c.borrow_mut().parent = f.clone());
+            let node = Node {
+                parent: Default::default(),
+                children,
+
+                local_transform: Default::default(),
+                world_transform: Default::default(),
+
+                mesh: None,
+            };
+            RefCell::new(node)
+        })
+    }
+}
+
+impl From<MeshAsset> for Node {
+    fn from(value: MeshAsset) -> Self {
+        Node {
+            parent: Default::default(),
+            children: Default::default(),
+
+            local_transform: Default::default(),
+            world_transform: Default::default(),
+
+            mesh: Some(Rc::new(value)),
+        }
+    }
 }
 
 pub struct Scene {
