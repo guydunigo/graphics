@@ -290,11 +290,13 @@ impl ApplicationHandler for App<'_> {
                     #[cfg(feature = "cpu")]
                     KeyCode::KeyD => self.world.camera.move_sight(1., 0., 0.),
                     #[cfg(feature = "cpu")]
-                    KeyCode::ArrowLeft => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0., -0.1, 0.)),
+                    KeyCode::ArrowLeft => {
+                        todo!();
+                        self.world
+                            .meshes
+                            .iter_mut()
+                            .for_each(|m| m.rot *= &Rotation::from_angles(0., -0.1, 0.))
+                    }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowRight => self
                         .world
