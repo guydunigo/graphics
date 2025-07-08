@@ -5,12 +5,12 @@ use std::ops::DerefMut;
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    maths::{Vec3f, Vec4u},
+    maths::Vec4u,
     rasterizer::{
         MINIMAL_AMBIANT_LIGHT, Rect, bounding_box_triangle, edge_function, settings::Settings,
         world_to_raster_triangle,
     },
-    scene::{Mesh, Texture, Triangle, World},
+    scene::{Texture, World},
 };
 
 use super::{SingleThreadedEngine, draw_vertice_basic};
@@ -56,7 +56,8 @@ impl SingleThreadedEngine for IteratorEngine {
         let ratio_w_h = size.width as f32 / size.height as f32;
 
         world
-            .meshes
+            .scene
+            .top_nodes()
             .iter()
             .flat_map(Mesh::to_world_triangles)
             .inspect(|_| {

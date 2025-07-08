@@ -8,11 +8,10 @@ mod single_threaded;
 #[cfg(feature = "vulkan")]
 mod vulkan;
 
+use glam::Vec3;
 #[cfg(feature = "cpu")]
 use std::marker::PhantomData;
 use std::rc::Rc;
-#[cfg(feature = "vulkan")]
-use vulkan::VulkanEngine;
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::WindowEvent,
@@ -20,12 +19,13 @@ use winit::{
 };
 
 #[cfg(feature = "cpu")]
-use crate::scene::Camera;
 use crate::{
-    maths::Vec3f,
-    scene::{Triangle, World},
+    scene::{Camera, World},
     window::AppObserver,
 };
+
+#[cfg(feature = "vulkan")]
+use vulkan::VulkanEngine;
 
 #[cfg(feature = "cpu")]
 use cpu_engine::CPUEngine;
@@ -155,7 +155,7 @@ impl Engine<'_> {
 }
 
 #[cfg(feature = "cpu")]
-fn world_to_raster(p_world: Vec3f, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3f {
+fn world_to_raster(p_world: Vec3, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3 {
     // Camera space
     let mut p = cam.world_to_sight(p_world);
 
@@ -225,11 +225,11 @@ fn bounding_box_triangle(t: &Triangle, size: PhysicalSize<u32>) -> Rect {
 
 // Calculates the area of the parallelogram from vectors ab and ap
 // Positive if p is "right" of ab
-fn edge_function(ab: Vec3f, ap: Vec3f) -> f32 {
+fn edge_function(ab: Vec3, ap: Vec3) -> f32 {
     ap.x * ab.y - ap.y * ab.x
 }
 
-fn buffer_index(p: Vec3f, size: PhysicalSize<u32>) -> Option<usize> {
+fn buffer_index(p: Vec3, size: PhysicalSize<u32>) -> Option<usize> {
     if p.x >= 0. && p.x < (size.width as f32) && p.y >= 0. && p.y < (size.height as f32) {
         Some(p.x as usize + p.y as usize * size.width as usize)
     } else {

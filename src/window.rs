@@ -9,6 +9,9 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
+#[cfg(feature = "cpu")]
+use glam::Mat4;
+
 #[cfg(target_os = "linux")]
 use winit::platform::x11::ActiveEventLoopExtX11;
 
@@ -18,7 +21,6 @@ use winit::platform::android::{EventLoopBuilderExtAndroid, activity::AndroidApp}
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
 use crate::{
-    maths::Rotation,
     rasterizer::{Engine, Settings},
     scene::World,
 };
@@ -291,43 +293,32 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::KeyD => self.world.camera.move_sight(1., 0., 0.),
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowLeft => {
-                        todo!();
-                        self.world
-                            .meshes
-                            .iter_mut()
-                            .for_each(|m| m.rot *= &Rotation::from_angles(0., -0.1, 0.))
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
+                            let mut m = m.borrow_mut();
+                            m.local_transform = Mat4::from_rotation_y(-0.1) * m.local_transform;
+                        }
                     }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ArrowRight => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0., 0.1, 0.)),
+                    KeyCode::ArrowRight => {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
+                            let mut m = m.borrow_mut();
+                            m.local_transform = Mat4::from_rotation_y(0.1) * m.local_transform;
+                        }
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ArrowUp => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(-0.1, 0., 0.)),
+                    KeyCode::ArrowUp => {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
+                            let mut m = m.borrow_mut();
+                            m.local_transform = Mat4::from_rotation_x(-0.1) * m.local_transform;
+                        }
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ArrowDown => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0.1, 0., 0.)),
-                    // TODO: parallel structures
-                    // KeyCode::ArrowLeft => self.world.meshes().iter().for_each(|m| {
-                    //     m.write().unwrap().rot *= &Rotation::from_angles(0., -0.1, 0.)
-                    // }),
-                    // KeyCode::ArrowRight => self.world.meshes().iter().for_each(|m| {
-                    //     m.write().unwrap().rot *= &Rotation::from_angles(0., 0.1, 0.)
-                    // }),
-                    // KeyCode::ArrowUp => self.world.meshes().iter().for_each(|m| {
-                    //     m.write().unwrap().rot *= &Rotation::from_angles(-0.1, 0., 0.)
-                    // }),
-                    // KeyCode::ArrowDown => self.world.meshes().iter().for_each(|m| {
-                    //     m.write().unwrap().rot *= &Rotation::from_angles(0.1, 0., 0.)
-                    // }),
+                    KeyCode::ArrowDown => {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
+                            let mut m = m.borrow_mut();
+                            m.local_transform = Mat4::from_rotation_x(0.1) * m.local_transform;
+                        }
+                    }
                     KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,
                     KeyCode::Digit1 => w.set_next_engine(),
                     KeyCode::Digit2 => w.settings.sort_triangles.next(),

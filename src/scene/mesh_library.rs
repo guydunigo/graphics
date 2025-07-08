@@ -29,10 +29,7 @@ pub fn base_scene() -> Scene {
     let mut nodes = HashMap::new();
     nodes.insert("suzanne".to_string(), suzanne);
 
-    Scene {
-        nodes,
-        top_nodes: vec![top],
-    }
+    Scene::new(nodes, vec![top])
 }
 
 fn base_triangle() -> Node {
@@ -55,11 +52,7 @@ fn base_triangle() -> Node {
         local_transform: Mat4::from_translation(vec3(0., 0., -10.)),
         world_transform: Default::default(),
 
-        mesh: Some(Rc::new(MeshAsset {
-            vertices,
-            indices,
-            surfaces,
-        })),
+        mesh: Some(Rc::new(MeshAsset::new(vertices, indices, surfaces))),
     }
 }
 
@@ -123,11 +116,7 @@ fn base_pyramid() -> Node {
 
         world_transform: Default::default(),
 
-        mesh: Some(Rc::new(MeshAsset {
-            vertices,
-            indices,
-            surfaces,
-        })),
+        mesh: Some(Rc::new(MeshAsset::new(vertices, indices, surfaces))),
     }
 }
 
@@ -164,11 +153,7 @@ fn triangles_plane_mesh(color_mask: u32) -> MeshAsset {
         })
         .collect();
 
-    MeshAsset {
-        vertices,
-        indices,
-        surfaces,
-    }
+    MeshAsset::new(vertices, indices, surfaces)
 }
 
 fn triangles_plane(color_mask: u32, pos: Vec3, rot: Quat, scale: f32) -> Node {

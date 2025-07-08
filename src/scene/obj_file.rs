@@ -65,11 +65,7 @@ pub fn import_mesh_and_diffuse<P: AsRef<Path>>(obj_path: P) -> MeshAsset {
     // obj.groups.keys().for_each(|k| println!("  - {k}"));
     // TODO: hierarchy of nodes ?
 
-    MeshAsset {
-        vertices,
-        indices,
-        surfaces,
-    }
+    MeshAsset::new(vertices, indices, surfaces)
 }
 
 fn load_materials_diffuse_rgb<P: AsRef<Path>>(

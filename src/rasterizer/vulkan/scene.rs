@@ -16,8 +16,8 @@ use super::{
     textures::{MaterialInstance, MaterialPass, Textures},
 };
 
-use ash::{vk, Device};
-use glam::{vec3, vec4, Mat4, Vec3, Vec4};
+use ash::{Device, vk};
+use glam::{Mat4, Vec3, Vec4, vec3, vec4};
 
 // TODO: proper resource path mngmt and all
 const SCENES: [(&str, &str); 5] = [
@@ -528,7 +528,7 @@ impl Node for NodeData {
         self.world_transform = parent_mat * self.local_transform;
         self.children
             .iter()
-            .for_each(|c| c.borrow_mut().refresh_transform(&self.world_transform));
+            .for_each(|c| c.borrow_mut().refresh_transform(self.world_transform));
     }
     fn node_data(&self) -> &NodeData {
         self

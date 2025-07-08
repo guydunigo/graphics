@@ -80,6 +80,13 @@ impl Node {
             RefCell::new(node)
         })
     }
+
+    pub fn refresh_transform(&mut self, parent_mat: &Mat4) {
+        self.world_transform = parent_mat * self.local_transform;
+        self.children
+            .iter()
+            .for_each(|c| c.borrow_mut().refresh_transform(&self.world_transform));
+    }
 }
 
 impl From<MeshAsset> for Node {
@@ -98,7 +105,32 @@ impl From<MeshAsset> for Node {
 
 pub struct Scene {
     // meshes: HashMap<String, Rc<MeshAsset>>,
-    nodes: HashMap<String, Rc<RefCell<Node>>>,
+    named_nodes: HashMap<String, Rc<RefCell<Node>>>,
 
     top_nodes: Vec<Rc<RefCell<Node>>>,
+}
+
+impl Scene {
+    pub fn new(
+        named_nodes: HashMap<String, Rc<RefCell<Node>>>,
+        top_nodes: Vec<Rc<RefCell<Node>>>,
+    ) -> Self {
+        // Update world transform infos to all nodes.
+        top_nodes
+            .iter()
+            .for_each(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY));
+
+        Scene {
+            named_nodes,
+            top_nodes,
+        }
+    }
+
+    pub fn top_nodes(&self) -> &[Rc<RefCell<Node>>] {
+        &self.top_nodes
+    }
+
+    pub fn get_named_node(&self, name: &str) -> Option<&Rc<RefCell<Node>>> {
+        self.named_nodes.get(name)
+    }
 }

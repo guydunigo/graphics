@@ -41,9 +41,26 @@ use glam::{Mat4, Vec3, vec3};
 use super::Texture;
 
 pub struct MeshAsset {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<usize>,
-    pub surfaces: Vec<GeoSurface<Texture>>,
+    vertices: Vec<Vertex>,
+    indices: Vec<usize>,
+    surfaces: Vec<GeoSurface<Texture>>,
+    bounds: Bounds,
+}
+
+impl MeshAsset {
+    pub fn new(
+        vertices: Vec<Vertex>,
+        indices: Vec<usize>,
+        surfaces: Vec<GeoSurface<Texture>>,
+    ) -> Self {
+        let bounds = Bounds::new(&mut vertices.iter());
+        Self {
+            vertices,
+            indices,
+            surfaces,
+            bounds,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
