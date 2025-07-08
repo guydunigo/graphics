@@ -11,7 +11,7 @@ egui = { version = "0.31.1", optional = true }
 egui-ash-renderer = { version = "0.8.0", features = ["vk-mem", "dynamic-rendering"], optional = true }
 egui-winit = { version = "0.31.1", default-features = false, optional = true }
 fontdue = { version = "0.9.3", features = ["std"], optional = true }
-glam = { version = "0.30.3", optional = true }
+glam = "0.30.3"
 obj-rs = "0.7.4"
 rand = "0.9.1"
 rayon = { version = "1.10.0", optional = true }
@@ -45,7 +45,7 @@ cpu=[
 ]
 android = ["winit/android-native-activity"]
 vulkan=[
-    "ash", "ash-window", "egui", "egui-ash-renderer", "egui-winit", "glam",
+    "ash", "ash-window", "egui", "egui-ash-renderer", "egui-winit",
     "gltf", "image", "vk-mem",
 ]
 vulkan_shaderc = ["shaderc"]
@@ -56,6 +56,6 @@ vulkan_dbg_mem = []
 vulkan_stats = []
 vulkan_validation_layers = []
 
-# default = ["cpu"]
-default = ["vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]
+default = ["cpu"]
+# default = ["vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]
 # default = ["vulkan", "vulkan_stats", "vulkan_validation_layers"]

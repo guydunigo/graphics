@@ -2,6 +2,7 @@ pub const SUZANNE_OBJ_PATH: &str = "resources/Suzanne.obj";
 
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
 
+use glam::{Vec3, Vec4, vec3, vec4};
 use obj::raw::{
     material::MtlColor,
     object::{Group, Polygon},
@@ -12,8 +13,93 @@ use crate::maths::Vec3f;
 
 use super::{mesh::Mesh, triangle::Texture, triangle::Triangle};
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Vertex {
+    pub position: Vec3,
+    // pub uv_x: f32,
+    // pub normal: Vec3,
+    // pub uv_y: f32,
+    // pub color: Vec4,
+}
+
+impl Default for Vertex {
+    fn default() -> Self {
+        Self {
+            position: Default::default(),
+            // uv_x: Default::default(),
+            // normal: vec3(1., 0., 0.),
+            // uv_y: Default::default(),
+            // color: vec4(1., 1., 1., 1.),
+        }
+    }
+}
+
+pub struct GeoSurface {
+    pub start_index: u32,
+    pub count: u32,
+    // pub material: Rc<MaterialInstance>,
+
+    // pub bounds: Bounds,
+}
+
+pub fn import_opti<P: AsRef<Path>>(obj_path: P) {
+    let obj = parse_obj(BufReader::new(File::open(&obj_path).expect(&format!(
+        "Couldn't load path : {}",
+        obj_path.as_ref().to_string_lossy()
+    ))))
+    .expect("Couldn't load .obj");
+
+    println!(
+        "Loading object '{}' from path '{}' : {} polygons from {} points...",
+        obj.name.unwrap_or("".to_string()),
+        obj_path.as_ref().to_string_lossy(),
+        obj.polygons.len(),
+        obj.positions.len(),
+    );
+
+    let mut vertices = Vec::with_capacity(obj.positions.len());
+    vertices.extend(obj.positions.iter().map(|(x, y, z, _)| Vertex {
+        position: vec3(*x, *y, *z),
+        ..Default::default()
+    }));
+
+    let mut indices: Vec<usize> = Vec::with_capacity(obj.polygons.len() * 3);
+    for poly in obj.polygons.iter() {
+        match poly {
+            Polygon::P(vec) if vec.len() == 3 => indices.extend(vec.iter()),
+            Polygon::PT(vec) | Polygon::PN(vec) if vec.len() == 3 => {
+                indices.extend(vec.iter().map(|(p, _)| p))
+            }
+            Polygon::PTN(vec) if vec.len() == 3 => indices.extend(vec.iter().map(|(p, _, _)| p)),
+            _ => panic!("Model should be triangulated first to be loaded properly"),
+        }
+    }
+
+    let surfaces: Vec<_> = obj
+        .meshes
+        .iter()
+        .flat_map(|(material_name, group)| {
+            group.polygons.iter().map(|r| GeoSurface {
+                start_index: (r.start * 3) as u32,
+                count: dbg!(((r.end - r.start) * 3) as u32),
+            })
+        })
+        .collect();
+
+    // Split by mesh ?
+    // println!("Groups : {}", obj.groups.keys().len());
+    // obj.groups.keys().for_each(|k| println!("  - {k}"));
+    //
+    // TODO: hierarchy of nodes ?
+
+    todo!();
+}
+
 // TODO: better error handling
 pub fn import_triangles_and_diffuse<P: AsRef<Path>>(obj_path: P) -> Mesh {
+    import_opti(&obj_path);
+
     let obj = parse_obj(BufReader::new(File::open(&obj_path).expect(&format!(
         "Couldn't load path : {}",
         obj_path.as_ref().to_string_lossy()
