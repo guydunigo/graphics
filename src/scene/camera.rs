@@ -56,7 +56,7 @@ impl Camera {
     // TODO: doesn't take into account time delta.
     pub fn update(&mut self) {
         let rot = self.rot_mat();
-        self.pos += (rot * Vec4::from((self.vel * 0.5, 0.))).xyz();
+        self.pos += (rot * Vec4::from((self.vel * Self::MOVE_STEP, 0.))).xyz();
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
@@ -103,12 +103,12 @@ impl Camera {
 
     pub fn on_mouse_motion(&mut self, (delta_x, delta_y): (f64, f64), cursor_grabbed: bool) {
         if cursor_grabbed {
-            self.yaw += delta_x as f32 / 200.;
-            self.pitch -= delta_y as f32 / 200.;
+            self.yaw += delta_x as f32 * Self::ROT_STEP;
+            self.pitch -= delta_y as f32 * Self::ROT_STEP;
         }
     }
 
-    pub fn world_to_sight(&self, _point: Vec3) -> Vec3 {
-        todo!();
+    pub fn world_to_sight(&self, point: Vec3) -> Vec3 {
+        (self.view_mat() * point.extend(1.)).xyz()
     }
 }

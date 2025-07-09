@@ -136,21 +136,22 @@ fn triangles_plane_mesh(color_mask: u32) -> MeshAsset {
         .flat_map(|x| {
             (0..RANGE_2).flat_map(move |z| {
                 [
-                    x * RANGE_2 + z,
-                    (x + 1) * RANGE_2 + z + 1,
-                    (x + 1) * RANGE_2 + z,
+                    x * (RANGE_2 + 1) + z,
+                    x * (RANGE_2 + 1) + z + 1,
+                    (x + 1) * (RANGE_2 + 1) + z + 1,
                 ]
             })
         })
         .map(|i| i as usize)
         .collect();
-    let surfaces = (0..indices.len() / 3)
+    let surfaces: Vec<_> = (0..indices.len())
+        .step_by(3)
         .map(|i| {
             GeoSurface::new(
                 &vertices,
                 &indices,
                 i,
-                1,
+                3,
                 Texture::Color(rand::rng().next_u32() & color_mask),
             )
         })
@@ -177,7 +178,7 @@ fn back_wall() -> Node {
     triangles_plane(
         0xffffff00,
         vec3(0., 0., -30.),
-        Quat::from_rotation_x(PI / 2.),
+        Quat::from_rotation_z(-PI / 2.) * Quat::from_rotation_x(PI / 2.),
         1.,
     )
 }

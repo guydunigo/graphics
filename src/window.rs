@@ -320,6 +320,9 @@ impl ApplicationHandler for App<'_> {
                 self.cursor = Some(position);
             }
             WindowEvent::RedrawRequested => {
+                // TODO: forward update and events to world to manage itself ?
+                self.world.camera.update();
+
                 self.update_last_frame_micros();
 
                 #[cfg(feature = "stats")]
