@@ -376,7 +376,8 @@ pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
 
             triangles.reserve(mesh.surfaces.iter().map(|s| s.count / 3).sum());
             triangles.extend(mesh.surfaces.iter().flat_map(|s| {
-                (0..s.count / 3)
+                (0..s.count)
+                    .step_by(3)
                     .map(|i| s.start_index + i)
                     .map(|i| Triangle {
                         p0: vertices[mesh.indices[i]],

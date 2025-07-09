@@ -282,57 +282,57 @@ impl ApplicationHandler for App<'_> {
                         }
                     }
                     KeyCode::ArrowLeft => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut().transform(&Mat4::from_rotation_y(-0.1));
                         }
                     }
                     KeyCode::ArrowRight => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut().transform(&Mat4::from_rotation_y(0.1));
                         }
                     }
                     KeyCode::ArrowUp => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut().transform(&Mat4::from_rotation_x(-0.1));
                         }
                     }
                     KeyCode::ArrowDown => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut().transform(&Mat4::from_rotation_x(0.1));
                         }
                     }
                     KeyCode::NumpadAdd => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_scale(Vec3::splat(1.1)));
                         }
                     }
                     KeyCode::NumpadSubtract => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_scale(Vec3::splat(0.9)));
                         }
                     }
                     KeyCode::Numpad4 => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_translation(vec3(-0.1, 0., 0.)));
                         }
                     }
                     KeyCode::Numpad6 => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_translation(vec3(0.1, 0., 0.)));
                         }
                     }
                     KeyCode::Numpad8 => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_translation(vec3(0., 0., -0.1)));
                         }
                     }
                     KeyCode::Numpad2 => {
-                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_translation(vec3(0., 0., 0.1)));
                         }
