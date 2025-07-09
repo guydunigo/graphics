@@ -44,13 +44,8 @@ impl Engine<'_> {
 
     #[cfg(all(not(feature = "vulkan"), feature = "cpu"))]
     pub fn set_next(&mut self) {
-        match self {
-            Engine::Cpu(e, d) => {
-                if e.set_next() {
-                    *self = Engine::Cpu(Box::new(CPUEngine::new(e.window().clone())), *d);
-                }
-            }
-        }
+        let Engine::Cpu(e, _) = self;
+        e.set_next();
     }
 
     #[cfg(all(feature = "vulkan", feature = "cpu"))]

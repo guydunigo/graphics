@@ -1,8 +1,8 @@
 #![cfg(feature = "cpu")]
 
 mod cpu_engine;
+mod parallel;
 mod single_threaded;
-// mod parallel;
 
 use glam::{Vec3, Vec4Swizzles};
 use winit::dpi::{PhysicalPosition, PhysicalSize};

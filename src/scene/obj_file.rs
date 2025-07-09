@@ -9,10 +9,8 @@ use super::{GeoSurface, MeshAsset, Texture, Vertex};
 
 // TODO: better error handling
 pub fn import_mesh_and_diffuse<P: AsRef<Path>>(obj_path: P) -> MeshAsset {
-    let obj = parse_obj(BufReader::new(File::open(&obj_path).expect(&format!(
-        "Couldn't load path : {}",
-        obj_path.as_ref().to_string_lossy()
-    ))))
+    let obj = parse_obj(BufReader::new(File::open(&obj_path).unwrap_or_else(|_| panic!("Couldn't load path : {}",
+        obj_path.as_ref().to_string_lossy()))))
     .expect("Couldn't load .obj");
 
     println!(

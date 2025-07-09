@@ -1,25 +1,28 @@
+use glam::Vec3;
 use rayon::prelude::*;
 use std::sync::{Arc, atomic::AtomicU64};
 use winit::dpi::PhysicalSize;
+
+use crate::{
+    maths::Vec4u,
+    rasterizer::{
+        cpu::{MINIMAL_AMBIANT_LIGHT, Triangle, bounding_box_triangle, world_to_raster_triangle},
+        settings::Settings,
+    },
+    scene::{Camera, Texture},
+};
+
+use super::{ParIterEngine, rasterize_triangle};
 
 #[cfg(feature = "stats")]
 use super::ParStats;
 #[cfg(feature = "stats")]
 use std::sync::atomic::Ordering;
 
-use crate::{
-    maths::Vec4u,
-    rasterizer::{
-        MINIMAL_AMBIANT_LIGHT, bounding_box_triangle, settings::Settings, world_to_raster_triangle,
-    },
-    scene::{Texture, World},
-};
-
-use super::{ParIterEngine, rasterize_triangle};
-
 /// par_bridge
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Clone)]
 pub struct ParIterEngine4 {
+    triangles: Vec<Triangle>,
     depth_color_buffer: Arc<[AtomicU64]>,
 }
 
@@ -32,36 +35,34 @@ impl ParIterEngine for ParIterEngine4 {
         &mut self.depth_color_buffer
     }
 
+    fn triangles_mut(&mut self) -> &mut Vec<Triangle> {
+        &mut self.triangles
+    }
+
     fn rasterize_world(
+        &mut self,
         settings: &Settings,
-        world: &World,
-        depth_color_buffer: &[AtomicU64],
+        camera: &Camera,
+        sun_direction: Vec3,
         size: PhysicalSize<u32>,
+        ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &ParStats,
     ) {
-        let ratio_w_h = size.width as f32 / size.height as f32;
-
-        world
-            .meshes
-            .par_iter()
-            .flat_map(|m| {
-                m.triangles
-                    .par_iter()
-                    .map(|t| t.scale_rot_move(m.scale, &m.rot, m.pos))
-            })
+        self.triangles
+            .par_drain(..)
             .inspect(|_| {
                 #[cfg(feature = "stats")]
                 stats.nb_triangles_tot.fetch_add(1, Ordering::Relaxed);
             })
             .map(|t| {
                 // TODO: explode ?
-                let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
+                let t_raster = world_to_raster_triangle(&t, camera, size, ratio_w_h);
                 let bb = bounding_box_triangle(&t_raster, size);
                 (t, t_raster, bb)
             })
             .filter(|(_, _, bb)| {
                 // TODO: max_z >= MAX_DEPTH ?
-                !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
+                !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= camera.z_near)
             })
             .inspect(|_| {
                 #[cfg(feature = "stats")]
@@ -93,22 +94,21 @@ impl ParIterEngine for ParIterEngine4 {
             // Also simplifying colours.
             .map(|(t, mut t_raster, bb, p01, p20)| {
                 let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
-                let light = world
-                    .sun_direction
+                let light = sun_direction
                     .dot(triangle_normal)
                     .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
 
                 // If a `Texture::VertexColor` has the same color for all vertices, then we can
                 // consider it like a `Texture::Color`.
-                if let Texture::VertexColor(c0, c1, c2) = t_raster.texture
+                if let Texture::VertexColor(c0, c1, c2) = t_raster.material
                     && c0 == c1
                     && c1 == c2
                 {
-                    t_raster.texture = Texture::Color(c0);
+                    t_raster.material = Texture::Color(c0);
                 }
 
-                if let Texture::Color(col) = t_raster.texture {
-                    t_raster.texture =
+                if let Texture::Color(col) = t_raster.material {
+                    t_raster.material =
                         Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
                 }
 
@@ -117,8 +117,8 @@ impl ParIterEngine for ParIterEngine4 {
             .for_each(|(t_raster, bb, light, p01, p20)| {
                 rasterize_triangle(
                     &t_raster,
-                    depth_color_buffer,
-                    world.camera.z_near,
+                    &self.depth_color_buffer,
+                    camera.z_near,
                     size,
                     settings,
                     #[cfg(feature = "stats")]
