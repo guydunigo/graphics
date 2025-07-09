@@ -1,4 +1,4 @@
-use std::{collections::HashMap, iter::once, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, iter::once, rc::Rc};
 
 use glam::{Mat4, Quat, Vec3, vec3};
 /// Set of constructor functions to get testing objects
@@ -49,7 +49,7 @@ fn base_triangle() -> Node {
         parent: Default::default(),
         children: Default::default(),
 
-        local_transform: Mat4::from_translation(vec3(0., 0., -10.)),
+        local_transform: RefCell::new(Mat4::from_translation(vec3(0., 0., -10.))),
         world_transform: Default::default(),
 
         mesh: Some(Rc::new(MeshAsset::new(vertices, indices, surfaces))),
@@ -108,11 +108,11 @@ fn base_pyramid() -> Node {
         parent: Default::default(),
         children: Default::default(),
 
-        local_transform: Mat4::from_scale_rotation_translation(
+        local_transform: RefCell::new(Mat4::from_scale_rotation_translation(
             Vec3::splat(0.7),
             Quat::from_rotation_z(-PI / 3.),
             vec3(4., 1., -19.),
-        ),
+        )),
 
         world_transform: Default::default(),
 
@@ -160,7 +160,11 @@ fn triangles_plane(color_mask: u32, pos: Vec3, rot: Quat, scale: f32) -> Node {
     Node {
         parent: Default::default(),
         children: Default::default(),
-        local_transform: Mat4::from_scale_rotation_translation(Vec3::splat(scale), rot, pos),
+        local_transform: RefCell::new(Mat4::from_scale_rotation_translation(
+            Vec3::splat(scale),
+            rot,
+            pos,
+        )),
         world_transform: Default::default(),
         mesh: Some(Rc::new(triangles_plane_mesh(color_mask))),
     }

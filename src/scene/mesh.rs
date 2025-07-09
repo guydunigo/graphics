@@ -170,7 +170,7 @@ pub struct Node {
     pub parent: Weak<Node>,
     pub children: Vec<Rc<Node>>,
 
-    pub local_transform: Mat4,
+    pub local_transform: RefCell<Mat4>,
     /// Cache :
     pub world_transform: RefCell<Mat4>,
 
@@ -197,7 +197,7 @@ impl Node {
     }
 
     pub fn refresh_transform(&self, parent_mat: &Mat4) {
-        let world_transform = parent_mat * self.local_transform;
+        let world_transform = parent_mat * *self.local_transform.borrow();
         self.children
             .iter()
             .for_each(|c| c.refresh_transform(&world_transform));

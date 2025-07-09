@@ -51,8 +51,8 @@ pub fn import_mesh_and_diffuse<P: AsRef<Path>>(obj_path: P) -> MeshAsset {
             group.polygons.iter().map(|r| {
                 let range = (r.start * 3)..(r.end * 3);
                 GeoSurface {
-                    start_index: (r.start * 3) as u32,
-                    count: range.len() as u32,
+                    start_index: (r.start * 3),
+                    count: range.len(),
                     material: mtls[material_name],
                     bounds: Bounds::new(&mut indices[range].iter().map(|i| &vertices[*i])),
                 }

@@ -294,29 +294,29 @@ impl ApplicationHandler for App<'_> {
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowLeft => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
-                            let mut m = m.borrow_mut();
-                            m.local_transform = Mat4::from_rotation_y(-0.1) * m.local_transform;
+                            let mut local_transform = m.local_transform.borrow_mut();
+                            *local_transform = Mat4::from_rotation_y(-0.1) * *local_transform;
                         }
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowRight => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
-                            let mut m = m.borrow_mut();
-                            m.local_transform = Mat4::from_rotation_y(0.1) * m.local_transform;
+                            let mut local_transform = m.local_transform.borrow_mut();
+                            *local_transform = Mat4::from_rotation_y(0.1) * *local_transform;
                         }
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowUp => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
-                            let mut m = m.borrow_mut();
-                            m.local_transform = Mat4::from_rotation_x(-0.1) * m.local_transform;
+                            let mut local_transform = m.local_transform.borrow_mut();
+                            *local_transform = Mat4::from_rotation_x(-0.1) * *local_transform;
                         }
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowDown => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
-                            let mut m = m.borrow_mut();
-                            m.local_transform = Mat4::from_rotation_x(0.1) * m.local_transform;
+                            let mut local_transform = m.local_transform.borrow_mut();
+                            *local_transform = Mat4::from_rotation_x(0.1) * *local_transform;
                         }
                     }
                     KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,

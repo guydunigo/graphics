@@ -1,10 +1,7 @@
 use std::{
-    fmt,
     iter::Sum,
     ops::{Add, Div, Mul, MulAssign, Sub},
 };
-
-use super::Vec3f;
 
 #[derive(Default, Debug, Clone, Copy)]
 pub struct Vec4u {
@@ -71,14 +68,6 @@ impl Mul<f32> for Vec4u {
     }
 }
 
-impl MulAssign<f32> for Vec3f {
-    fn mul_assign(&mut self, rhs: f32) {
-        self.x *= rhs;
-        self.y *= rhs;
-        self.z *= rhs;
-    }
-}
-
 impl Div<f32> for Vec4u {
     type Output = Self;
 
@@ -96,11 +85,5 @@ impl MulAssign<f32> for Vec4u {
         self.y *= rhs;
         self.z *= rhs;
         self.w *= rhs;
-    }
-}
-
-impl fmt::Display for Vec3f {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({:5.2},{:5.2},{:5.2})", self.x, self.y, self.z)
     }
 }

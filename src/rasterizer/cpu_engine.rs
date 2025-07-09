@@ -5,7 +5,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{font::TextWriter, scene::World, window::AppObserver};
 
 use super::{
-    parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
+    // parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
     settings::{EngineType, Settings},
     single_threaded::{IteratorEngine, OriginalEngine, SingleThreadedEngine},
 };
@@ -86,14 +86,13 @@ impl CPUEngine {
     }
 }
 
-#[derive(Debug)]
 enum AnyEngine {
     Original(OriginalEngine),
     Iterator(IteratorEngine),
-    ParIter2(ParIterEngine2),
-    ParIter3(ParIterEngine3),
-    ParIter4(ParIterEngine4),
-    ParIter5(ParIterEngine5),
+    // ParIter2(ParIterEngine2),
+    // ParIter3(ParIterEngine3),
+    // ParIter4(ParIterEngine4),
+    // ParIter5(ParIterEngine5),
 }
 
 impl Default for AnyEngine {
@@ -107,11 +106,11 @@ impl AnyEngine {
     pub fn set_next(&mut self) -> bool {
         match self {
             AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
-            AnyEngine::Iterator(_) => *self = AnyEngine::ParIter2(Default::default()),
-            AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
-            AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
-            AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
-            AnyEngine::ParIter5(_) => {
+            // AnyEngine::Iterator(_) => *self = AnyEngine::ParIter2(Default::default()),
+            // AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
+            // AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
+            // AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
+            AnyEngine::Iterator(_) => {
                 *self = AnyEngine::Original(Default::default());
                 return true;
             }
@@ -151,46 +150,46 @@ impl AnyEngine {
                 #[cfg(feature = "stats")]
                 stats,
             ),
-            AnyEngine::ParIter2(e) => e.rasterize(
-                settings,
-                text_writer,
-                world,
-                buffer,
-                size,
-                app,
-                #[cfg(feature = "stats")]
-                stats,
-            ),
-            AnyEngine::ParIter3(e) => e.rasterize(
-                settings,
-                text_writer,
-                world,
-                buffer,
-                size,
-                app,
-                #[cfg(feature = "stats")]
-                stats,
-            ),
-            AnyEngine::ParIter4(e) => e.rasterize(
-                settings,
-                text_writer,
-                world,
-                buffer,
-                size,
-                app,
-                #[cfg(feature = "stats")]
-                stats,
-            ),
-            AnyEngine::ParIter5(e) => e.rasterize(
-                settings,
-                text_writer,
-                world,
-                buffer,
-                size,
-                app,
-                #[cfg(feature = "stats")]
-                stats,
-            ),
+            // AnyEngine::ParIter2(e) => e.rasterize(
+            //     settings,
+            //     text_writer,
+            //     world,
+            //     buffer,
+            //     size,
+            //     app,
+            //     #[cfg(feature = "stats")]
+            //     stats,
+            // ),
+            // AnyEngine::ParIter3(e) => e.rasterize(
+            //     settings,
+            //     text_writer,
+            //     world,
+            //     buffer,
+            //     size,
+            //     app,
+            //     #[cfg(feature = "stats")]
+            //     stats,
+            // ),
+            // AnyEngine::ParIter4(e) => e.rasterize(
+            //     settings,
+            //     text_writer,
+            //     world,
+            //     buffer,
+            //     size,
+            //     app,
+            //     #[cfg(feature = "stats")]
+            //     stats,
+            // ),
+            // AnyEngine::ParIter5(e) => e.rasterize(
+            //     settings,
+            //     text_writer,
+            //     world,
+            //     buffer,
+            //     size,
+            //     app,
+            //     #[cfg(feature = "stats")]
+            //     stats,
+            // ),
         }
     }
 
@@ -198,10 +197,10 @@ impl AnyEngine {
         match self {
             AnyEngine::Original(_) => EngineType::Original,
             AnyEngine::Iterator(_) => EngineType::Iterator,
-            AnyEngine::ParIter2(_) => EngineType::ParIter2,
-            AnyEngine::ParIter3(_) => EngineType::ParIter3,
-            AnyEngine::ParIter4(_) => EngineType::ParIter4,
-            AnyEngine::ParIter5(_) => EngineType::ParIter5,
+            // AnyEngine::ParIter2(_) => EngineType::ParIter2,
+            // AnyEngine::ParIter3(_) => EngineType::ParIter3,
+            // AnyEngine::ParIter4(_) => EngineType::ParIter4,
+            // AnyEngine::ParIter5(_) => EngineType::ParIter5,
         }
     }
 }

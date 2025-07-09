@@ -1,8 +1,8 @@
 // TODO: mod CPU
 #[cfg(feature = "cpu")]
 mod cpu_engine;
-#[cfg(feature = "cpu")]
-mod parallel;
+// #[cfg(feature = "cpu")]
+// mod parallel;
 mod settings;
 #[cfg(feature = "cpu")]
 mod single_threaded;
@@ -291,9 +291,9 @@ fn format_debug(
         size.width,
         size.height,
         world.camera.pos,
-        cam_rot.u(),
-        cam_rot.v(),
-        cam_rot.w(),
+        cam_rot.x,
+        cam_rot.y,
+        cam_rot.z,
         settings,
         stats
     )
