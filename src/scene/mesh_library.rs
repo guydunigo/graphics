@@ -11,10 +11,11 @@ pub fn base_scene() -> Scene {
     let suzanne: Node = obj_file::import_mesh_and_diffuse(obj_file::SUZANNE_OBJ_PATH).into();
     let suzanne = Rc::new(RefCell::new(suzanne));
 
+    let pyramid = Rc::new(RefCell::new(base_pyramid()));
+
     let top = Node::parent_of(
         vec![
             base_triangle(),
-            base_pyramid(),
             floor(),
             back_wall(),
             left_wall(),
@@ -23,11 +24,13 @@ pub fn base_scene() -> Scene {
         .drain(..)
         .map(|n| Rc::new(RefCell::new(n)))
         .chain(once(suzanne.clone()))
+        .chain(once(pyramid.clone()))
         .collect(),
     );
 
     let mut nodes = HashMap::new();
     nodes.insert("suzanne".to_string(), suzanne);
+    nodes.insert("pyramid".to_string(), pyramid);
 
     Scene::new(nodes, vec![top])
 }
@@ -62,7 +65,6 @@ fn base_pyramid() -> Node {
         vec3(-1., -1., 0.),
         vec3(0., -1., 0.),
         vec3(0., 0., 9.),
-        vec3(0., -1., 0.),
         vec3(1., -1., 0.),
         vec3(-1., 1., 0.),
         vec3(0., 1., 0.),
@@ -84,25 +86,30 @@ fn base_pyramid() -> Node {
     #[rustfmt::skip]
     let indices = vec![
         0, 1, 2,
-        3, 4, 2,
-        5, 2, 6,
-        2, 7, 6,
-        0, 2, 8,
-        5, 8, 2,
-        9, 2, 4,
-        2, 9, 7,
-        10, 11, 12,
-        11, 13, 12,
-        14, 15, 16,
-        15, 17, 16,
+        1, 3, 2,
+
+        4, 2, 5,
+        2, 6, 5,
+
+        0, 2, 7,
+        4, 7, 2,
+
+        8, 2, 3,
+        2, 8, 6,
+
+        9, 10, 11,
+        10, 12, 11,
+
+        13, 14, 15,
+        14, 16, 15,
     ];
     let surfaces = vec![
-        GeoSurface::new(&vertices, &indices, 0, 2, Texture::Color(0xffff0000)),
-        GeoSurface::new(&vertices, &indices, 2, 2, Texture::Color(0xff0000ff)),
-        GeoSurface::new(&vertices, &indices, 4, 2, Texture::Color(0xff00ff00)),
-        GeoSurface::new(&vertices, &indices, 6, 2, Texture::Color(0xffffff00)),
-        GeoSurface::new(&vertices, &indices, 8, 2, Texture::Color(0xff00ffff)),
-        GeoSurface::new(&vertices, &indices, 10, 2, Texture::Color(0xffff00ff)),
+        GeoSurface::new(&vertices, &indices, 0, 6, Texture::Color(0xffff0000)),
+        GeoSurface::new(&vertices, &indices, 6, 6, Texture::Color(0xff0000ff)),
+        GeoSurface::new(&vertices, &indices, 12, 6, Texture::Color(0xff00ff00)),
+        GeoSurface::new(&vertices, &indices, 18, 6, Texture::Color(0xffffff00)),
+        GeoSurface::new(&vertices, &indices, 24, 6, Texture::Color(0xff00ffff)),
+        GeoSurface::new(&vertices, &indices, 30, 6, Texture::Color(0xffff00ff)),
     ];
 
     Node {

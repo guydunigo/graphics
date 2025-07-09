@@ -1,5 +1,6 @@
 use std::{rc::Rc, time::Instant};
 
+use glam::{Vec3, vec3};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
@@ -280,28 +281,60 @@ impl ApplicationHandler for App<'_> {
                             self.cursor_grabbed = false;
                         }
                     }
-                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowLeft => {
-                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
                             m.borrow_mut().transform(&Mat4::from_rotation_y(-0.1));
                         }
                     }
-                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowRight => {
-                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
                             m.borrow_mut().transform(&Mat4::from_rotation_y(0.1));
                         }
                     }
-                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowUp => {
-                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
                             m.borrow_mut().transform(&Mat4::from_rotation_x(-0.1));
                         }
                     }
-                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowDown => {
-                        if let Some(m) = self.world.scene.get_named_node("suzanne") {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
                             m.borrow_mut().transform(&Mat4::from_rotation_x(0.1));
+                        }
+                    }
+                    KeyCode::NumpadAdd => {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                            m.borrow_mut()
+                                .transform(&Mat4::from_scale(Vec3::splat(1.1)));
+                        }
+                    }
+                    KeyCode::NumpadSubtract => {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                            m.borrow_mut()
+                                .transform(&Mat4::from_scale(Vec3::splat(0.9)));
+                        }
+                    }
+                    KeyCode::Numpad4 => {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                            m.borrow_mut()
+                                .transform(&Mat4::from_translation(vec3(-0.1, 0., 0.)));
+                        }
+                    }
+                    KeyCode::Numpad6 => {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                            m.borrow_mut()
+                                .transform(&Mat4::from_translation(vec3(0.1, 0., 0.)));
+                        }
+                    }
+                    KeyCode::Numpad8 => {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                            m.borrow_mut()
+                                .transform(&Mat4::from_translation(vec3(0., 0., -0.1)));
+                        }
+                    }
+                    KeyCode::Numpad2 => {
+                        if let Some(m) = self.world.scene.get_named_node("pyramid") {
+                            m.borrow_mut()
+                                .transform(&Mat4::from_translation(vec3(0., 0., 0.1)));
                         }
                     }
                     KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,
@@ -320,10 +353,9 @@ impl ApplicationHandler for App<'_> {
                 self.cursor = Some(position);
             }
             WindowEvent::RedrawRequested => {
-                // TODO: forward update and events to world to manage itself ?
-                self.world.camera.update();
-
                 self.update_last_frame_micros();
+                // TODO: forward update and events to world to manage itself ?
+                self.world.camera.update(self.last_frame_micros);
 
                 #[cfg(feature = "stats")]
                 let mut stats = Stats::default();

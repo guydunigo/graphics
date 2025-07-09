@@ -275,7 +275,7 @@ fn format_debug(
 
     // TODO: describe each numbers
     format!(
-        "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\n{}x{}\n{:?}\n{:?}\n{}",
+        "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\nWindow : {}x{}\nCamera : {} p: {} y: {}\n{:#?}\n{}",
         app.fps_avg().round(),
         app.last_buffer_fill_micros,
         app.last_rendering_micros,
@@ -293,7 +293,9 @@ fn format_debug(
             .unwrap_or(String::from("\nNo cursor position")),
         size.width,
         size.height,
-        world.camera,
+        world.camera.pos,
+        world.camera.pitch,
+        world.camera.yaw,
         settings,
         stats
     )

@@ -213,8 +213,12 @@ impl Node {
     }
 
     pub fn transform(&mut self, tr: &Mat4) {
-        // TODO: which order ?
-        self.local_transform = self.local_transform * tr;
+        // We split to rotate in place.
+        let (tr_scale, tr_rot, tr_pos) = tr.to_scale_rotation_translation();
+        let (scale, rot, pos) = self.local_transform.to_scale_rotation_translation();
+
+        self.local_transform =
+            Mat4::from_scale_rotation_translation(scale * tr_scale, tr_rot * rot, pos + tr_pos);
         self.refresh_transform(&Mat4::IDENTITY);
     }
 }

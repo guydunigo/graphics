@@ -628,13 +628,15 @@ fn format_debug(
     #[cfg(not(feature = "vulkan_stats"))]
     let stats = "Stats disabled";
     format!(
-        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\nCamera : {:?}\n{}",
+        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\nCamera : {} p: {} y: {}\n{}",
         app.fps_avg().round(),
         app.last_full_render_loop_micros(),
         app.frame_avg_micros(),
         size.width,
         size.height,
-        camera,
+        camera.pos,
+        camera.pitch,
+        camera.yaw,
         stats,
     )
 }

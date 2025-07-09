@@ -32,7 +32,8 @@ impl Default for Camera {
 }
 
 impl Camera {
-    const MOVE_STEP: f32 = 0.1;
+    // Move step per micro seconds if we move at 60fps
+    const MOVE_STEP: f32 = 0.2 / (1. / 60. * 1_000_000.);
     const ROT_STEP: f32 = 0.001;
 
     pub fn view_mat(&self) -> Mat4 {
@@ -53,10 +54,10 @@ impl Camera {
         Mat4::from_quat(yaw * pitch)
     }
 
-    // TODO: doesn't take into account time delta.
-    pub fn update(&mut self) {
+    pub fn update(&mut self, step_micros: u128) {
         let rot = self.rot_mat();
-        self.pos += (rot * Vec4::from((self.vel * Self::MOVE_STEP, 0.))).xyz();
+        self.pos +=
+            (rot * Vec4::from((self.vel * (Self::MOVE_STEP * step_micros as f32), 0.))).xyz();
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
@@ -75,8 +76,8 @@ impl Camera {
                     KeyCode::KeyS => self.vel.z = 1.,
                     KeyCode::KeyA => self.vel.x = -1.,
                     KeyCode::KeyD => self.vel.x = 1.,
-                    KeyCode::ShiftLeft => self.vel.y = -1.,
-                    KeyCode::ControlLeft => self.vel.y = 1.,
+                    KeyCode::ShiftLeft => self.vel.y = 1.,
+                    KeyCode::ControlLeft => self.vel.y = -1.,
                     _ => (),
                 },
                 ElementState::Released => match key {
