@@ -1,3 +1,4 @@
+// TODO: mod CPU
 #[cfg(feature = "cpu")]
 mod cpu_engine;
 #[cfg(feature = "cpu")]
@@ -8,7 +9,8 @@ mod single_threaded;
 #[cfg(feature = "vulkan")]
 mod vulkan;
 
-use glam::Vec3;
+use glam::{Vec3, Vec4Swizzles};
+
 #[cfg(feature = "cpu")]
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -20,7 +22,7 @@ use winit::{
 
 #[cfg(feature = "cpu")]
 use crate::{
-    scene::{Camera, World},
+    scene::{Camera, Node, Texture, World},
     window::AppObserver,
 };
 
@@ -154,6 +156,10 @@ impl Engine<'_> {
     }
 }
 
+fn vec_cross_z(v0: Vec3, v1: Vec3) -> f32 {
+    v0.x * v1.y - v0.y * v1.x
+}
+
 #[cfg(feature = "cpu")]
 fn world_to_raster(p_world: Vec3, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3 {
     // Camera space
@@ -200,7 +206,7 @@ fn world_to_raster_triangle(
         p0: world_to_raster(triangle.p0, cam, size, ratio_w_h),
         p1: world_to_raster(triangle.p1, cam, size, ratio_w_h),
         p2: world_to_raster(triangle.p2, cam, size, ratio_w_h),
-        texture: triangle.texture,
+        material: triangle.material,
     }
 }
 
@@ -215,11 +221,11 @@ struct Rect {
 
 fn bounding_box_triangle(t: &Triangle, size: PhysicalSize<u32>) -> Rect {
     Rect {
-        min_x: (f32::min(f32::min(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1),
-        max_x: (f32::max(f32::max(t.p0.x, t.p1.x), t.p2.x) as u32).clamp(0, size.width - 1),
-        min_y: (f32::min(f32::min(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1),
-        max_y: (f32::max(f32::max(t.p0.y, t.p1.y), t.p2.y) as u32).clamp(0, size.height - 1),
-        max_z: f32::max(f32::max(t.p0.z, t.p1.z), t.p2.z),
+        min_x: (t.p0.x.min(t.p1.x).min(t.p2.x) as u32).clamp(0, size.width - 1),
+        max_x: (t.p0.x.max(t.p1.x).max(t.p2.x) as u32).clamp(0, size.width - 1),
+        min_y: (t.p0.y.min(t.p1.y).min(t.p2.y) as u32).clamp(0, size.height - 1),
+        max_y: (t.p0.y.max(t.p1.y).max(t.p2.y) as u32).clamp(0, size.height - 1),
+        max_z: t.p0.z.max(t.p1.z).max(t.p2.z),
     }
 }
 
@@ -291,4 +297,97 @@ fn format_debug(
         settings,
         stats
     )
+}
+
+// TODO
+/*
+#[cfg(feature = "cpu")]
+pub fn todo_prepare_node_single_core(
+    settings: &Settings,
+    triangles: &mut Vec<RenderObject>,
+    view_proj: &Mat4,
+    node: &Node,
+) {
+    {
+        let world_transform = node.world_transform.borrow();
+        if let Some(mesh) = node.mesh.as_ref().filter(|m| {
+            todo!() || !settings.culling_meshes || m.bounds.is_visible(view_proj, &world_transform)
+        }) {
+            let matrix = view_proj * *world_transform;
+
+            triangles.extend(
+                mesh.surfaces
+                    .iter()
+                    .filter(|s| {
+                        todo!()
+                            || !settings.culling_surfaces
+                            || s.bounds.is_visible(view_proj, &world_transform)
+                    })
+                    .map(|s| RenderObject {
+                        vertices: mesh.indices[s.start_index..s.start_index + s.count]
+                            .iter()
+                            .map(|i| &mesh.vertices[*i].position)
+                            .map(|v| matrix * v.extend(1.))
+                            .map(|v| v.xyz() / v.w)
+                            .map(|v| v.with_z(-v.z))
+                            .collect(),
+                        material: s.material,
+                    }),
+            );
+        }
+    }
+
+    node.children
+        .iter()
+        .for_each(|c| todo_prepare_node_single_core(settings, triangles, view_proj, c));
+}
+*/
+
+// TODO: group by texture to avoid duplicates ? Closer to data
+#[cfg(feature = "cpu")]
+#[derive(Clone, Copy)]
+pub struct Triangle {
+    pub p0: Vec3,
+    pub p1: Vec3,
+    pub p2: Vec3,
+    pub material: Texture,
+}
+
+impl Triangle {
+    pub fn min_z(&self) -> f32 {
+        f32::min(self.p0.z, f32::min(self.p1.z, self.p2.z))
+    }
+}
+
+#[cfg(feature = "cpu")]
+pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
+    {
+        let world_transform = *node.world_transform.borrow();
+        // TODO: mesh + surface culling via bounding boxes ?
+        if let Some(mesh) = node.mesh.as_ref() {
+            let mut vertices = Vec::with_capacity(mesh.vertices.len());
+            vertices.extend(
+                mesh.vertices
+                    .iter()
+                    .map(|v| world_transform * v.position.extend(1.))
+                    .map(|v| v.xyz()),
+            );
+
+            triangles.reserve(mesh.surfaces.iter().map(|s| s.count / 3).sum());
+            triangles.extend(mesh.surfaces.iter().flat_map(|s| {
+                (0..s.count / 3)
+                    .map(|i| s.start_index + i)
+                    .map(|i| Triangle {
+                        p0: vertices[mesh.indices[i]],
+                        p1: vertices[mesh.indices[i + 1]],
+                        p2: vertices[mesh.indices[i + 2]],
+                        material: s.material,
+                    })
+            }));
+        }
+    }
+
+    node.children
+        .iter()
+        .for_each(|c| populate_nodes(triangles, c));
 }

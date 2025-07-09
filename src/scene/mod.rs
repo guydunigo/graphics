@@ -1,10 +1,6 @@
 /// Describing the world
 mod camera;
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    rc::{Rc, Weak},
-};
+use std::{collections::HashMap, rc::Rc};
 
 pub use camera::Camera;
 mod mesh;
@@ -49,76 +45,19 @@ impl Default for Texture {
     }
 }
 
-pub struct Node {
-    /// If there is no parent or it was destroyed, weak won't upgrade.
-    pub parent: Weak<RefCell<Node>>,
-    pub children: Vec<Rc<RefCell<Node>>>,
-
-    pub local_transform: Mat4,
-    /// Cache :
-    world_transform: Mat4,
-
-    /// Actual mesh if any at this node
-    mesh: Option<Rc<MeshAsset>>,
-}
-
-impl Node {
-    pub fn parent_of(children: Vec<Rc<RefCell<Node>>>) -> Rc<RefCell<Self>> {
-        Rc::new_cyclic(|f| {
-            children
-                .iter()
-                .for_each(|c| c.borrow_mut().parent = f.clone());
-            let node = Node {
-                parent: Default::default(),
-                children,
-
-                local_transform: Default::default(),
-                world_transform: Default::default(),
-
-                mesh: None,
-            };
-            RefCell::new(node)
-        })
-    }
-
-    pub fn refresh_transform(&mut self, parent_mat: &Mat4) {
-        self.world_transform = parent_mat * self.local_transform;
-        self.children
-            .iter()
-            .for_each(|c| c.borrow_mut().refresh_transform(&self.world_transform));
-    }
-}
-
-impl From<MeshAsset> for Node {
-    fn from(value: MeshAsset) -> Self {
-        Node {
-            parent: Default::default(),
-            children: Default::default(),
-
-            local_transform: Default::default(),
-            world_transform: Default::default(),
-
-            mesh: Some(Rc::new(value)),
-        }
-    }
-}
-
 pub struct Scene {
     // meshes: HashMap<String, Rc<MeshAsset>>,
-    named_nodes: HashMap<String, Rc<RefCell<Node>>>,
+    named_nodes: HashMap<String, Rc<Node>>,
 
-    top_nodes: Vec<Rc<RefCell<Node>>>,
+    top_nodes: Vec<Rc<Node>>,
 }
 
 impl Scene {
-    pub fn new(
-        named_nodes: HashMap<String, Rc<RefCell<Node>>>,
-        top_nodes: Vec<Rc<RefCell<Node>>>,
-    ) -> Self {
+    pub fn new(named_nodes: HashMap<String, Rc<Node>>, top_nodes: Vec<Rc<Node>>) -> Self {
         // Update world transform infos to all nodes.
         top_nodes
             .iter()
-            .for_each(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY));
+            .for_each(|n| n.refresh_transform(&Mat4::IDENTITY));
 
         Scene {
             named_nodes,
@@ -126,11 +65,11 @@ impl Scene {
         }
     }
 
-    pub fn top_nodes(&self) -> &[Rc<RefCell<Node>>] {
+    pub fn top_nodes(&self) -> &[Rc<Node>] {
         &self.top_nodes
     }
 
-    pub fn get_named_node(&self, name: &str) -> Option<&Rc<RefCell<Node>>> {
+    pub fn get_named_node(&self, name: &str) -> Option<&Rc<Node>> {
         self.named_nodes.get(name)
     }
 }

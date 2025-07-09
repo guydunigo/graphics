@@ -10,7 +10,7 @@ pub struct Settings {
     pub sort_triangles: TriangleSorting,
     pub parallel_text: bool,
     pub oversampling: usize,
-    pub culling_mesh: bool,
+    pub culling_meshes: bool,
     pub culling_surfaces: bool,
     pub culling_triangles: bool,
 }
@@ -23,7 +23,7 @@ impl Default for Settings {
             sort_triangles: Default::default(),
             parallel_text: true,
             oversampling: 1,
-            culling_mesh: true,
+            culling_meshes: true,
             culling_surfaces: true,
             culling_triangles: true,
         }

@@ -1,6 +1,7 @@
 mod iterator;
 mod original;
 
+use glam::Vec3;
 pub use iterator::IteratorEngine;
 pub use original::OriginalEngine;
 
@@ -9,8 +10,8 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     font::{self, TextWriter},
-    maths::{Vec3f, Vec4u},
-    rasterizer::Settings,
+    maths::Vec4u,
+    rasterizer::{Settings, Triangle, populate_nodes, settings::TriangleSorting},
     scene::{DEFAULT_BACKGROUND_COLOR, Texture, World},
     window::AppObserver,
 };
@@ -24,12 +25,15 @@ use crate::rasterizer::Stats;
 pub trait SingleThreadedEngine {
     fn depth_buffer_mut(&mut self) -> &mut Vec<f32>;
 
+    fn triangles_mut(&mut self) -> &mut Vec<Triangle>;
+
     fn rasterize_world<B: DerefMut<Target = [u32]>>(
+        &mut self,
         settings: &Settings,
         world: &World,
         buffer: &mut B,
-        depth_buffer: &mut [f32],
         size: PhysicalSize<u32>,
+        ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &mut Stats,
     );
 
@@ -45,13 +49,35 @@ pub trait SingleThreadedEngine {
     ) {
         app.last_buffer_fill_micros = clean_resize_buffers(self.depth_buffer_mut(), buffer, size);
 
+        {
+            let triangles = self.triangles_mut();
+            triangles.clear();
+            world
+                .scene
+                .top_nodes()
+                .iter()
+                .for_each(|n| populate_nodes(triangles, n));
+
+            match settings.sort_triangles {
+                TriangleSorting::BackToFront => {
+                    triangles.sort_by_key(|t| -t.min_z() as u32);
+                }
+                TriangleSorting::FrontToBack => {
+                    triangles.sort_by_key(|t| t.min_z() as u32);
+                }
+                _ => (),
+            }
+        }
+
+        let ratio_w_h = size.width as f32 / size.height as f32;
+
         let t = Instant::now();
-        Self::rasterize_world(
+        self.rasterize_world(
             settings,
             world,
             buffer,
-            &mut self.depth_buffer_mut()[..],
             size,
+            ratio_w_h,
             #[cfg(feature = "stats")]
             stats,
         );
@@ -94,7 +120,7 @@ fn clean_resize_buffers<B: DerefMut<Target = [u32]>>(
 fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
     buffer: &mut B,
     size: PhysicalSize<u32>,
-    v: Vec3f,
+    v: Vec3,
     texture: &Texture,
 ) {
     if v.x >= 1.

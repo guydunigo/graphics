@@ -1,13 +1,14 @@
 //! First implementation, putting the whole triangle rasterizing in a single function.
 
 use crate::{
-    maths::{Vec3f, Vec4u},
+    maths::Vec4u,
     rasterizer::{
-        MINIMAL_AMBIANT_LIGHT, Settings, bounding_box_triangle, edge_function,
-        settings::TriangleSorting, world_to_raster_triangle,
+        MINIMAL_AMBIANT_LIGHT, Settings, Triangle, bounding_box_triangle, edge_function,
+        vec_cross_z, world_to_raster_triangle,
     },
-    scene::{Camera, Mesh, Texture, Triangle, World},
+    scene::{Camera, Texture, World},
 };
+use glam::vec3;
 use std::ops::DerefMut;
 use winit::dpi::PhysicalSize;
 
@@ -16,8 +17,9 @@ use super::{SingleThreadedEngine, draw_vertice_basic};
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default)]
 pub struct OriginalEngine {
+    triangles: Vec<Triangle>,
     depth_buffer: Vec<f32>,
 }
 
@@ -26,19 +28,20 @@ impl SingleThreadedEngine for OriginalEngine {
         &mut self.depth_buffer
     }
 
+    fn triangles_mut(&mut self) -> &mut Vec<Triangle> {
+        &mut self.triangles
+    }
+
     fn rasterize_world<B: DerefMut<Target = [u32]>>(
+        &mut self,
         settings: &Settings,
         world: &World,
         buffer: &mut B,
-        depth_buffer: &mut [f32],
         size: PhysicalSize<u32>,
+        ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        let triangles = world.meshes.iter().flat_map(Mesh::to_world_triangles);
-
-        let ratio_w_h = size.width as f32 / size.height as f32;
-
-        let f = |f| {
+        self.triangles.drain(..).for_each(|t| {
             #[cfg(feature = "stats")]
             {
                 stats.nb_triangles_tot += 1;
@@ -46,30 +49,16 @@ impl SingleThreadedEngine for OriginalEngine {
             rasterize_triangle(
                 settings,
                 world,
-                &f,
+                &t,
                 buffer,
-                depth_buffer,
+                &mut self.depth_buffer[..],
                 &world.camera,
                 size,
                 ratio_w_h,
                 #[cfg(feature = "stats")]
                 stats,
             );
-        };
-
-        match settings.sort_triangles {
-            TriangleSorting::None => triangles.for_each(f),
-            TriangleSorting::BackToFront => {
-                let mut array: Vec<Triangle> = triangles.collect();
-                array.sort_by_key(|t| -t.min_z() as u32);
-                array.drain(..).for_each(f);
-            }
-            TriangleSorting::FrontToBack => {
-                let mut array: Vec<Triangle> = triangles.collect();
-                array.sort_by_key(|t| t.min_z() as u32);
-                array.drain(..).for_each(f);
-            }
-        }
+        });
     }
 }
 
@@ -114,14 +103,12 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
 
     ////////////////////////////////
     // Back face culling
-    // If triangle normal and camera sight are in same direction (dot product > 0), it's invisible.
+    // If triangle normal and camera sight are in same direction (cross product > 0), it's invisible.
 
     let p01 = tri_raster.p1 - tri_raster.p0;
     let p20 = tri_raster.p0 - tri_raster.p2;
 
-    let raster_normale = p01.cross(p20);
-    // Calculate only of normal z
-    if raster_normale.z < 0. {
+    if vec_cross_z(p01, p20) < 0. {
         return;
     }
 
@@ -139,19 +126,13 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let tri_area = edge_function(p20, p01);
 
     // TODO: Optimize color calculus
-    let texture = match tri_raster.texture {
+    let texture = match tri_raster.material {
         Texture::Color(col) => Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32()),
-        _ => tri_raster.texture,
+        _ => tri_raster.material,
     };
 
     (bb.min_x..=bb.max_x)
-        .flat_map(|x| {
-            (bb.min_y..=bb.max_y).map(move |y| Vec3f {
-                x: x as f32,
-                y: y as f32,
-                z: 0.,
-            })
-        })
+        .flat_map(|x| (bb.min_y..=bb.max_y).map(move |y| vec3(x as f32, y as f32, 0.)))
         .for_each(|pixel| {
             #[cfg(feature = "stats")]
             {
@@ -237,8 +218,8 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     }
 
     if settings.show_vertices {
-        draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.texture);
-        draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.texture);
-        draw_vertice_basic(buffer, size, tri_raster.p2, &tri_raster.texture);
+        draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.material);
+        draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.material);
+        draw_vertice_basic(buffer, size, tri_raster.p2, &tri_raster.material);
     }
 }

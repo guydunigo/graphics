@@ -1,14 +1,15 @@
 //! From original, but splitting the rasterize_triangle function tu have cleaner
 //! iterator steps.
 
+use glam::{Vec3, vec3};
 use std::ops::DerefMut;
 use winit::dpi::PhysicalSize;
 
 use crate::{
     maths::Vec4u,
     rasterizer::{
-        MINIMAL_AMBIANT_LIGHT, Rect, bounding_box_triangle, edge_function, settings::Settings,
-        world_to_raster_triangle,
+        MINIMAL_AMBIANT_LIGHT, Rect, Triangle, bounding_box_triangle, edge_function,
+        settings::Settings, vec_cross_z, world_to_raster_triangle,
     },
     scene::{Texture, World},
 };
@@ -18,8 +19,9 @@ use super::{SingleThreadedEngine, draw_vertice_basic};
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default)]
 pub struct IteratorEngine {
+    triangles: Vec<Triangle>,
     depth_buffer: Vec<f32>,
 }
 
@@ -28,12 +30,17 @@ impl SingleThreadedEngine for IteratorEngine {
         &mut self.depth_buffer
     }
 
+    fn triangles_mut(&mut self) -> &mut Vec<Triangle> {
+        &mut self.triangles
+    }
+
     fn rasterize_world<B: DerefMut<Target = [u32]>>(
+        &mut self,
         settings: &Settings,
         world: &World,
         buffer: &mut B,
-        depth_buffer: &mut [f32],
         size: PhysicalSize<u32>,
+        ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         #[cfg(feature = "stats")]
@@ -53,13 +60,8 @@ impl SingleThreadedEngine for IteratorEngine {
         #[cfg(feature = "stats")]
         let mut nb_pixels_written = 0;
 
-        let ratio_w_h = size.width as f32 / size.height as f32;
-
-        world
-            .scene
-            .top_nodes()
-            .iter()
-            .flat_map(Mesh::to_world_triangles)
+        self.triangles
+            .drain(..)
             .inspect(|_| {
                 #[cfg(feature = "stats")]
                 {
@@ -88,9 +90,9 @@ impl SingleThreadedEngine for IteratorEngine {
             })
             ////////////////////////////////
             // Back face culling
-            // If triangle normal and camera sight are in same direction (dot product > 0),
+            // If triangle normal and camera sight are in same direction (cross product > 0),
             // it's invisible.
-            .filter(|(_, _, _, p01, p20)| p01.cross_z(*p20) >= 0.)
+            .filter(|(_, _, _, p01, p20)| vec_cross_z(*p01, *p20) >= 0.)
             .inspect(|_| {
                 #[cfg(feature = "stats")]
                 {
@@ -112,15 +114,15 @@ impl SingleThreadedEngine for IteratorEngine {
 
                 // If a `Texture::VertexColor` has the same color for all vertices, then we can
                 // consider it like a `Texture::Color`.
-                if let Texture::VertexColor(c0, c1, c2) = t_raster.texture
+                if let Texture::VertexColor(c0, c1, c2) = t_raster.material
                     && c0 == c1
                     && c1 == c2
                 {
-                    t_raster.texture = Texture::Color(c0);
+                    t_raster.material = Texture::Color(c0);
                 }
 
-                if let Texture::Color(col) = t_raster.texture {
-                    t_raster.texture =
+                if let Texture::Color(col) = t_raster.material {
+                    t_raster.material =
                         Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
                 }
 
@@ -131,7 +133,7 @@ impl SingleThreadedEngine for IteratorEngine {
                     settings,
                     &mut t_raster,
                     buffer,
-                    depth_buffer,
+                    &mut self.depth_buffer[..],
                     world.camera.z_near,
                     size,
                     #[cfg(feature = "stats")]
@@ -167,8 +169,8 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     #[cfg(feature = "stats")] stats: &mut Stats,
     bb: &Rect,
     light: f32,
-    p01: Vec3f,
-    p20: Vec3f,
+    p01: Vec3,
+    p20: Vec3,
 ) {
     #[cfg(feature = "stats")]
     let mut was_drawn = false;
@@ -178,13 +180,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let tri_area = edge_function(p20, p01);
 
     (bb.min_x..=bb.max_x)
-        .flat_map(|x| {
-            (bb.min_y..=bb.max_y).map(move |y| Vec3f {
-                x: x as f32,
-                y: y as f32,
-                z: 0.,
-            })
-        })
+        .flat_map(|x| (bb.min_y..=bb.max_y).map(move |y| vec3(x as f32, y as f32, 0.)))
         .for_each(|pixel| {
             // TODO: split to iterator ?
 
@@ -248,7 +244,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 stats.nb_pixels_written += 1;
             }
 
-            let col = match tri_raster.texture {
+            let col = match tri_raster.material {
                 Texture::Color(col) => col,
                 Texture::VertexColor(c0, c1, c2) => {
                     // TODO: Optimize color calculus
@@ -272,8 +268,8 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     }
 
     if settings.show_vertices {
-        draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.texture);
-        draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.texture);
-        draw_vertice_basic(buffer, size, tri_raster.p2, &tri_raster.texture);
+        draw_vertice_basic(buffer, size, tri_raster.p0, &tri_raster.material);
+        draw_vertice_basic(buffer, size, tri_raster.p1, &tri_raster.material);
+        draw_vertice_basic(buffer, size, tri_raster.p2, &tri_raster.material);
     }
 }

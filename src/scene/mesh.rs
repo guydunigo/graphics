@@ -36,15 +36,20 @@ impl Mesh {
 }
 */
 
-use glam::{Mat4, Vec3, vec3};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
+
+use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 
 use super::Texture;
 
 pub struct MeshAsset {
-    vertices: Vec<Vertex>,
-    indices: Vec<usize>,
-    surfaces: Vec<GeoSurface<Texture>>,
-    bounds: Bounds,
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<usize>,
+    pub surfaces: Vec<GeoSurface<Texture>>,
+    pub bounds: Bounds,
 }
 
 impl MeshAsset {
@@ -85,8 +90,8 @@ impl Default for Vertex {
 }
 
 pub struct GeoSurface<T> {
-    pub start_index: u32,
-    pub count: u32,
+    pub start_index: usize,
+    pub count: usize,
     pub material: T,
     pub bounds: Bounds,
 }
@@ -94,8 +99,8 @@ pub struct GeoSurface<T> {
 impl<T> GeoSurface<T> {
     pub fn new(vertices: &[Vertex], start_index: usize, count: usize, material: T) -> Self {
         GeoSurface {
-            start_index: start_index as u32,
-            count: count as u32,
+            start_index,
+            count,
             material,
             bounds: Bounds::new(&mut vertices[start_index..start_index + count].iter()),
         }
@@ -146,11 +151,7 @@ impl Bounds {
 
         let (min, max) = corners.iter().fold((min, max), |(min, max), c| {
             let v = matrix * (self.origin + c * self.extents).extend(1.);
-            let v = Vec3 {
-                x: v.x / v.w,
-                y: v.y / v.w,
-                z: v.z / v.w,
-            };
+            let v = v.xyz() / v.w;
             (min.min(v), max.max(v))
         });
 
@@ -161,5 +162,59 @@ impl Bounds {
     pub fn clip_space_origin_depth(&self, view_proj: &Mat4, transform: &Mat4) -> f32 {
         let projected_origin = view_proj * transform * self.origin.extend(1.);
         projected_origin.z
+    }
+}
+
+pub struct Node {
+    /// If there is no parent or it was destroyed, weak won't upgrade.
+    pub parent: Weak<Node>,
+    pub children: Vec<Rc<Node>>,
+
+    pub local_transform: Mat4,
+    /// Cache :
+    pub world_transform: RefCell<Mat4>,
+
+    /// Actual mesh if any at this node
+    pub mesh: Option<Rc<MeshAsset>>,
+}
+
+impl Node {
+    pub fn parent_of(mut children: Vec<Rc<Node>>) -> Rc<Self> {
+        Rc::new_cyclic(|f| {
+            children
+                .iter_mut()
+                .for_each(|c| Rc::get_mut(c).unwrap().parent = f.clone());
+            Node {
+                parent: Default::default(),
+                children,
+
+                local_transform: Default::default(),
+                world_transform: Default::default(),
+
+                mesh: None,
+            }
+        })
+    }
+
+    pub fn refresh_transform(&self, parent_mat: &Mat4) {
+        let world_transform = parent_mat * self.local_transform;
+        self.children
+            .iter()
+            .for_each(|c| c.refresh_transform(&world_transform));
+        *self.world_transform.borrow_mut() = world_transform;
+    }
+}
+
+impl From<MeshAsset> for Node {
+    fn from(value: MeshAsset) -> Self {
+        Node {
+            parent: Default::default(),
+            children: Default::default(),
+
+            local_transform: Default::default(),
+            world_transform: Default::default(),
+
+            mesh: Some(Rc::new(value)),
+        }
     }
 }

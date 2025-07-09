@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, iter::once, rc::Rc};
+use std::{collections::HashMap, iter::once, rc::Rc};
 
 use glam::{Mat4, Quat, Vec3, vec3};
 /// Set of constructor functions to get testing objects
@@ -9,7 +9,7 @@ use crate::maths::PI;
 
 pub fn base_scene() -> Scene {
     let suzanne: Node = obj_file::import_mesh_and_diffuse(obj_file::SUZANNE_OBJ_PATH).into();
-    let suzanne = Rc::new(RefCell::new(suzanne));
+    let suzanne = Rc::new(suzanne);
 
     let top = Node::parent_of(
         vec![
@@ -21,7 +21,7 @@ pub fn base_scene() -> Scene {
             right_wall(),
         ]
         .drain(..)
-        .map(|n| Rc::new(RefCell::new(n)))
+        .map(|n| Rc::new(n))
         .chain(once(suzanne.clone()))
         .collect(),
     );
