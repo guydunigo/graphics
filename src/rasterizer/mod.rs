@@ -138,6 +138,8 @@ impl Engine<'_> {
     }
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
+        #[cfg(feature = "cpu")]
+        let _ = event;
         match self {
             #[cfg(feature = "cpu")]
             Self::Cpu(_, _) => (),
@@ -147,6 +149,8 @@ impl Engine<'_> {
     }
 
     pub fn on_mouse_motion(&mut self, delta: (f64, f64), cursor_grabbed: bool) {
+        #[cfg(feature = "cpu")]
+        let _ = (delta, cursor_grabbed);
         match self {
             #[cfg(feature = "cpu")]
             Self::Cpu(_, _) => (),
@@ -264,7 +268,6 @@ fn format_debug(
     cursor_color: Option<u32>,
     #[cfg(feature = "stats")] stats: &Stats,
 ) -> String {
-    let cam_rot = world.camera.rot();
     #[cfg(feature = "stats")]
     let stats = format!("{:#?}", stats);
     #[cfg(not(feature = "stats"))]
@@ -272,7 +275,7 @@ fn format_debug(
 
     // TODO: describe each numbers
     format!(
-        "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\n{}x{}\n{} {} {} {}\n{:?}\n{}",
+        "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\n{}x{}\n{:?}\n{:?}\n{}",
         app.fps_avg().round(),
         app.last_buffer_fill_micros,
         app.last_rendering_micros,
@@ -290,10 +293,7 @@ fn format_debug(
             .unwrap_or(String::from("\nNo cursor position")),
         size.width,
         size.height,
-        world.camera.pos,
-        cam_rot.x,
-        cam_rot.y,
-        cam_rot.z,
+        world.camera,
         settings,
         stats
     )
@@ -362,14 +362,13 @@ impl Triangle {
 #[cfg(feature = "cpu")]
 pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
     {
-        let world_transform = *node.world_transform.borrow();
         // TODO: mesh + surface culling via bounding boxes ?
         if let Some(mesh) = node.mesh.as_ref() {
             let mut vertices = Vec::with_capacity(mesh.vertices.len());
             vertices.extend(
                 mesh.vertices
                     .iter()
-                    .map(|v| world_transform * v.position.extend(1.))
+                    .map(|v| node.world_transform * v.position.extend(1.))
                     .map(|v| v.xyz()),
             );
 
@@ -389,5 +388,5 @@ pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
 
     node.children
         .iter()
-        .for_each(|c| populate_nodes(triangles, c));
+        .for_each(|c| populate_nodes(triangles, &c.borrow()));
 }

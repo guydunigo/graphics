@@ -1,27 +1,32 @@
-use glam::{Mat4, Quat, Vec3, vec3};
+use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles, vec3};
+use winit::{
+    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
+    keyboard::{KeyCode, PhysicalKey},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
-    pub pos: Vec3,
     pub z_near: f32,
     pub canvas_side: f32,
-    /// Quat matrix that will turn objects based on sight.
-    /// It is made of opposite angles : if I turn to the left,
-    /// the objects move to the right in my vision.
-    ///
-    /// This is the inverse of the actual rotation matrix of the camera "object" : `rot * sight_rot == identity`. See [`rot()`]
-    ///
-    /// We store this one because it is easier to manipulate and more used.
-    sight_rot: Quat,
+
+    pub pos: Vec3,
+    pub vel: Vec3,
+
+    pub pitch: f32,
+    pub yaw: f32,
 }
 
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            pos: vec3(1., 1., 12.),
             z_near: 0.5,
             canvas_side: 0.1,
-            sight_rot: Default::default(),
+
+            pos: vec3(1., 1., 12.),
+            vel: Default::default(),
+
+            pitch: 0.,
+            yaw: 0.,
         }
     }
 }
@@ -30,43 +35,80 @@ impl Camera {
     const MOVE_STEP: f32 = 0.1;
     const ROT_STEP: f32 = 0.001;
 
-    /// Quat of the camera "object".
-    ///
-    /// The camera points towards `-rot().w` and the "up" is `rot().v`.
-    ///
-    /// It is calculated from [`sight_rot`] (inverse matrix), because it is only needed for
-    /// movement.
-    pub fn rot(&self) -> Quat {
-        self.sight_rot.inverse()
+    pub fn view_mat(&self) -> Mat4 {
+        // to create a correct model view, we need to move the world in opposite
+        // direction to the camera
+        //  so we will create the camera model matrix and invert
+        let tr = Mat4::from_translation(self.pos);
+        let rot = self.rot_mat();
+        (tr * rot).inverse()
     }
 
-    pub fn sight_rot(&self) -> &Quat {
-        &self.sight_rot
+    pub fn rot_mat(&self) -> Mat4 {
+        // fairly typical FPS style camera. we join the pitch and yaw rotations into
+        // the final rotation matrix
+        let pitch = Quat::from_axis_angle(vec3(1., 0., 0.), self.pitch);
+        let yaw = Quat::from_axis_angle(vec3(0., -1., 0.), self.yaw);
+
+        Mat4::from_quat(yaw * pitch)
     }
 
-    pub fn reset_rot(&mut self) {
-        self.sight_rot = Default::default();
+    // TODO: doesn't take into account time delta.
+    pub fn update(&mut self) {
+        let rot = self.rot_mat();
+        self.pos += (rot * Vec4::from((self.vel * 0.5, 0.))).xyz();
     }
 
-    pub fn rotate_from_mouse(&mut self, delta_x: f32, delta_y: f32) {
-        // Objects rotate opposite direction from camera, so double negative.
-        self.sight_rot = Quat::from_rotation_y(delta_x * Self::ROT_STEP)
-            * &self.sight_rot
-            * &Quat::from_rotation_x(delta_y * Self::ROT_STEP);
+    pub fn on_window_event(&mut self, event: &WindowEvent) {
+        match event {
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(key),
+                        state,
+                        ..
+                    },
+                ..
+            } => match state {
+                ElementState::Pressed => match key {
+                    KeyCode::KeyW => self.vel.z = -1.,
+                    KeyCode::KeyS => self.vel.z = 1.,
+                    KeyCode::KeyA => self.vel.x = -1.,
+                    KeyCode::KeyD => self.vel.x = 1.,
+                    KeyCode::ShiftLeft => self.vel.y = -1.,
+                    KeyCode::ControlLeft => self.vel.y = 1.,
+                    _ => (),
+                },
+                ElementState::Released => match key {
+                    KeyCode::KeyW => self.vel.z = 0.,
+                    KeyCode::KeyS => self.vel.z = 0.,
+                    KeyCode::KeyA => self.vel.x = 0.,
+                    KeyCode::KeyD => self.vel.x = 0.,
+                    KeyCode::ShiftLeft => self.vel.y = 0.,
+                    KeyCode::ControlLeft => self.vel.y = 0.,
+                    _ => (),
+                },
+            },
+            WindowEvent::MouseInput {
+                button: MouseButton::Right,
+                state: ElementState::Pressed,
+                ..
+            } => {
+                self.pitch = 0.;
+                self.yaw = 0.;
+            }
+            _ => (),
+        }
     }
 
-    /// Move along view direction
-    /// `delta_x` : left->right
-    /// `delta_y` : bottom->up
-    /// `delta_z` : back->forward
-    ///
-    /// Z goes backwards so we reverse it.
-    pub fn move_sight(&mut self, delta_x: f32, delta_y: f32, delta_z: f32) {
-        let rot = self.rot();
-        self.pos += (rot.x * delta_x + rot.y * delta_y - rot.z * delta_z) * Self::MOVE_STEP;
+    pub fn on_mouse_motion(&mut self, (delta_x, delta_y): (f64, f64), cursor_grabbed: bool) {
+        if cursor_grabbed {
+            self.yaw += delta_x as f32 / 200.;
+            self.pitch -= delta_y as f32 / 200.;
+        }
     }
 
-    pub fn world_to_sight(&self, point: Vec3) -> Vec3 {
-        self.sight_rot * (point - self.pos)
+    pub fn world_to_sight(&self, _point: Vec3) -> Vec3 {
+        todo!();
     }
 }

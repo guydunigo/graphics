@@ -58,7 +58,7 @@ impl MeshAsset {
         indices: Vec<usize>,
         surfaces: Vec<GeoSurface<Texture>>,
     ) -> Self {
-        let bounds = Bounds::new(&mut vertices.iter());
+        let bounds = Bounds::new(&vertices, &indices, 0, indices.len());
         Self {
             vertices,
             indices,
@@ -97,12 +97,18 @@ pub struct GeoSurface<T> {
 }
 
 impl<T> GeoSurface<T> {
-    pub fn new(vertices: &[Vertex], start_index: usize, count: usize, material: T) -> Self {
+    pub fn new(
+        vertices: &[Vertex],
+        indices: &[usize],
+        start_index: usize,
+        count: usize,
+        material: T,
+    ) -> Self {
         GeoSurface {
             start_index,
             count,
             material,
-            bounds: Bounds::new(&mut vertices[start_index..start_index + count].iter()),
+            bounds: Bounds::new(vertices, indices, start_index, count),
         }
     }
 }
@@ -115,12 +121,14 @@ pub struct Bounds {
 }
 
 impl Bounds {
-    pub fn new<'a, T: Iterator<Item = &'a Vertex>>(vertices: &mut T) -> Self {
-        let mut vertices = vertices.peekable();
-        let default = vertices.peek().unwrap().position;
-        let (min, max) = vertices.fold((default, default), |(min, max), p| {
-            (min.min(p.position), max.max(p.position))
-        });
+    pub fn new(vertices: &[Vertex], indices: &[usize], start: usize, count: usize) -> Self {
+        let default = vertices[indices[start]].position;
+        let (min, max) = indices[start..start + count]
+            .iter()
+            .map(|i| vertices[*i])
+            .fold((default, default), |(min, max), p| {
+                (min.min(p.position), max.max(p.position))
+            });
 
         let extents = (max - min) / 2.;
         Self {
@@ -167,24 +175,24 @@ impl Bounds {
 
 pub struct Node {
     /// If there is no parent or it was destroyed, weak won't upgrade.
-    pub parent: Weak<Node>,
-    pub children: Vec<Rc<Node>>,
+    pub parent: Weak<RefCell<Node>>,
+    pub children: Vec<Rc<RefCell<Node>>>,
 
-    pub local_transform: RefCell<Mat4>,
+    pub local_transform: Mat4,
     /// Cache :
-    pub world_transform: RefCell<Mat4>,
+    pub world_transform: Mat4,
 
     /// Actual mesh if any at this node
     pub mesh: Option<Rc<MeshAsset>>,
 }
 
 impl Node {
-    pub fn parent_of(mut children: Vec<Rc<Node>>) -> Rc<Self> {
+    pub fn parent_of(mut children: Vec<Rc<RefCell<Node>>>) -> Rc<RefCell<Self>> {
         Rc::new_cyclic(|f| {
             children
                 .iter_mut()
-                .for_each(|c| Rc::get_mut(c).unwrap().parent = f.clone());
-            Node {
+                .for_each(|c| c.borrow_mut().parent = f.clone());
+            let node = Node {
                 parent: Default::default(),
                 children,
 
@@ -192,16 +200,22 @@ impl Node {
                 world_transform: Default::default(),
 
                 mesh: None,
-            }
+            };
+            RefCell::new(node)
         })
     }
 
-    pub fn refresh_transform(&self, parent_mat: &Mat4) {
-        let world_transform = parent_mat * *self.local_transform.borrow();
+    pub fn refresh_transform(&mut self, parent_mat: &Mat4) {
+        self.world_transform = parent_mat * self.local_transform;
         self.children
             .iter()
-            .for_each(|c| c.refresh_transform(&world_transform));
-        *self.world_transform.borrow_mut() = world_transform;
+            .for_each(|c| c.borrow_mut().refresh_transform(&self.world_transform));
+    }
+
+    pub fn transform(&mut self, tr: &Mat4) {
+        // TODO: which order ?
+        self.local_transform = self.local_transform * tr;
+        self.refresh_transform(&Mat4::IDENTITY);
     }
 }
 

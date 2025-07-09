@@ -56,7 +56,7 @@ pub trait SingleThreadedEngine {
                 .scene
                 .top_nodes()
                 .iter()
-                .for_each(|n| populate_nodes(triangles, n));
+                .for_each(|n| populate_nodes(triangles, &n.borrow()));
 
             match settings.sort_triangles {
                 TriangleSorting::BackToFront => {

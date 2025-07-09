@@ -9,7 +9,7 @@ use crate::maths::PI;
 
 pub fn base_scene() -> Scene {
     let suzanne: Node = obj_file::import_mesh_and_diffuse(obj_file::SUZANNE_OBJ_PATH).into();
-    let suzanne = Rc::new(suzanne);
+    let suzanne = Rc::new(RefCell::new(suzanne));
 
     let top = Node::parent_of(
         vec![
@@ -21,7 +21,7 @@ pub fn base_scene() -> Scene {
             right_wall(),
         ]
         .drain(..)
-        .map(|n| Rc::new(n))
+        .map(|n| Rc::new(RefCell::new(n)))
         .chain(once(suzanne.clone()))
         .collect(),
     );
@@ -40,6 +40,7 @@ fn base_triangle() -> Node {
     let indices = vec![0, 1, 2];
     let surfaces = vec![GeoSurface::new(
         &vertices,
+        &indices,
         0,
         indices.len(),
         Texture::VertexColor(0xffff0000, 0xff00ff00, 0xff0000ff),
@@ -49,7 +50,7 @@ fn base_triangle() -> Node {
         parent: Default::default(),
         children: Default::default(),
 
-        local_transform: RefCell::new(Mat4::from_translation(vec3(0., 0., -10.))),
+        local_transform: Mat4::from_translation(vec3(0., 0., -10.)),
         world_transform: Default::default(),
 
         mesh: Some(Rc::new(MeshAsset::new(vertices, indices, surfaces))),
@@ -96,23 +97,23 @@ fn base_pyramid() -> Node {
         15, 17, 16,
     ];
     let surfaces = vec![
-        GeoSurface::new(&vertices, 0, 2, Texture::Color(0xffff0000)),
-        GeoSurface::new(&vertices, 2, 2, Texture::Color(0xff0000ff)),
-        GeoSurface::new(&vertices, 4, 2, Texture::Color(0xff00ff00)),
-        GeoSurface::new(&vertices, 6, 2, Texture::Color(0xffffff00)),
-        GeoSurface::new(&vertices, 8, 2, Texture::Color(0xff00ffff)),
-        GeoSurface::new(&vertices, 10, 2, Texture::Color(0xffff00ff)),
+        GeoSurface::new(&vertices, &indices, 0, 2, Texture::Color(0xffff0000)),
+        GeoSurface::new(&vertices, &indices, 2, 2, Texture::Color(0xff0000ff)),
+        GeoSurface::new(&vertices, &indices, 4, 2, Texture::Color(0xff00ff00)),
+        GeoSurface::new(&vertices, &indices, 6, 2, Texture::Color(0xffffff00)),
+        GeoSurface::new(&vertices, &indices, 8, 2, Texture::Color(0xff00ffff)),
+        GeoSurface::new(&vertices, &indices, 10, 2, Texture::Color(0xffff00ff)),
     ];
 
     Node {
         parent: Default::default(),
         children: Default::default(),
 
-        local_transform: RefCell::new(Mat4::from_scale_rotation_translation(
+        local_transform: Mat4::from_scale_rotation_translation(
             Vec3::splat(0.7),
             Quat::from_rotation_z(-PI / 3.),
             vec3(4., 1., -19.),
-        )),
+        ),
 
         world_transform: Default::default(),
 
@@ -134,18 +135,20 @@ fn triangles_plane_mesh(color_mask: u32) -> MeshAsset {
     let indices: Vec<_> = (0..RANGE_2)
         .flat_map(|x| {
             (0..RANGE_2).flat_map(move |z| {
-                // Ugly, but we need an owned iterator...
-                once(x * RANGE_2 + z)
-                    .chain(once((x + 1) * RANGE_2 + z + 1))
-                    .chain(once((x + 1) * RANGE_2 + z))
-                    .map(|i| i as usize)
+                [
+                    x * RANGE_2 + z,
+                    (x + 1) * RANGE_2 + z + 1,
+                    (x + 1) * RANGE_2 + z,
+                ]
             })
         })
+        .map(|i| i as usize)
         .collect();
     let surfaces = (0..indices.len() / 3)
         .map(|i| {
             GeoSurface::new(
-                &vertices[i..=i],
+                &vertices,
+                &indices,
                 i,
                 1,
                 Texture::Color(rand::rng().next_u32() & color_mask),
@@ -160,11 +163,7 @@ fn triangles_plane(color_mask: u32, pos: Vec3, rot: Quat, scale: f32) -> Node {
     Node {
         parent: Default::default(),
         children: Default::default(),
-        local_transform: RefCell::new(Mat4::from_scale_rotation_translation(
-            Vec3::splat(scale),
-            rot,
-            pos,
-        )),
+        local_transform: Mat4::from_scale_rotation_translation(Vec3::splat(scale), rot, pos),
         world_transform: Default::default(),
         mesh: Some(Rc::new(triangles_plane_mesh(color_mask))),
     }

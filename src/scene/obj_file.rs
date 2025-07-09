@@ -5,7 +5,7 @@ use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
 use glam::vec3;
 use obj::raw::{material::MtlColor, object::Polygon, parse_mtl, parse_obj};
 
-use super::{Bounds, GeoSurface, MeshAsset, Texture, Vertex};
+use super::{GeoSurface, MeshAsset, Texture, Vertex};
 
 // TODO: better error handling
 pub fn import_mesh_and_diffuse<P: AsRef<Path>>(obj_path: P) -> MeshAsset {
@@ -50,12 +50,13 @@ pub fn import_mesh_and_diffuse<P: AsRef<Path>>(obj_path: P) -> MeshAsset {
         .flat_map(|(material_name, group)| {
             group.polygons.iter().map(|r| {
                 let range = (r.start * 3)..(r.end * 3);
-                GeoSurface {
-                    start_index: (r.start * 3),
-                    count: range.len(),
-                    material: mtls[material_name],
-                    bounds: Bounds::new(&mut indices[range].iter().map(|i| &vertices[*i])),
-                }
+                GeoSurface::new(
+                    &vertices[..],
+                    &indices[..],
+                    r.start * 3,
+                    range.len(),
+                    mtls[material_name],
+                )
             })
         })
         .collect();

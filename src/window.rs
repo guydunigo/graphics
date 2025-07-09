@@ -3,7 +3,7 @@ use std::{rc::Rc, time::Instant};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
-    event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent},
+    event::{DeviceEvent, DeviceId, ElementState, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, KeyCode, PhysicalKey},
     window::{CursorGrabMode, Window, WindowId},
@@ -211,6 +211,7 @@ impl ApplicationHandler for App<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        self.world.camera.on_window_event(&event);
         self.window.as_mut().unwrap().engine.on_window_event(&event);
         match event {
             WindowEvent::CloseRequested
@@ -280,43 +281,27 @@ impl ApplicationHandler for App<'_> {
                         }
                     }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ControlLeft => self.world.camera.move_sight(0., 1., 0.),
-                    #[cfg(feature = "cpu")]
-                    KeyCode::ShiftLeft => self.world.camera.move_sight(0., -1., 0.),
-                    #[cfg(feature = "cpu")]
-                    KeyCode::KeyW => self.world.camera.move_sight(0., 0., 1.),
-                    #[cfg(feature = "cpu")]
-                    KeyCode::KeyS => self.world.camera.move_sight(0., 0., -1.),
-                    #[cfg(feature = "cpu")]
-                    KeyCode::KeyA => self.world.camera.move_sight(-1., 0., 0.),
-                    #[cfg(feature = "cpu")]
-                    KeyCode::KeyD => self.world.camera.move_sight(1., 0., 0.),
-                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowLeft => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
-                            let mut local_transform = m.local_transform.borrow_mut();
-                            *local_transform = Mat4::from_rotation_y(-0.1) * *local_transform;
+                            m.borrow_mut().transform(&Mat4::from_rotation_y(-0.1));
                         }
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowRight => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
-                            let mut local_transform = m.local_transform.borrow_mut();
-                            *local_transform = Mat4::from_rotation_y(0.1) * *local_transform;
+                            m.borrow_mut().transform(&Mat4::from_rotation_y(0.1));
                         }
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowUp => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
-                            let mut local_transform = m.local_transform.borrow_mut();
-                            *local_transform = Mat4::from_rotation_x(-0.1) * *local_transform;
+                            m.borrow_mut().transform(&Mat4::from_rotation_x(-0.1));
                         }
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowDown => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
-                            let mut local_transform = m.local_transform.borrow_mut();
-                            *local_transform = Mat4::from_rotation_x(0.1) * *local_transform;
+                            m.borrow_mut().transform(&Mat4::from_rotation_x(0.1));
                         }
                     }
                     KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,
@@ -331,12 +316,6 @@ impl ApplicationHandler for App<'_> {
                     _ => (),
                 }
             }
-            #[cfg(feature = "cpu")]
-            WindowEvent::MouseInput {
-                button: MouseButton::Right,
-                state: ElementState::Pressed,
-                ..
-            } => self.world.camera.reset_rot(),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = Some(position);
             }
@@ -387,17 +366,14 @@ impl ApplicationHandler for App<'_> {
         event: DeviceEvent,
     ) {
         if let DeviceEvent::MouseMotion { delta } = event {
+            self.world
+                .camera
+                .on_mouse_motion(delta, self.cursor_grabbed);
             self.window
                 .as_mut()
                 .unwrap()
                 .engine
                 .on_mouse_motion(delta, self.cursor_grabbed);
-            #[cfg(feature = "cpu")]
-            if self.cursor_grabbed {
-                self.world
-                    .camera
-                    .rotate_from_mouse(delta.0 as f32, delta.1 as f32);
-            }
         }
     }
 }

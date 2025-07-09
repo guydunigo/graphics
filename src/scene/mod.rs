@@ -1,6 +1,6 @@
 /// Describing the world
 mod camera;
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use camera::Camera;
 mod mesh;
@@ -47,17 +47,20 @@ impl Default for Texture {
 
 pub struct Scene {
     // meshes: HashMap<String, Rc<MeshAsset>>,
-    named_nodes: HashMap<String, Rc<Node>>,
+    named_nodes: HashMap<String, Rc<RefCell<Node>>>,
 
-    top_nodes: Vec<Rc<Node>>,
+    top_nodes: Vec<Rc<RefCell<Node>>>,
 }
 
 impl Scene {
-    pub fn new(named_nodes: HashMap<String, Rc<Node>>, top_nodes: Vec<Rc<Node>>) -> Self {
+    pub fn new(
+        named_nodes: HashMap<String, Rc<RefCell<Node>>>,
+        top_nodes: Vec<Rc<RefCell<Node>>>,
+    ) -> Self {
         // Update world transform infos to all nodes.
         top_nodes
             .iter()
-            .for_each(|n| n.refresh_transform(&Mat4::IDENTITY));
+            .for_each(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY));
 
         Scene {
             named_nodes,
@@ -65,11 +68,11 @@ impl Scene {
         }
     }
 
-    pub fn top_nodes(&self) -> &[Rc<Node>] {
+    pub fn top_nodes(&self) -> &[Rc<RefCell<Node>>] {
         &self.top_nodes
     }
 
-    pub fn get_named_node(&self, name: &str) -> Option<&Rc<Node>> {
+    pub fn get_named_node(&self, name: &str) -> Option<&Rc<RefCell<Node>>> {
         self.named_nodes.get(name)
     }
 }
