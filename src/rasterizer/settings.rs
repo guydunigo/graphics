@@ -48,10 +48,12 @@ pub enum EngineType {
     Original,
     Iterator,
     Steps,
+    Steps2,
     ParIter2,
     ParIter3,
     ParIter4,
     ParIter5,
+    #[cfg(feature = "vulkan")]
     Vulkan,
 }
 

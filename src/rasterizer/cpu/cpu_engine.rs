@@ -7,7 +7,9 @@ use crate::{font::TextWriter, scene::World, window::AppObserver};
 use super::{
     super::settings::{EngineType, Settings},
     parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
-    single_threaded::{IteratorEngine, OriginalEngine, SingleThreadedEngine, StepsEngine},
+    single_threaded::{
+        IteratorEngine, OriginalEngine, SingleThreadedEngine, Steps2Engine, StepsEngine,
+    },
 };
 
 pub struct CPUEngine {
@@ -89,6 +91,7 @@ enum AnyEngine {
     Original(OriginalEngine),
     Iterator(IteratorEngine),
     Steps(StepsEngine),
+    Steps2(Steps2Engine),
     ParIter2(ParIterEngine2),
     ParIter3(ParIterEngine3),
     ParIter4(ParIterEngine4),
@@ -107,7 +110,8 @@ impl AnyEngine {
         match self {
             AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
             AnyEngine::Iterator(_) => *self = AnyEngine::Steps(Default::default()),
-            AnyEngine::Steps(_) => *self = AnyEngine::ParIter2(Default::default()),
+            AnyEngine::Steps(_) => *self = AnyEngine::Steps2(Default::default()),
+            AnyEngine::Steps2(_) => *self = AnyEngine::ParIter2(Default::default()),
             AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
             AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
             AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
@@ -152,6 +156,16 @@ impl AnyEngine {
                 stats,
             ),
             AnyEngine::Steps(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::Steps2(e) => e.rasterize(
                 settings,
                 text_writer,
                 world,
@@ -209,6 +223,7 @@ impl AnyEngine {
             AnyEngine::Original(_) => EngineType::Original,
             AnyEngine::Iterator(_) => EngineType::Iterator,
             AnyEngine::Steps(_) => EngineType::Steps,
+            AnyEngine::Steps2(_) => EngineType::Steps2,
             AnyEngine::ParIter2(_) => EngineType::ParIter2,
             AnyEngine::ParIter3(_) => EngineType::ParIter3,
             AnyEngine::ParIter4(_) => EngineType::ParIter4,
