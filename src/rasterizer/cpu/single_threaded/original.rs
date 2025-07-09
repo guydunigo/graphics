@@ -3,8 +3,11 @@
 use crate::{
     maths::Vec4u,
     rasterizer::{
-        MINIMAL_AMBIANT_LIGHT, Settings, Triangle, bounding_box_triangle, edge_function,
-        vec_cross_z, world_to_raster_triangle,
+        Settings,
+        cpu::{
+            MINIMAL_AMBIANT_LIGHT, Triangle, bounding_box_triangle, edge_function, vec_cross_z,
+            world_to_raster_triangle,
+        },
     },
     scene::{Camera, Texture, World},
 };

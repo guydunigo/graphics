@@ -11,12 +11,12 @@ use winit::dpi::PhysicalSize;
 use crate::{
     font::{self, TextWriter},
     maths::Vec4u,
-    rasterizer::{Settings, Triangle, populate_nodes, settings::TriangleSorting},
+    rasterizer::{Settings, settings::TriangleSorting},
     scene::{DEFAULT_BACKGROUND_COLOR, Texture, World},
     window::AppObserver,
 };
 
-use super::{buffer_index, cursor_buffer_index, format_debug};
+use super::{Triangle, buffer_index, cursor_buffer_index, format_debug, populate_nodes};
 
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;

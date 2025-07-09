@@ -8,8 +8,11 @@ use winit::dpi::PhysicalSize;
 use crate::{
     maths::Vec4u,
     rasterizer::{
-        MINIMAL_AMBIANT_LIGHT, Rect, Triangle, bounding_box_triangle, edge_function,
-        settings::Settings, vec_cross_z, world_to_raster_triangle,
+        Settings,
+        cpu::{
+            MINIMAL_AMBIANT_LIGHT, Rect, Triangle, bounding_box_triangle, edge_function,
+            vec_cross_z, world_to_raster_triangle,
+        },
     },
     scene::{Texture, World},
 };

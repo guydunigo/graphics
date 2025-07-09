@@ -5,13 +5,10 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{font::TextWriter, scene::World, window::AppObserver};
 
 use super::{
-    // parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
-    settings::{EngineType, Settings},
+    super::settings::{EngineType, Settings},
     single_threaded::{IteratorEngine, OriginalEngine, SingleThreadedEngine},
+    // parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
 };
-
-#[cfg(feature = "stats")]
-use super::Stats;
 
 pub struct CPUEngine {
     window: Rc<Window>,
