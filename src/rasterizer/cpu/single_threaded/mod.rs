@@ -11,7 +11,7 @@ use winit::dpi::PhysicalSize;
 use crate::{
     font::{self, TextWriter},
     maths::Vec4u,
-    rasterizer::{Settings, settings::TriangleSorting},
+    rasterizer::Settings,
     scene::{DEFAULT_BACKGROUND_COLOR, Texture, World},
     window::AppObserver,
 };
@@ -58,6 +58,7 @@ pub trait SingleThreadedEngine {
                 .iter()
                 .for_each(|n| populate_nodes(triangles, &n.borrow()));
 
+            /*
             match settings.sort_triangles {
                 TriangleSorting::BackToFront => {
                     triangles.sort_by_key(|t| -t.min_z() as u32);
@@ -67,6 +68,7 @@ pub trait SingleThreadedEngine {
                 }
                 _ => (),
             }
+            */
         }
 
         let ratio_w_h = size.width as f32 / size.height as f32;

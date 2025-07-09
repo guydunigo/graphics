@@ -222,11 +222,13 @@ pub struct Triangle {
     pub material: Texture,
 }
 
+/*
 impl Triangle {
     pub fn min_z(&self) -> f32 {
         f32::min(self.p0.z, f32::min(self.p1.z, self.p2.z))
     }
 }
+*/
 
 pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
     {

@@ -1,3 +1,4 @@
+//! drain(..).par_bridge()
 use glam::Vec3;
 use rayon::prelude::*;
 use std::sync::{Arc, atomic::AtomicU64};

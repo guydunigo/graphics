@@ -95,10 +95,13 @@ pub struct InitializedWindow<'a> {
 
 impl InitializedWindow<'_> {
     pub fn new(window: Rc<Window>) -> Self {
+        let engine = Engine::new(window.clone());
+        let mut settings = Settings::default();
+        settings.engine_type = engine.as_engine_type();
         Self {
-            window: window.clone(),
-            settings: Default::default(),
-            engine: Engine::new(window),
+            window,
+            settings,
+            engine,
         }
     }
 
@@ -339,9 +342,9 @@ impl ApplicationHandler for App<'_> {
                     }
                     KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,
                     KeyCode::Digit1 => w.set_next_engine(),
-                    KeyCode::Digit2 => w.settings.sort_triangles.next(),
-                    KeyCode::Digit3 => w.settings.parallel_text = !w.settings.parallel_text,
-                    KeyCode::Digit4 => w.settings.next_oversampling(),
+                    // KeyCode::Digit2 => w.settings.sort_triangles.next(),
+                    KeyCode::Digit2 => w.settings.parallel_text = !w.settings.parallel_text,
+                    KeyCode::Digit3 => w.settings.next_oversampling(),
                     #[cfg(feature = "cpu")]
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),

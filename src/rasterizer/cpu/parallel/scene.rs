@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock, Weak};
 use rand::RngCore;
 
 use crate::{
-    maths::{PI, Rotation, Vec3f},
-    scene::{Camera, Texture, Triangle},
+    maths::PI,
+    scene::{Camera, Texture},
 };
 
 // TODO: try with Arc::new_cyclic ?

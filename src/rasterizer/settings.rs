@@ -7,7 +7,7 @@ pub struct Settings {
     /// Sort triangles by point with mininum Z value
     ///
     /// Not implemented everywhere
-    pub sort_triangles: TriangleSorting,
+    // pub sort_triangles: TriangleSorting,
     pub parallel_text: bool,
     pub oversampling: usize,
     pub culling_meshes: bool,
@@ -20,7 +20,7 @@ impl Default for Settings {
         Self {
             show_vertices: Default::default(),
             engine_type: Default::default(),
-            sort_triangles: Default::default(),
+            // sort_triangles: Default::default(),
             parallel_text: true,
             oversampling: 1,
             culling_meshes: true,
@@ -54,6 +54,7 @@ pub enum EngineType {
     Vulkan,
 }
 
+/*
 #[derive(Default, Debug, Clone, Copy)]
 pub enum TriangleSorting {
     #[default]
@@ -71,3 +72,4 @@ impl TriangleSorting {
         }
     }
 }
+*/

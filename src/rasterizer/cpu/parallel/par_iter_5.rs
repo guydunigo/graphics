@@ -1,3 +1,4 @@
+//! Par_drain in a for_each loop
 use glam::Vec3;
 use rayon::prelude::*;
 use std::sync::{Arc, atomic::AtomicU64};

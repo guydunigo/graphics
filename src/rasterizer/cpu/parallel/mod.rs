@@ -1,8 +1,7 @@
-// mod par_iter_2;
+mod par_iter_2;
 mod par_iter_3;
 mod par_iter_4;
 mod par_iter_5;
-// mod scene;
 
 use glam::Vec3;
 use rayon::prelude::*;
@@ -15,7 +14,7 @@ use std::{
     time::Instant,
 };
 
-// pub use par_iter_2::ParIterEngine2;
+pub use par_iter_2::ParIterEngine2;
 pub use par_iter_3::ParIterEngine3;
 pub use par_iter_4::ParIterEngine4;
 pub use par_iter_5::ParIterEngine5;
@@ -29,7 +28,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize};
 use crate::{
     font::{self, TextWriter},
     maths::Vec4u,
-    rasterizer::{Settings, cpu::populate_nodes, settings::TriangleSorting},
+    rasterizer::{Settings, cpu::populate_nodes},
     scene::{Camera, DEFAULT_BACKGROUND_COLOR, Texture},
     window::AppObserver,
 };
@@ -78,8 +77,8 @@ pub trait ParIterEngine {
 
         app.last_buffer_fill_micros = clean_resize_buffer(self.depth_color_buffer_mut(), size);
 
-        // TODO: parallel ?
         {
+            // TODO: let t = Instant::now();
             let triangles = self.triangles_mut();
             triangles.clear();
             world
@@ -88,6 +87,8 @@ pub trait ParIterEngine {
                 .iter()
                 .for_each(|n| populate_nodes(triangles, &n.borrow()));
 
+            /*
+            // TODO: Can't sort, not from camera view
             match settings.sort_triangles {
                 TriangleSorting::BackToFront => {
                     triangles.sort_by_key(|t| -t.min_z() as u32);
@@ -97,6 +98,8 @@ pub trait ParIterEngine {
                 }
                 _ => (),
             }
+            */
+            // TODO: println!("{}", t.elapsed().as_micros()); // ~100 micros
         }
 
         let ratio_w_h = size.width as f32 / size.height as f32;
