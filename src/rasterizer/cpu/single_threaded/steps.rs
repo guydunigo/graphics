@@ -133,35 +133,38 @@ impl SingleThreadedEngine for StepsEngine {
         // vector to face normal vector to see if they are opposed (face is lit).
         //
         // Also simplifying colours.
+        let sun_direction = world.sun_direction;
         self.light.clear();
         self.light.reserve(self.triangles.len());
-        self.t_raster
-            .iter_mut()
-            .zip(self.triangles.iter())
-            .for_each(|(t_raster, t)| {
-                let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
-                let light = world
-                    .sun_direction
-                    .dot(triangle_normal)
-                    .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
+        self.light
+            .extend(
+                self.t_raster
+                    .iter_mut()
+                    .zip(self.triangles.iter())
+                    .map(|(t_raster, t)| {
+                        let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
+                        let light = sun_direction
+                            .dot(triangle_normal)
+                            .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
 
-                // TODO: remove this test, just load correctly ?
-                // If a `Texture::VertexColor` has the same color for all vertices, then we can
-                // consider it like a `Texture::Color`.
-                if let Texture::VertexColor(c0, c1, c2) = t_raster.material
-                    && c0 == c1
-                    && c1 == c2
-                {
-                    t_raster.material = Texture::Color(c0);
-                }
+                        // TODO: remove this test, just load correctly ?
+                        // If a `Texture::VertexColor` has the same color for all vertices, then we can
+                        // consider it like a `Texture::Color`.
+                        if let Texture::VertexColor(c0, c1, c2) = t_raster.material
+                            && c0 == c1
+                            && c1 == c2
+                        {
+                            t_raster.material = Texture::Color(c0);
+                        }
 
-                if let Texture::Color(col) = t.material {
-                    t_raster.material =
-                        Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
-                }
+                        if let Texture::Color(col) = t.material {
+                            t_raster.material =
+                                Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
+                        }
 
-                self.light.push(light);
-            });
+                        light
+                    }),
+            );
 
         self.t_raster
             .drain(..)
