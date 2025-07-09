@@ -162,7 +162,7 @@ impl SingleThreadedEngine for IteratorEngine {
     }
 }
 
-fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
+pub fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     settings: &Settings,
     tri_raster: &mut Triangle,
     buffer: &mut B,
