@@ -47,6 +47,7 @@ pub enum EngineType {
     None,
     Original,
     Iterator,
+    Steps,
     ParIter2,
     ParIter3,
     ParIter4,

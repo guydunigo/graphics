@@ -1,9 +1,11 @@
 mod iterator;
 mod original;
+mod steps;
 
 use glam::Vec3;
 pub use iterator::IteratorEngine;
 pub use original::OriginalEngine;
+pub use steps::StepsEngine;
 
 use std::{ops::DerefMut, time::Instant};
 use winit::dpi::PhysicalSize;
