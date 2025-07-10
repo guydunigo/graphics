@@ -232,7 +232,6 @@ impl Triangle {
 
 pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
     {
-        // TODO: mesh + surface culling via bounding boxes ?
         if let Some(mesh) = node.mesh.as_ref() {
             let mut vertices = Vec::with_capacity(mesh.vertices.len());
             vertices.extend(

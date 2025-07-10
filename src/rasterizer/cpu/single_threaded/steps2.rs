@@ -1,6 +1,8 @@
 //! Copy from steps
+//!
+//! Try to cull early
 
-use glam::Vec3;
+use glam::{Vec3, Vec4Swizzles};
 use std::{ops::DerefMut, time::Instant};
 use winit::dpi::PhysicalSize;
 
@@ -11,11 +13,11 @@ use crate::{
         Settings,
         cpu::{
             MINIMAL_AMBIANT_LIGHT, Rect, Triangle, bounding_box_triangle, cursor_buffer_index,
-            format_debug, populate_nodes, single_threaded::clean_resize_buffers, vec_cross_z,
+            format_debug, single_threaded::clean_resize_buffers, vec_cross_z, world_to_raster,
             world_to_raster_triangle,
         },
     },
-    scene::{Texture, World},
+    scene::{Camera, Node, Texture, World},
     window::AppObserver,
 };
 
@@ -60,6 +62,17 @@ impl Steps2Engine {
         let mut nb_pixels_front = 0;
         #[cfg(feature = "stats")]
         let mut nb_pixels_written = 0;
+
+        self.triangles.clear();
+        world.scene.top_nodes().iter().for_each(|n| {
+            populate_nodes(
+                &world.camera,
+                size,
+                ratio_w_h,
+                &mut self.triangles,
+                &n.borrow(),
+            )
+        });
 
         #[cfg(feature = "stats")]
         {
@@ -204,27 +217,6 @@ impl Steps2Engine {
     ) {
         app.last_buffer_fill_micros = clean_resize_buffers(&mut self.depth_buffer, buffer, size);
 
-        {
-            self.triangles.clear();
-            world
-                .scene
-                .top_nodes()
-                .iter()
-                .for_each(|n| populate_nodes(&mut self.triangles, &n.borrow()));
-
-            /*
-            match settings.sort_triangles {
-                TriangleSorting::BackToFront => {
-                    triangles.sort_by_key(|t| -t.min_z() as u32);
-                }
-                TriangleSorting::FrontToBack => {
-                    triangles.sort_by_key(|t| t.min_z() as u32);
-                }
-                _ => (),
-            }
-            */
-        }
-
         let ratio_w_h = size.width as f32 / size.height as f32;
 
         let t = Instant::now();
@@ -253,4 +245,44 @@ impl Steps2Engine {
             text_writer.rasterize(buffer, size, font::PX, &display[..]);
         }
     }
+}
+
+fn populate_nodes(
+    camera: &Camera,
+    size: PhysicalSize<u32>,
+    ratio_w_h: f32,
+    triangles: &mut Vec<Triangle>,
+    node: &Node,
+) {
+    {
+        // TODO: mesh + surface culling via bounding boxes ?
+        if let Some(mesh) = node.mesh.as_ref() {
+            let mut vertices = Vec::with_capacity(mesh.vertices.len());
+            vertices.extend(
+                mesh.vertices
+                    .iter()
+                    .map(|v| node.world_transform * v.position.extend(1.))
+                    .map(|v| v.xyz()),
+            );
+
+            triangles.reserve(mesh.surfaces.iter().map(|s| s.count / 3).sum());
+            triangles.extend(mesh.surfaces.iter().flat_map(|s| {
+                (0..s.count)
+                    .step_by(3)
+                    .map(|i| s.start_index + i)
+                    .map(|i| Triangle {
+                        p0: vertices[mesh.indices[i]],
+                        p1: vertices[mesh.indices[i + 1]],
+                        p2: vertices[mesh.indices[i + 2]],
+                        material: s.material,
+                    })
+            }));
+        }
+    }
+
+    node.children
+        .iter()
+        .for_each(|c| populate_nodes(camera, size, ratio_w_h, triangles, &c.borrow()));
+
+    todo!("cull mesh first world_to_raster(...)");
 }
