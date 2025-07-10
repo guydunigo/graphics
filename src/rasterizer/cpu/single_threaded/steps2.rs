@@ -2,7 +2,7 @@
 //!
 //! Try to cull early
 
-use glam::{Vec3, Vec4Swizzles};
+use glam::{Mat4, Vec3};
 use std::{ops::DerefMut, time::Instant};
 use winit::dpi::PhysicalSize;
 
@@ -95,7 +95,11 @@ impl Steps2Engine {
             let i = self.bounding_boxes.len();
             // TODO: max_z >= MAX_DEPTH ?
             let bb = bounding_box_triangle(&self.t_raster[i], size);
-            if !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near) {
+            if !settings.culling_triangles
+                || !(bb.min_x == bb.max_x
+                    || bb.min_y == bb.max_y
+                    || bb.max_z <= world.camera.z_near)
+            {
                 self.bounding_boxes.push(bb);
             } else {
                 self.triangles.swap_remove(i);
@@ -253,7 +257,10 @@ fn populate_nodes(
     camera: &Camera,
     size: PhysicalSize<u32>,
     ratio_w_h: f32,
-    triangles: &mut Vec<Triangle>,
+    vertices: &mut Vec<Vec3>,
+    world_trs: &mut Vec<Mat4>,
+    to_cam_trs: &mut Vec<Mat4>,
+    textures: &mut Vec<Texture>,
     node: &Node,
 ) {
     {
@@ -264,34 +271,44 @@ fn populate_nodes(
                     .bounds
                     .is_visible_cpu(camera, &to_cam_tr, size, ratio_w_h))
         {
-            let mut vertices = Vec::with_capacity(mesh.vertices.len());
-            vertices.extend(
-                mesh.vertices
-                    .iter()
-                    .map(|v| node.world_transform * v.position.extend(1.))
-                    .map(|v| v.xyz()),
-            );
-
-            triangles.reserve(mesh.surfaces.iter().map(|s| s.count / 3).sum());
-            triangles.extend(mesh.surfaces.iter().flat_map(|s| {
-                (0..s.count)
-                    .step_by(3)
-                    .map(|i| s.start_index + i)
-                    .map(|i| Triangle {
-                        p0: vertices[mesh.indices[i]],
-                        p1: vertices[mesh.indices[i + 1]],
-                        p2: vertices[mesh.indices[i + 2]],
-                        material: s.material,
-                    })
-            }));
+            let vert_count = mesh.surfaces.iter().map(|s| s.count).sum();
+            let vert_count_3 = vert_count / 3;
+            vertices.reserve(vert_count);
+            world_trs.reserve(vert_count_3);
+            to_cam_trs.reserve(vert_count_3);
+            textures.reserve(vert_count_3);
+            mesh.surfaces
+                .iter()
+                .filter(|s| {
+                    !settings.culling_surfaces
+                        || s.bounds.is_visible_cpu(camera, &to_cam_tr, size, ratio_w_h)
+                })
+                .for_each(|s| {
+                    mesh.indices[s.start_index..s.start_index + s.count]
+                        .chunks(3)
+                        .for_each(|is| {
+                            vertices.push(mesh.vertices[is[0]].position);
+                            vertices.push(mesh.vertices[is[1]].position);
+                            vertices.push(mesh.vertices[is[2]].position);
+                            world_trs.push(node.world_transform);
+                            to_cam_trs.push(to_cam_tr);
+                            textures.push(s.material);
+                        });
+                });
         }
     }
 
-    node.children
-        .iter()
-        .for_each(|c| populate_nodes(settings, camera, size, ratio_w_h, triangles, &c.borrow()));
-
-    todo!("cull mesh first world_to_raster(...)");
-    // TODO: mesh + surface culling via bounding boxes ?
-    // TODO: settings
+    node.children.iter().for_each(|c| {
+        populate_nodes(
+            settings,
+            camera,
+            size,
+            ratio_w_h,
+            vertices,
+            world_trs,
+            to_cam_trs,
+            textures,
+            &c.borrow(),
+        )
+    });
 }

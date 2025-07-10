@@ -226,18 +226,7 @@ impl Bounds {
             .clamp(Vec3::splat(-1.), Vec3::splat(1.));
 
         // TODO: max_z >= MAX_DEPTH ?
-        let res = !(min.x == max.x || min.y == max.y || max.z <= camera.z_near);
-
-        assert_eq!(
-            res,
-            self.is_visible(
-                &camera.view_mat(),
-                &(to_cam_tr * camera.view_mat().inverse())
-            ),
-            "Not same visibility !"
-        );
-
-        res
+        !(min.x == max.x || min.y == max.y || max.z <= camera.z_near)
     }
 }
 

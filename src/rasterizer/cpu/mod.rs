@@ -172,7 +172,7 @@ pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
                     .map(|v| v.xyz()),
             );
 
-            triangles.reserve(mesh.surfaces.iter().map(|s| s.count / 3).sum());
+            triangles.reserve(mesh.surfaces.iter().map(|s| s.count).sum::<usize>() / 3);
             triangles.extend(mesh.surfaces.iter().flat_map(|s| {
                 (0..s.count)
                     .step_by(3)
