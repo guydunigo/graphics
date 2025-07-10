@@ -23,7 +23,7 @@ use crate::{
 use super::{SingleThreadedEngine, iterator::rasterize_triangle};
 
 #[cfg(feature = "stats")]
-use crate::rasterizer::Stats;
+use crate::rasterizer::cpu::Stats;
 
 #[derive(Default)]
 pub struct StepsEngine {
@@ -54,25 +54,8 @@ impl SingleThreadedEngine for StepsEngine {
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
         #[cfg(feature = "stats")]
-        let mut nb_triangles_sight = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_triangles_tot = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_triangles_facing = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_triangles_drawn = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_tested = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_in = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_front = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_written = 0;
-
-        #[cfg(feature = "stats")]
         {
-            nb_triangles_tot = self.triangles.len();
+            stats.nb_triangles_tot = self.triangles.len();
         }
 
         self.t_raster.clear();
@@ -100,7 +83,7 @@ impl SingleThreadedEngine for StepsEngine {
 
         #[cfg(feature = "stats")]
         {
-            nb_triangles_sight = self.triangles.len();
+            stats.nb_triangles_sight = self.triangles.len();
         }
 
         ////////////////////////////////
@@ -124,7 +107,7 @@ impl SingleThreadedEngine for StepsEngine {
 
         #[cfg(feature = "stats")]
         {
-            nb_triangles_facing = self.triangles.len();
+            stats.nb_triangles_facing = self.triangles.len();
         }
 
         ////////////////////////////////
@@ -187,17 +170,5 @@ impl SingleThreadedEngine for StepsEngine {
                     p20,
                 )
             });
-
-        #[cfg(feature = "stats")]
-        {
-            stats.nb_triangles_tot += nb_triangles_tot;
-            stats.nb_triangles_sight += nb_triangles_sight;
-            stats.nb_triangles_facing += nb_triangles_facing;
-            stats.nb_triangles_drawn += nb_triangles_drawn;
-            stats.nb_pixels_tested += nb_pixels_tested;
-            stats.nb_pixels_in += nb_pixels_in;
-            stats.nb_pixels_front += nb_pixels_front;
-            stats.nb_pixels_written += nb_pixels_written;
-        }
     }
 }

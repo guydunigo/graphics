@@ -23,7 +23,7 @@ use crate::{
 use super::{Triangle, buffer_index, cursor_buffer_index, format_debug, populate_nodes};
 
 #[cfg(feature = "stats")]
-use crate::rasterizer::Stats;
+use crate::rasterizer::cpu::Stats;
 
 /// Common base for engines not requiring buffer synchronization.
 pub trait SingleThreadedEngine {

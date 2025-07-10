@@ -115,3 +115,29 @@ pub fn local_to_clipspace(
 
     p
 }
+
+pub fn to_raster(
+    p_world: Vec3,
+    cam: &Camera,
+    to_cam_tr: &Mat4,
+    size: PhysicalSize<u32>,
+    ratio_w_h: f32,
+) -> Vec3 {
+    let mut p = local_to_clipspace(cam, to_cam_tr, size, ratio_w_h, &p_world);
+
+    // Raster space
+    // [0,1] -> [0,size]
+    p.x = (p.x + 1.) / 2. * (size.width as f32);
+    p.y = (1. - p.y) / 2. * (size.height as f32);
+
+    p
+}
+
+pub fn world_to_raster(
+    p_world: Vec3,
+    cam: &Camera,
+    size: PhysicalSize<u32>,
+    ratio_w_h: f32,
+) -> Vec3 {
+    to_raster(p_world, cam, &cam.view_mat(), size, ratio_w_h)
+}

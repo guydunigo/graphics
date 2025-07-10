@@ -12,6 +12,9 @@ use super::{
     },
 };
 
+#[cfg(feature = "stats")]
+use crate::rasterizer::cpu::Stats;
+
 pub struct CPUEngine {
     window: Rc<Window>,
     surface: Surface<Rc<Window>, Rc<Window>>,
@@ -100,7 +103,7 @@ enum AnyEngine {
 
 impl Default for AnyEngine {
     fn default() -> Self {
-        AnyEngine::Iterator(Default::default())
+        AnyEngine::Steps2(Default::default())
     }
 }
 

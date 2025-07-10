@@ -7,7 +7,7 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use super::Settings;
 use crate::{
-    scene::{Camera, Node, Texture, World, local_to_clipspace},
+    scene::{Camera, Node, Texture, World, world_to_raster},
     window::AppObserver,
 };
 pub use cpu_engine::CPUEngine;
@@ -30,17 +30,6 @@ const MINIMAL_AMBIANT_LIGHT: f32 = 0.2;
 
 fn vec_cross_z(v0: Vec3, v1: Vec3) -> f32 {
     v0.x * v1.y - v0.y * v1.x
-}
-
-fn world_to_raster(p_world: Vec3, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3 {
-    let mut p = local_to_clipspace(cam, &cam.view_mat(), size, ratio_w_h, &p_world);
-
-    // Raster space
-    // [0,1] -> [0,size]
-    p.x = (p.x + 1.) / 2. * (size.width as f32);
-    p.y = (1. - p.y) / 2. * (size.height as f32);
-
-    p
 }
 
 fn world_to_raster_triangle(
@@ -66,6 +55,7 @@ pub struct Rect {
     pub max_z: f32,
 }
 
+// TODO: delete
 fn bounding_box_triangle(t: &Triangle, size: PhysicalSize<u32>) -> Rect {
     Rect {
         min_x: (t.p0.x.min(t.p1.x).min(t.p2.x) as u32).clamp(0, size.width - 1),
@@ -73,6 +63,16 @@ fn bounding_box_triangle(t: &Triangle, size: PhysicalSize<u32>) -> Rect {
         min_y: (t.p0.y.min(t.p1.y).min(t.p2.y) as u32).clamp(0, size.height - 1),
         max_y: (t.p0.y.max(t.p1.y).max(t.p2.y) as u32).clamp(0, size.height - 1),
         max_z: t.p0.z.max(t.p1.z).max(t.p2.z),
+    }
+}
+
+fn bounding_box_triangle_2((p0, p1, p2): &(Vec3, Vec3, Vec3), size: PhysicalSize<u32>) -> Rect {
+    Rect {
+        min_x: (p0.x.min(p1.x).min(p2.x) as u32).clamp(0, size.width - 1),
+        max_x: (p0.x.max(p1.x).max(p2.x) as u32).clamp(0, size.width - 1),
+        min_y: (p0.y.min(p1.y).min(p2.y) as u32).clamp(0, size.height - 1),
+        max_y: (p0.y.max(p1.y).max(p2.y) as u32).clamp(0, size.height - 1),
+        max_z: p0.z.max(p1.z).max(p2.z),
     }
 }
 

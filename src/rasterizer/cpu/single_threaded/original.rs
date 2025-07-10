@@ -18,7 +18,7 @@ use winit::dpi::PhysicalSize;
 use super::{SingleThreadedEngine, draw_vertice_basic};
 
 #[cfg(feature = "stats")]
-use crate::rasterizer::Stats;
+use crate::rasterizer::cpu::Stats;
 
 #[derive(Default)]
 pub struct OriginalEngine {

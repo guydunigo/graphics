@@ -20,7 +20,7 @@ use crate::{
 use super::{SingleThreadedEngine, draw_vertice_basic};
 
 #[cfg(feature = "stats")]
-use crate::rasterizer::Stats;
+use crate::rasterizer::cpu::Stats;
 
 #[derive(Default)]
 pub struct IteratorEngine {
@@ -52,16 +52,6 @@ impl SingleThreadedEngine for IteratorEngine {
         let mut nb_triangles_tot = 0;
         #[cfg(feature = "stats")]
         let mut nb_triangles_facing = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_triangles_drawn = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_tested = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_in = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_front = 0;
-        #[cfg(feature = "stats")]
-        let mut nb_pixels_written = 0;
 
         self.triangles
             .drain(..)
@@ -131,10 +121,10 @@ impl SingleThreadedEngine for IteratorEngine {
 
                 (t_raster, bb, light, p01, p20)
             })
-            .for_each(|(mut t_raster, bb, light, p01, p20)| {
+            .for_each(|(t_raster, bb, light, p01, p20)| {
                 rasterize_triangle(
                     settings,
-                    &mut t_raster,
+                    &t_raster,
                     buffer,
                     &mut self.depth_buffer[..],
                     world.camera.z_near,
@@ -153,18 +143,13 @@ impl SingleThreadedEngine for IteratorEngine {
             stats.nb_triangles_tot += nb_triangles_tot;
             stats.nb_triangles_sight += nb_triangles_sight;
             stats.nb_triangles_facing += nb_triangles_facing;
-            stats.nb_triangles_drawn += nb_triangles_drawn;
-            stats.nb_pixels_tested += nb_pixels_tested;
-            stats.nb_pixels_in += nb_pixels_in;
-            stats.nb_pixels_front += nb_pixels_front;
-            stats.nb_pixels_written += nb_pixels_written;
         }
     }
 }
 
 pub fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     settings: &Settings,
-    tri_raster: &mut Triangle,
+    tri_raster: &Triangle,
     buffer: &mut B,
     depth_buffer: &mut [f32],
     z_near: f32,

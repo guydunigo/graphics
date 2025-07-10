@@ -346,6 +346,9 @@ impl ApplicationHandler for App<'_> {
                     // KeyCode::Digit2 => w.settings.sort_triangles.next(),
                     KeyCode::Digit2 => w.settings.parallel_text = !w.settings.parallel_text,
                     KeyCode::Digit3 => w.settings.next_oversampling(),
+                    KeyCode::Digit4 => w.settings.culling_meshes = !w.settings.culling_meshes,
+                    KeyCode::Digit5 => w.settings.culling_surfaces = !w.settings.culling_surfaces,
+                    KeyCode::Digit6 => w.settings.culling_triangles = !w.settings.culling_triangles,
                     #[cfg(feature = "cpu")]
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),

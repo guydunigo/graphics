@@ -8,6 +8,8 @@ use std::rc::Rc;
 use winit::{event::WindowEvent, window::Window};
 
 use crate::window::AppObserver;
+#[cfg(feature = "stats")]
+pub use cpu::Stats;
 use settings::EngineType;
 pub use settings::Settings;
 
