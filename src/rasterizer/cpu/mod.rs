@@ -1,5 +1,3 @@
-#![cfg(feature = "cpu")]
-
 mod cpu_engine;
 mod parallel;
 mod single_threaded;
@@ -9,7 +7,7 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use super::Settings;
 use crate::{
-    scene::{Camera, Node, Texture, World},
+    scene::{Camera, Node, Texture, World, local_to_clipspace},
     window::AppObserver,
 };
 pub use cpu_engine::CPUEngine;
@@ -35,33 +33,10 @@ fn vec_cross_z(v0: Vec3, v1: Vec3) -> f32 {
 }
 
 fn world_to_raster(p_world: Vec3, cam: &Camera, size: PhysicalSize<u32>, ratio_w_h: f32) -> Vec3 {
-    // Camera space
-    let mut p = cam.world_to_sight(p_world);
-
-    // Screen space : perspective correct
-    if p.z < -0.001 {
-        p.x *= cam.z_near / -p.z;
-        p.y *= cam.z_near / -p.z;
-    } else {
-        // TODO: 0 divide getting too near the camera and reversing problem behind...
-        p.x *= cam.z_near / 0.1;
-        p.y *= cam.z_near / 0.1;
-    };
-    p.z = -p.z;
-
-    // Near-Clipping-Plane
-    // [-1,1]
-    p.x /= cam.canvas_side;
-    p.y /= cam.canvas_side;
-
-    if size.width > size.height {
-        p.x /= ratio_w_h;
-    } else {
-        p.y *= ratio_w_h;
-    }
+    let mut p = local_to_clipspace(cam, &cam.view_mat(), size, ratio_w_h, &p_world);
 
     // Raster space
-    // [0,1]
+    // [0,1] -> [0,size]
     p.x = (p.x + 1.) / 2. * (size.width as f32);
     p.y = (1. - p.y) / 2. * (size.height as f32);
 
@@ -83,7 +58,7 @@ fn world_to_raster_triangle(
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Rect {
+pub struct Rect {
     pub min_x: u32,
     pub min_y: u32,
     pub max_x: u32,
@@ -168,50 +143,6 @@ fn format_debug(
         stats
     )
 }
-
-// TODO
-/*
-#[cfg(feature = "cpu")]
-pub fn todo_prepare_node_single_core(
-    settings: &Settings,
-    triangles: &mut Vec<RenderObject>,
-    view_proj: &Mat4,
-    node: &Node,
-) {
-    {
-        let world_transform = node.world_transform.borrow();
-        if let Some(mesh) = node.mesh.as_ref().filter(|m| {
-            todo!() || !settings.culling_meshes || m.bounds.is_visible(view_proj, &world_transform)
-        }) {
-            let matrix = view_proj * *world_transform;
-
-            triangles.extend(
-                mesh.surfaces
-                    .iter()
-                    .filter(|s| {
-                        todo!()
-                            || !settings.culling_surfaces
-                            || s.bounds.is_visible(view_proj, &world_transform)
-                    })
-                    .map(|s| RenderObject {
-                        vertices: mesh.indices[s.start_index..s.start_index + s.count]
-                            .iter()
-                            .map(|i| &mesh.vertices[*i].position)
-                            .map(|v| matrix * v.extend(1.))
-                            .map(|v| v.xyz() / v.w)
-                            .map(|v| v.with_z(-v.z))
-                            .collect(),
-                        material: s.material,
-                    }),
-            );
-        }
-    }
-
-    node.children
-        .iter()
-        .for_each(|c| todo_prepare_node_single_core(settings, triangles, view_proj, c));
-}
-*/
 
 // TODO: group by texture to avoid duplicates ? Closer to data
 #[derive(Clone, Copy)]

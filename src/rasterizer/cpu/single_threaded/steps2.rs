@@ -13,11 +13,11 @@ use crate::{
         Settings,
         cpu::{
             MINIMAL_AMBIANT_LIGHT, Rect, Triangle, bounding_box_triangle, cursor_buffer_index,
-            format_debug, single_threaded::clean_resize_buffers, vec_cross_z, world_to_raster,
+            format_debug, single_threaded::clean_resize_buffers, vec_cross_z,
             world_to_raster_triangle,
         },
     },
-    scene::{Camera, Node, Texture, World},
+    scene::{Camera, Node, Texture, World, to_cam_tr},
     window::AppObserver,
 };
 
@@ -66,6 +66,7 @@ impl Steps2Engine {
         self.triangles.clear();
         world.scene.top_nodes().iter().for_each(|n| {
             populate_nodes(
+                settings,
                 &world.camera,
                 size,
                 ratio_w_h,
@@ -85,7 +86,7 @@ impl Steps2Engine {
         self.t_raster.extend(
             self.triangles
                 .iter()
-                .map(|t| world_to_raster_triangle(&t, &world.camera, size, ratio_w_h)),
+                .map(|t| world_to_raster_triangle(t, &world.camera, size, ratio_w_h)),
         );
 
         self.bounding_boxes.clear();
@@ -248,6 +249,7 @@ impl Steps2Engine {
 }
 
 fn populate_nodes(
+    settings: &Settings,
     camera: &Camera,
     size: PhysicalSize<u32>,
     ratio_w_h: f32,
@@ -255,8 +257,13 @@ fn populate_nodes(
     node: &Node,
 ) {
     {
-        // TODO: mesh + surface culling via bounding boxes ?
-        if let Some(mesh) = node.mesh.as_ref() {
+        let to_cam_tr = to_cam_tr(camera, &node.world_transform);
+        if let Some(mesh) = node.mesh.as_ref()
+            && (!settings.culling_meshes
+                || mesh
+                    .bounds
+                    .is_visible_cpu(camera, &to_cam_tr, size, ratio_w_h))
+        {
             let mut vertices = Vec::with_capacity(mesh.vertices.len());
             vertices.extend(
                 mesh.vertices
@@ -282,7 +289,9 @@ fn populate_nodes(
 
     node.children
         .iter()
-        .for_each(|c| populate_nodes(camera, size, ratio_w_h, triangles, &c.borrow()));
+        .for_each(|c| populate_nodes(settings, camera, size, ratio_w_h, triangles, &c.borrow()));
 
     todo!("cull mesh first world_to_raster(...)");
+    // TODO: mesh + surface culling via bounding boxes ?
+    // TODO: settings
 }

@@ -108,8 +108,4 @@ impl Camera {
             self.pitch -= delta_y as f32 * Self::ROT_STEP;
         }
     }
-
-    pub fn world_to_sight(&self, point: Vec3) -> Vec3 {
-        (self.view_mat() * point.extend(1.)).xyz()
-    }
 }

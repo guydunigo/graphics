@@ -89,7 +89,7 @@ impl ParIterEngine for ParIterEngine2 {
         self.t_raster.par_extend(
             self.triangles
                 .par_iter()
-                .map(|t| world_to_raster_triangle(&t, &camera, size, ratio_w_h)),
+                .map(|t| world_to_raster_triangle(t, camera, size, ratio_w_h)),
         );
 
         self.bounding_boxes.clear();

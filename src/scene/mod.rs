@@ -4,8 +4,9 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub use camera::Camera;
 mod mesh;
-use glam::{Mat4, Vec3, vec3};
+use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 pub use mesh::*;
+use winit::dpi::PhysicalSize;
 mod mesh_library;
 pub mod obj_file;
 
@@ -75,4 +76,42 @@ impl Scene {
     pub fn get_named_node(&self, name: &str) -> Option<&Rc<RefCell<Node>>> {
         self.named_nodes.get(name)
     }
+}
+
+pub fn to_cam_tr(camera: &Camera, world_transform: &Mat4) -> Mat4 {
+    camera.view_mat() * world_transform
+}
+
+pub fn local_to_clipspace(
+    camera: &Camera,
+    to_cam_tr: &Mat4,
+    size: PhysicalSize<u32>,
+    ratio_w_h: f32,
+    p: &Vec3,
+) -> Vec3 {
+    let mut p = (to_cam_tr * p.extend(1.)).xyz();
+
+    // Screen space : perspective correct
+    if p.z < -0.001 {
+        p.x *= camera.z_near / -p.z;
+        p.y *= camera.z_near / -p.z;
+    } else {
+        // TODO: 0 divide getting too near the camera and reversing problem behind...
+        p.x *= camera.z_near / 0.1;
+        p.y *= camera.z_near / 0.1;
+    };
+    p.z = -p.z;
+
+    // Near-Clipping-Plane
+    // [-1,1]
+    p.x /= camera.canvas_side;
+    p.y /= camera.canvas_side;
+
+    if size.width > size.height {
+        p.x /= ratio_w_h;
+    } else {
+        p.y *= ratio_w_h;
+    }
+
+    p
 }

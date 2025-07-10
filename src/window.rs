@@ -96,11 +96,12 @@ pub struct InitializedWindow<'a> {
 impl InitializedWindow<'_> {
     pub fn new(window: Rc<Window>) -> Self {
         let engine = Engine::new(window.clone());
-        let mut settings = Settings::default();
-        settings.engine_type = engine.as_engine_type();
         Self {
             window,
-            settings,
+            settings: Settings {
+                engine_type: engine.as_engine_type(),
+                ..Default::default()
+            },
             engine,
         }
     }

@@ -81,7 +81,7 @@ impl SingleThreadedEngine for StepsEngine {
         self.t_raster.extend(
             self.triangles
                 .iter()
-                .map(|t| world_to_raster_triangle(&t, &world.camera, size, ratio_w_h)),
+                .map(|t| world_to_raster_triangle(t, &world.camera, size, ratio_w_h)),
         );
 
         self.bounding_boxes.clear();

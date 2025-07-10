@@ -42,6 +42,9 @@ use std::{
 };
 
 use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
+use winit::dpi::PhysicalSize;
+
+use crate::scene::{Camera, local_to_clipspace};
 
 use super::Texture;
 
@@ -125,6 +128,7 @@ impl Bounds {
         let default = vertices[indices[start]].position;
         let (min, max) = indices[start..start + count]
             .iter()
+            .skip(1)
             .map(|i| vertices[*i])
             .fold((default, default), |(min, max), p| {
                 (min.min(p.position), max.max(p.position))
@@ -140,8 +144,9 @@ impl Bounds {
 
     // TODO: is it optimal ?
     // TODO: glitchy for large objects in front and behind camera
+    /// From vulkan guide
     pub fn is_visible(&self, view_proj: &Mat4, transform: &Mat4) -> bool {
-        let corners = [
+        let mut corners = [
             vec3(1., 1., 1.),
             vec3(1., 1., -1.),
             vec3(1., -1., 1.),
@@ -154,14 +159,19 @@ impl Bounds {
 
         let matrix = view_proj * transform;
 
-        let min = vec3(1.5, 1.5, 1.5);
-        let max = vec3(-1.5, -1.5, -1.5);
-
-        let (min, max) = corners.iter().fold((min, max), |(min, max), c| {
-            let v = matrix * (self.origin + c * self.extents).extend(1.);
-            let v = v.xyz() / v.w;
-            (min.min(v), max.max(v))
+        corners.iter_mut().for_each(|c| {
+            let v = matrix * (self.origin + *c * self.extents).extend(1.);
+            *c = v.xyz() / v.w;
         });
+
+        let min = corners
+            .iter()
+            .copied()
+            .fold(vec3(1.5, 1.5, 1.5), |a, b| a.min(b));
+        let max = corners
+            .iter()
+            .copied()
+            .fold(vec3(-1.5, -1.5, -1.5), |a, b| a.min(b));
 
         // Clip space box in view
         min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.
@@ -170,6 +180,64 @@ impl Bounds {
     pub fn clip_space_origin_depth(&self, view_proj: &Mat4, transform: &Mat4) -> f32 {
         let projected_origin = view_proj * transform * self.origin.extend(1.);
         projected_origin.z
+    }
+
+    /// Done on my own
+    pub fn is_visible_cpu(
+        &self,
+        camera: &Camera,
+        to_cam_tr: &Mat4,
+        size: PhysicalSize<u32>,
+        ratio_w_h: f32,
+    ) -> bool {
+        let mut corners = [
+            vec3(1., 1., 1.),
+            vec3(1., 1., -1.),
+            vec3(1., -1., 1.),
+            vec3(1., -1., -1.),
+            vec3(-1., 1., 1.),
+            vec3(-1., 1., -1.),
+            vec3(-1., -1., 1.),
+            vec3(-1., -1., -1.),
+        ];
+
+        corners.iter_mut().for_each(|c| {
+            *c = local_to_clipspace(
+                camera,
+                to_cam_tr,
+                size,
+                ratio_w_h,
+                &(self.origin + *c * self.extents),
+            );
+        });
+
+        let min = corners
+            .iter()
+            .copied()
+            .reduce(|a, b| a.min(b))
+            .unwrap()
+            .clamp(Vec3::splat(-1.), Vec3::splat(1.));
+
+        let max = corners
+            .iter()
+            .copied()
+            .reduce(|a, b| a.max(b))
+            .unwrap()
+            .clamp(Vec3::splat(-1.), Vec3::splat(1.));
+
+        // TODO: max_z >= MAX_DEPTH ?
+        let res = !(min.x == max.x || min.y == max.y || max.z <= camera.z_near);
+
+        assert_eq!(
+            res,
+            self.is_visible(
+                &camera.view_mat(),
+                &(to_cam_tr * camera.view_mat().inverse())
+            ),
+            "Not same visibility !"
+        );
+
+        res
     }
 }
 
