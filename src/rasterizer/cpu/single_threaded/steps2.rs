@@ -28,7 +28,11 @@ use crate::rasterizer::Stats;
 
 #[derive(Default)]
 pub struct Steps2Engine {
-    triangles: Vec<Triangle>,
+    vertices: Vec<Vec3>,
+    world_trs: Vec<Mat4>,
+    to_cam_trs: Vec<Mat4>,
+    textures: Vec<Texture>,
+
     t_raster: Vec<Triangle>,
     bounding_boxes: Vec<Rect>,
     p01p20: Vec<(Vec3, Vec3)>,
@@ -63,25 +67,31 @@ impl Steps2Engine {
         #[cfg(feature = "stats")]
         let mut nb_pixels_written = 0;
 
-        self.triangles.clear();
+        self.vertices.clear();
+        self.world_trs.clear();
+        self.to_cam_trs.clear();
+        self.textures.clear();
         world.scene.top_nodes().iter().for_each(|n| {
             populate_nodes(
                 settings,
                 &world.camera,
                 size,
                 ratio_w_h,
-                &mut self.triangles,
+                &mut self.vertices,
+                &mut self.world_trs,
+                &mut self.to_cam_trs,
+                &mut self.textures,
                 &n.borrow(),
             )
         });
 
         #[cfg(feature = "stats")]
         {
-            nb_triangles_tot = self.triangles.len();
+            nb_triangles_tot = self.world_trs.len();
         }
 
         self.t_raster.clear();
-        self.t_raster.reserve(self.triangles.len());
+        self.t_raster.reserve(self.world_trs.len());
         // TODO: explode ?
         self.t_raster.extend(
             self.triangles
