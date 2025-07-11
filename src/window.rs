@@ -1,5 +1,6 @@
 use std::{rc::Rc, time::Instant};
 
+#[cfg(feature = "cpu")]
 use glam::{Vec3, vec3};
 use winit::{
     application::ApplicationHandler,
@@ -21,10 +22,9 @@ use winit::platform::android::{EventLoopBuilderExtAndroid, activity::AndroidApp}
 
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
-use crate::{
-    rasterizer::{Engine, Settings},
-    scene::World,
-};
+use crate::rasterizer::{Engine, Settings};
+#[cfg(feature = "cpu")]
+use crate::scene::World;
 
 const BLENDING_RATIO: f32 = 0.01;
 
@@ -42,6 +42,7 @@ pub struct AppObserver {
 }
 
 impl AppObserver {
+    #[cfg(feature = "cpu")]
     pub fn cursor(&self) -> &Option<PhysicalPosition<f64>> {
         &self.cursor
     }
@@ -50,6 +51,7 @@ impl AppObserver {
         self.last_full_render_loop_micros
     }
 
+    #[cfg(feature = "cpu")]
     pub fn last_frame_micros(&self) -> u128 {
         self.last_frame_micros
     }
@@ -216,6 +218,7 @@ impl ApplicationHandler for App<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        #[cfg(feature = "cpu")]
         self.world.camera.on_window_event(&event);
         self.window.as_mut().unwrap().engine.on_window_event(&event);
         match event {
@@ -285,56 +288,66 @@ impl ApplicationHandler for App<'_> {
                             self.cursor_grabbed = false;
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowLeft => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut().transform(&Mat4::from_rotation_y(-0.1));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowRight => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut().transform(&Mat4::from_rotation_y(0.1));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowUp => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut().transform(&Mat4::from_rotation_x(-0.1));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::ArrowDown => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut().transform(&Mat4::from_rotation_x(0.1));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::NumpadAdd => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_scale(Vec3::splat(1.1)));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::NumpadSubtract => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_scale(Vec3::splat(0.9)));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::Numpad4 => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_translation(vec3(-0.1, 0., 0.)));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::Numpad6 => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_translation(vec3(0.1, 0., 0.)));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::Numpad8 => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
                                 .transform(&Mat4::from_translation(vec3(0., 0., -0.1)));
                         }
                     }
+                    #[cfg(feature = "cpu")]
                     KeyCode::Numpad2 => {
                         if let Some(m) = self.world.scene.get_named_node("suzanne") {
                             m.borrow_mut()
@@ -362,6 +375,7 @@ impl ApplicationHandler for App<'_> {
             WindowEvent::RedrawRequested => {
                 self.update_last_frame_micros();
                 // TODO: forward update and events to world to manage itself ?
+                #[cfg(feature = "cpu")]
                 self.world.camera.update(self.last_frame_micros);
 
                 #[cfg(feature = "stats")]
@@ -408,6 +422,7 @@ impl ApplicationHandler for App<'_> {
         event: DeviceEvent,
     ) {
         if let DeviceEvent::MouseMotion { delta } = event {
+            #[cfg(feature = "cpu")]
             self.world
                 .camera
                 .on_mouse_motion(delta, self.cursor_grabbed);

@@ -15,9 +15,10 @@ use super::{
     swapchain::VulkanSwapchain,
     textures::{MaterialInstance, MaterialPass, Textures},
 };
+use crate::scene::{Bounds, Vertex};
 
 use ash::{Device, vk};
-use glam::{Mat4, Vec3, Vec4, vec3, vec4};
+use glam::{Mat4, Vec4, vec4};
 
 // TODO: proper resource path mngmt and all
 const SCENES: [(&str, &str); 5] = [
@@ -182,37 +183,6 @@ pub struct GpuSceneData {
     pub sunlight_color: Vec4,
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Vertex {
-    pub position: Vec3,
-    pub uv_x: f32,
-    pub normal: Vec3,
-    pub uv_y: f32,
-    pub color: Vec4,
-}
-
-impl Default for Vertex {
-    fn default() -> Self {
-        Self {
-            position: Default::default(),
-            uv_x: Default::default(),
-            normal: vec3(1., 0., 0.),
-            uv_y: Default::default(),
-            color: vec4(1., 1., 1., 1.),
-        }
-    }
-}
-
-// impl Vertex {
-//     pub fn from_position(x: f32, y: f32, z: f32) -> Self {
-//         Self {
-//             position: Vec3 { x, y, z },
-//             ..Default::default()
-//         }
-//     }
-// }
-
 pub struct GpuMeshBuffers {
     pub index_buffer: AllocatedBuffer,
     _vertex_buffer: AllocatedBuffer,
@@ -319,67 +289,6 @@ impl GpuMeshBuffers {
     //     let indices = [0, 1, 2, 2, 1, 3];
     //     Self::new(device, commands, &indices[..], &vertices[..])
     // }
-}
-
-#[derive(Default, Debug, Clone, Copy)]
-pub struct Bounds {
-    pub origin: Vec3,
-    pub extents: Vec3,
-    // pub sphere_radius: f32,
-}
-
-impl Bounds {
-    pub fn new(vertices: &[Vertex]) -> Self {
-        let (min, max) = vertices.iter().fold(
-            (vertices[0].position, vertices[0].position),
-            |(min, max), p| (min.min(p.position), max.max(p.position)),
-        );
-
-        let extents = (max - min) / 2.;
-        Self {
-            origin: (max + min) / 2.,
-            extents,
-            // sphere_radius: extents.length(),
-        }
-    }
-
-    // TODO: is it optimal ?
-    // TODO: glitchy for large objects in front and behind camera
-    pub fn is_visible(&self, view_proj: &Mat4, transform: &Mat4) -> bool {
-        let corners = [
-            vec3(1., 1., 1.),
-            vec3(1., 1., -1.),
-            vec3(1., -1., 1.),
-            vec3(1., -1., -1.),
-            vec3(-1., 1., 1.),
-            vec3(-1., 1., -1.),
-            vec3(-1., -1., 1.),
-            vec3(-1., -1., -1.),
-        ];
-
-        let matrix = view_proj * transform;
-
-        let min = vec3(1.5, 1.5, 1.5);
-        let max = vec3(-1.5, -1.5, -1.5);
-
-        let (min, max) = corners.iter().fold((min, max), |(min, max), c| {
-            let v = matrix * (self.origin + c * self.extents).extend(1.);
-            let v = Vec3 {
-                x: v.x / v.w,
-                y: v.y / v.w,
-                z: v.z / v.w,
-            };
-            (min.min(v), max.max(v))
-        });
-
-        // Clip space box in view
-        min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.
-    }
-
-    pub fn clip_space_origin_depth(&self, view_proj: &Mat4, transform: &Mat4) -> f32 {
-        let projected_origin = view_proj * transform * self.origin.extend(1.);
-        projected_origin.z
-    }
 }
 
 pub struct GeoSurface {
@@ -528,7 +437,7 @@ impl Node for NodeData {
         self.world_transform = parent_mat * self.local_transform;
         self.children
             .iter()
-            .for_each(|c| c.borrow_mut().refresh_transform(self.world_transform));
+            .for_each(|c| c.borrow_mut().refresh_transform(&self.world_transform));
     }
     fn node_data(&self) -> &NodeData {
         self

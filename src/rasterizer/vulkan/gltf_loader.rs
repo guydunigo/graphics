@@ -21,11 +21,10 @@ use super::{
     allocated::{AllocatedBuffer, AllocatedImage, MyMemoryUsage},
     commands::VulkanCommands,
     descriptors::DescriptorAllocatorGrowable,
-    scene::{
-        Bounds, GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable, Vertex,
-    },
+    scene::{GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable},
     textures::{MaterialConstants, MaterialInstance, MaterialPass, MaterialResources, Textures},
 };
+use crate::scene::{Bounds, Vertex};
 
 /// Override colors with normal value
 const OVERRIDE_COLORS: bool = false;
@@ -486,7 +485,7 @@ fn load_meshes(
                             material: materials_vec[primitive.material().index().unwrap_or(0)]
                                 .clone(),
 
-                            bounds: Bounds::new(&vertices[initial_vtx..]),
+                            bounds: Bounds::from_vertices(&vertices[initial_vtx..]),
                         }
                     })
                     .collect();

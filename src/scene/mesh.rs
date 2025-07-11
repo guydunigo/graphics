@@ -41,7 +41,7 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
+use glam::{Mat4, Vec3, Vec4, Vec4Swizzles, vec3, vec4};
 use winit::dpi::PhysicalSize;
 
 use crate::scene::{Camera, local_to_clipspace};
@@ -71,23 +71,24 @@ impl MeshAsset {
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex {
     pub position: Vec3,
-    // pub uv_x: f32,
-    // pub normal: Vec3,
-    // pub uv_y: f32,
-    // pub color: Vec4,
+    pub uv_x: f32,
+    pub normal: Vec3,
+    pub uv_y: f32,
+    pub color: Vec4,
 }
 
 impl Default for Vertex {
     fn default() -> Self {
         Self {
             position: Default::default(),
-            // uv_x: Default::default(),
-            // normal: vec3(1., 0., 0.),
-            // uv_y: Default::default(),
-            // color: vec4(1., 1., 1., 1.),
+            uv_x: Default::default(),
+            normal: vec3(1., 0., 0.),
+            uv_y: Default::default(),
+            color: vec4(1., 1., 1., 1.),
         }
     }
 }
@@ -124,6 +125,20 @@ pub struct Bounds {
 }
 
 impl Bounds {
+    pub fn from_vertices(vertices: &[Vertex]) -> Self {
+        let (min, max) = vertices.iter().fold(
+            (vertices[0].position, vertices[0].position),
+            |(min, max), p| (min.min(p.position), max.max(p.position)),
+        );
+
+        let extents = (max - min) / 2.;
+        Self {
+            origin: (max + min) / 2.,
+            extents,
+            // sphere_radius: extents.length(),
+        }
+    }
+
     pub fn new(vertices: &[Vertex], indices: &[usize], start: usize, count: usize) -> Self {
         let default = vertices[indices[start]].position;
         let (min, max) = indices[start..start + count]

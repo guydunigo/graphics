@@ -39,11 +39,10 @@ impl CPUEngine {
         }
     }
 
-    /*
+    #[cfg(all(feature = "vulkan", feature = "cpu"))]
     pub fn window(&self) -> &Rc<Window> {
         &self.window
     }
-    */
 
     pub fn as_engine_type(&self) -> EngineType {
         self.engine.as_engine_type()

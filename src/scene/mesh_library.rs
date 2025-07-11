@@ -38,7 +38,10 @@ pub fn base_scene() -> Scene {
 fn base_triangle() -> Node {
     let vertices: Vec<_> = [vec3(0., 1., -2.), vec3(0., 0., 0.), vec3(0., 0., -4.)]
         .iter()
-        .map(|p| Vertex { position: *p })
+        .map(|p| Vertex {
+            position: *p,
+            ..Default::default()
+        })
         .collect();
     let indices = vec![0, 1, 2];
     let surfaces = vec![GeoSurface::new(
@@ -81,7 +84,10 @@ fn base_pyramid() -> Node {
         vec3(0.3, 0.3, 7.),
     ]
     .iter()
-    .map(|p| Vertex { position: *p })
+    .map(|p| Vertex {
+        position: *p,
+        ..Default::default()
+    })
     .collect();
     #[rustfmt::skip]
     let indices = vec![
@@ -134,6 +140,7 @@ fn triangles_plane_mesh(color_mask: u32) -> MeshAsset {
         .flat_map(|x| {
             (-RANGE..=RANGE).map(move |z| Vertex {
                 position: vec3(x as f32, 0., z as f32),
+                ..Default::default()
             })
         })
         .collect();
