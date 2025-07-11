@@ -1,32 +1,75 @@
-use std::{collections::HashMap, iter::zip, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, iter::zip, path::Path, rc::Rc};
 
 use crate::{
     maths::ColorF32,
-    scene::{Bounds, GeoSurface, MeshAsset, Texture, Vertex},
+    scene::{GeoSurface, MeshAsset, Node, Scene, Texture, Vertex},
 };
-use glam::{Mat4, Vec3, Vec4, vec4};
+use glam::{Mat4, Vec3, Vec4};
 use gltf::{Document, buffer};
 
 /// Override colors with normal value
 const OVERRIDE_COLORS: bool = false;
 
 // TODO: better error handling
-pub fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> MeshAsset {
+pub fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
     println!("Loading glTF : {}", path.as_ref().to_string_lossy());
 
-    let (document, buffers, mut images_data) = gltf::import(path).unwrap();
-    let (materials_vec, materials) = load_materials(&document);
+    let (document, buffers, _) = gltf::import(path).unwrap();
+    let (materials_vec, _materials) = load_materials(&document);
 
-    let (meshes_vec, meshes) = load_meshes(&document, buffers, materials_vec);
+    let (meshes_vec, _meshes) = load_meshes(&document, buffers, materials_vec);
 
-    todo!();
+    let mut nodes = HashMap::new();
+    let nodes_vec: Vec<Rc<RefCell<Node>>> = document
+        .nodes()
+        .map(|node| {
+            let local_transform = Mat4::from_cols_array_2d(&node.transform().matrix());
+            let mut new_node = Node::new(local_transform);
+
+            if let Some(mesh) = node.mesh() {
+                new_node.mesh = Some(meshes_vec[mesh.index()].clone());
+            };
+
+            let new_node = Rc::new(RefCell::new(new_node));
+
+            if let Some(name) = node.name() {
+                nodes.insert(name.into(), new_node.clone());
+            }
+
+            new_node
+        })
+        .collect();
+
+    // Parent-children
+    zip(document.nodes(), nodes_vec.iter()).for_each(|(node, new_node)| {
+        new_node
+            .borrow_mut()
+            .children
+            .extend(node.children().map(|c| {
+                let new_c = &nodes_vec[c.index()];
+                // We hope a node can't be its own parent, otherwise borrow_mut would panic.
+                new_c.borrow_mut().parent = Rc::downgrade(new_node);
+                new_c.clone()
+            }));
+    });
+
+    // Searching for parent-less nodes
+    let top_nodes = nodes_vec
+        .iter()
+        .filter(|n| n.borrow().parent.strong_count() == 0)
+        .cloned()
+        .inspect(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY))
+        .collect();
+
+    Scene::new(nodes, top_nodes)
 }
 
-fn load_materials(document: &Document) -> (Vec<ColorF32>, HashMap<String, ColorF32>) {
+fn load_materials(document: &Document) -> (Vec<Texture>, HashMap<String, Texture>) {
     let mut materials = HashMap::new();
     let mut materials_vec = Vec::with_capacity(document.materials().count());
     materials_vec.extend(document.materials().map(|mat| {
         let new_mat = ColorF32::from_rgba(mat.pbr_metallic_roughness().base_color_factor());
+        let new_mat = Texture::Color(new_mat.as_color_u32());
 
         if let Some(name) = mat.name() {
             materials.insert(name.into(), new_mat);
@@ -41,18 +84,15 @@ fn load_materials(document: &Document) -> (Vec<ColorF32>, HashMap<String, ColorF
 fn load_meshes(
     document: &Document,
     buffers: Vec<buffer::Data>,
-    materials_vec: Vec<ColorF32>,
+    materials_vec: Vec<Texture>,
 ) -> (Vec<Rc<MeshAsset>>, HashMap<String, Rc<MeshAsset>>) {
     let mut meshes = HashMap::new();
     let meshes_vec = {
-        // In common to prevent reallocating much
-        let mut indices = Vec::new();
-        let mut vertices = Vec::new();
         document
             .meshes()
             .map(|mesh| {
-                indices.clear();
-                vertices.clear();
+                let mut indices = Vec::new();
+                let mut vertices = Vec::new();
 
                 let surfaces = mesh
                     .primitives()
@@ -113,11 +153,7 @@ fn load_meshes(
                     })
                     .collect();
 
-                let mesh_buffers =
-                    GpuMeshBuffers::new(device, commands, &indices[..], &vertices[..]);
-                let new_mesh = Rc::new(MeshAsset::new(&vertices[..], &indices[..], surfaces));
-                todo!("mesh.name().map(String::from),");
-
+                let new_mesh = Rc::new(MeshAsset::new(vertices, indices, surfaces));
                 if let Some(name) = mesh.name().map(String::from) {
                     meshes.insert(name, new_mesh.clone());
                 }

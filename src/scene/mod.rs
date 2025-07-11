@@ -1,6 +1,6 @@
 /// Describing the world
 mod camera;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, time::Instant};
 
 pub use camera::Camera;
 mod mesh;
@@ -23,11 +23,15 @@ pub struct World {
 
 impl Default for World {
     fn default() -> Self {
-        World {
-            scene: mesh_library::base_scene(),
+        let t = Instant::now();
+        let w = World {
+            scene: gltf_file::import_mesh_and_diffuse("resources/structure.glb"),
+            // scene: mesh_library::base_scene(),
             camera: Default::default(),
             sun_direction: vec3(-1., -1., -1.).normalize(),
-        }
+        };
+        println!("World loaded in : {}μs", t.elapsed().as_micros());
+        w
     }
 }
 

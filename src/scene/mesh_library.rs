@@ -52,15 +52,10 @@ fn base_triangle() -> Node {
         Texture::VertexColor(0xffff0000, 0xff00ff00, 0xff0000ff),
     )];
 
-    Node {
-        parent: Default::default(),
-        children: Default::default(),
-
-        local_transform: Mat4::from_translation(vec3(0., 0., -10.)),
-        world_transform: Default::default(),
-
-        mesh: Some(Rc::new(MeshAsset::new(vertices, indices, surfaces))),
-    }
+    Node::new_mesh(
+        Rc::new(MeshAsset::new(vertices, indices, surfaces)),
+        Mat4::from_translation(vec3(0., 0., -10.)),
+    )
 }
 
 fn base_pyramid() -> Node {
@@ -118,20 +113,14 @@ fn base_pyramid() -> Node {
         GeoSurface::new(&vertices, &indices, 30, 6, Texture::Color(0xffff00ff)),
     ];
 
-    Node {
-        parent: Default::default(),
-        children: Default::default(),
-
-        local_transform: Mat4::from_scale_rotation_translation(
+    Node::new_mesh(
+        Rc::new(MeshAsset::new(vertices, indices, surfaces)),
+        Mat4::from_scale_rotation_translation(
             Vec3::splat(0.7),
             Quat::from_rotation_z(-PI / 3.),
             vec3(4., 1., -19.),
         ),
-
-        world_transform: Default::default(),
-
-        mesh: Some(Rc::new(MeshAsset::new(vertices, indices, surfaces))),
-    }
+    )
 }
 
 fn triangles_plane_mesh(color_mask: u32) -> MeshAsset {
@@ -175,13 +164,10 @@ fn triangles_plane_mesh(color_mask: u32) -> MeshAsset {
 }
 
 fn triangles_plane(color_mask: u32, pos: Vec3, rot: Quat, scale: f32) -> Node {
-    Node {
-        parent: Default::default(),
-        children: Default::default(),
-        local_transform: Mat4::from_scale_rotation_translation(Vec3::splat(scale), rot, pos),
-        world_transform: Default::default(),
-        mesh: Some(Rc::new(triangles_plane_mesh(color_mask))),
-    }
+    Node::new_mesh(
+        Rc::new(triangles_plane_mesh(color_mask)),
+        Mat4::from_scale_rotation_translation(Vec3::splat(scale), rot, pos),
+    )
 }
 
 fn floor() -> Node {

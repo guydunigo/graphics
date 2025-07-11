@@ -279,7 +279,7 @@ impl LoadedGLTF {
         // Searching for parent-less nodes
         let top_nodes = nodes_vec
             .iter()
-            .filter(|n| n.borrow().node_data().parent.upgrade().is_none())
+            .filter(|n| n.borrow().node_data().parent.strong_count() == 0)
             .cloned()
             .inspect(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY))
             .collect();

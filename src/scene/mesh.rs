@@ -318,6 +318,25 @@ pub struct Node {
 }
 
 impl Node {
+    pub fn new(local_transform: Mat4) -> Self {
+        Self {
+            parent: Default::default(),
+            children: Default::default(),
+
+            local_transform,
+            world_transform: Default::default(),
+
+            mesh: None,
+        }
+    }
+
+    pub fn new_mesh(mesh: Rc<MeshAsset>, local_transform: Mat4) -> Self {
+        Self {
+            mesh: Some(mesh),
+            ..Self::new(local_transform)
+        }
+    }
+
     pub fn parent_of(mut children: Vec<Rc<RefCell<Node>>>) -> Rc<RefCell<Self>> {
         Rc::new_cyclic(|f| {
             children
