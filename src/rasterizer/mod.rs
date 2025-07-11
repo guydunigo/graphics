@@ -7,6 +7,8 @@ mod vulkan;
 use std::rc::Rc;
 use winit::{event::WindowEvent, window::Window};
 
+#[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+use crate::scene::Camera;
 use crate::window::AppObserver;
 #[cfg(feature = "stats")]
 pub use cpu::Stats;
@@ -80,6 +82,7 @@ impl Engine<'_> {
         &mut self,
         settings: &Settings,
         #[cfg(feature = "cpu")] world: &World,
+        #[cfg(all(not(feature = "cpu"), feature = "vulkan"))] camera: &Camera,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
@@ -96,7 +99,9 @@ impl Engine<'_> {
             Self::Vulkan(e) => e.rasterize(
                 settings,
                 #[cfg(feature = "cpu")]
-                world,
+                &world.camera,
+                #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+                camera,
                 app,
                 #[cfg(feature = "stats")]
                 stats,

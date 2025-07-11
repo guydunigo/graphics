@@ -56,6 +56,6 @@ vulkan_dbg_mem = []
 vulkan_stats = []
 vulkan_validation_layers = []
 
-# default = ["cpu", "vulkan"]
+default = ["cpu"]
 # default = ["vulkan", "vulkan_stats", "vulkan_validation_layers"]
-default = ["cpu", "vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]
+# default = ["vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]

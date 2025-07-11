@@ -23,6 +23,8 @@ impl Default for Camera {
             canvas_side: 0.1,
 
             pos: vec3(1., 1., 12.),
+            // Vulkan : pos: vec3(0., 0., 5.),
+            // structure scene : pos: vec3(30., -0., -85.),
             vel: Default::default(),
 
             pitch: 0.,

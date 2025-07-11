@@ -23,6 +23,8 @@ use winit::platform::android::{EventLoopBuilderExtAndroid, activity::AndroidApp}
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
 use crate::rasterizer::{Engine, Settings};
+#[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+use crate::scene::Camera;
 #[cfg(feature = "cpu")]
 use crate::scene::World;
 
@@ -111,6 +113,7 @@ impl InitializedWindow<'_> {
     pub fn rasterize(
         &mut self,
         #[cfg(feature = "cpu")] world: &World,
+        #[cfg(all(not(feature = "cpu"), feature = "vulkan"))] camera: &Camera,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
@@ -118,6 +121,8 @@ impl InitializedWindow<'_> {
             &self.settings,
             #[cfg(feature = "cpu")]
             world,
+            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+            camera,
             app,
             #[cfg(feature = "stats")]
             stats,
@@ -134,6 +139,8 @@ pub struct App<'a> {
     window: Option<InitializedWindow<'a>>,
     #[cfg(feature = "cpu")]
     world: World,
+    #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+    camera: Camera,
     cursor: Option<PhysicalPosition<f64>>,
     cursor_grabbed: bool,
     last_full_render_loop_micros: u128,
@@ -152,6 +159,8 @@ impl Default for App<'_> {
             window: Default::default(),
             #[cfg(feature = "cpu")]
             world: Default::default(),
+            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+            camera: Default::default(),
             cursor: Default::default(),
             cursor_grabbed: Default::default(),
             last_full_render_loop_micros: Default::default(),
@@ -220,6 +229,8 @@ impl ApplicationHandler for App<'_> {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         #[cfg(feature = "cpu")]
         self.world.camera.on_window_event(&event);
+        #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+        self.camera.on_window_event(&event);
         self.window.as_mut().unwrap().engine.on_window_event(&event);
         match event {
             WindowEvent::CloseRequested
@@ -377,6 +388,8 @@ impl ApplicationHandler for App<'_> {
                 // TODO: forward update and events to world to manage itself ?
                 #[cfg(feature = "cpu")]
                 self.world.camera.update(self.last_frame_micros);
+                #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+                self.camera.update(self.last_frame_micros);
 
                 #[cfg(feature = "stats")]
                 let mut stats = Stats::default();
@@ -394,6 +407,8 @@ impl ApplicationHandler for App<'_> {
                 w.rasterize(
                     #[cfg(feature = "cpu")]
                     &self.world,
+                    #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+                    &self.camera,
                     &mut obs,
                     #[cfg(feature = "stats")]
                     &mut stats,
@@ -426,6 +441,8 @@ impl ApplicationHandler for App<'_> {
             self.world
                 .camera
                 .on_mouse_motion(delta, self.cursor_grabbed);
+            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+            self.camera.on_mouse_motion(delta, self.cursor_grabbed);
             self.window
                 .as_mut()
                 .unwrap()
