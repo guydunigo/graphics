@@ -5,7 +5,7 @@ use std::ops::DerefMut;
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    maths::Vec4u,
+    maths::ColorF32,
     rasterizer::{
         Settings,
         cpu::{MINIMAL_AMBIANT_LIGHT, vec_cross_z, world_to_raster_triangle},
@@ -109,12 +109,12 @@ impl SingleThreadedEngine for IteratorEngine {
                 match t_raster.material {
                     Texture::Color(col) => {
                         t_raster.material =
-                            Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
+                            Texture::Color((ColorF32::from_argb_u32(col) * light).as_color_u32());
                     }
                     Texture::VertexColor(ref mut c0, ref mut c1, ref mut c2) => {
-                        *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
-                        *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
-                        *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();
+                        *c0 = (ColorF32::from_argb_u32(*c0) * light).as_color_u32();
+                        *c1 = (ColorF32::from_argb_u32(*c1) * light).as_color_u32();
+                        *c2 = (ColorF32::from_argb_u32(*c2) * light).as_color_u32();
                     }
                 }
 

@@ -14,7 +14,7 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     font::{self, TextWriter},
-    maths::Vec4u,
+    maths::ColorF32,
     rasterizer::{Settings, cpu::edge_function},
     scene::{BoundingBox, DEFAULT_BACKGROUND_COLOR, Texture, World},
     window::AppObserver,
@@ -138,9 +138,9 @@ fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
         let color = match texture {
             Texture::Color(col) => *col,
             // TODO: Better color calculus
-            Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
-                + Vec4u::from_color_u32(*c1)
-                + Vec4u::from_color_u32(*c2))
+            Texture::VertexColor(c0, c1, c2) => ((ColorF32::from_argb_u32(*c0)
+                + ColorF32::from_argb_u32(*c1)
+                + ColorF32::from_argb_u32(*c2))
                 / 3.)
                 .as_color_u32(),
         };
@@ -241,9 +241,9 @@ pub fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 Texture::Color(col) => col,
                 Texture::VertexColor(c0, c1, c2) => {
                     // TODO: Optimize color calculus
-                    let col_0 = Vec4u::from_color_u32(c0) / tri_raster.p0.z;
-                    let col_1 = Vec4u::from_color_u32(c1) / tri_raster.p1.z;
-                    let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
+                    let col_0 = ColorF32::from_argb_u32(c0) / tri_raster.p0.z;
+                    let col_1 = ColorF32::from_argb_u32(c1) / tri_raster.p1.z;
+                    let col_2 = ColorF32::from_argb_u32(c2) / tri_raster.p2.z;
 
                     ((col_2 + (col_0 - col_2) * a12 + (col_1 - col_2) * a20) * depth).as_color_u32()
                 }

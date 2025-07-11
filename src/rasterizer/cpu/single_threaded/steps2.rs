@@ -6,7 +6,7 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     font::{self, TextWriter},
-    maths::Vec4u,
+    maths::ColorF32,
     rasterizer::{
         Settings,
         cpu::{
@@ -169,12 +169,12 @@ impl Steps2Engine {
                 match texture {
                     Texture::Color(col) => {
                         *texture =
-                            Texture::Color((Vec4u::from_color_u32(*col) * light).as_color_u32());
+                            Texture::Color((ColorF32::from_argb_u32(*col) * light).as_color_u32());
                     }
                     Texture::VertexColor(c0, c1, c2) => {
-                        *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
-                        *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
-                        *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();
+                        *c0 = (ColorF32::from_argb_u32(*c0) * light).as_color_u32();
+                        *c1 = (ColorF32::from_argb_u32(*c1) * light).as_color_u32();
+                        *c2 = (ColorF32::from_argb_u32(*c2) * light).as_color_u32();
                     }
                 }
             });

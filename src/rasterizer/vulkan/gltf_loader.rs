@@ -236,7 +236,7 @@ impl LoadedGLTF {
             &mut descriptor_pool,
         );
 
-        let (meshes, meshes_vec) =
+        let (meshes_vec, meshes) =
             load_meshes(&device, commands, &document, buffers, materials_vec);
 
         let mut nodes = HashMap::new();
@@ -418,7 +418,7 @@ fn load_meshes(
     document: &Document,
     buffers: Vec<buffer::Data>,
     materials_vec: Vec<Rc<MaterialInstance>>,
-) -> (HashMap<String, Rc<MeshAsset>>, Vec<Rc<MeshAsset>>) {
+) -> (Vec<Rc<MeshAsset>>, HashMap<String, Rc<MeshAsset>>) {
     let mut meshes = HashMap::new();
     let meshes_vec = {
         // In common to prevent reallocating much
@@ -507,7 +507,7 @@ fn load_meshes(
             .collect()
     };
 
-    (meshes, meshes_vec)
+    (meshes_vec, meshes)
 }
 
 fn load_image(

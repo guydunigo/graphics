@@ -31,7 +31,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize};
 
 use crate::{
     font::{self, TextWriter},
-    maths::Vec4u,
+    maths::ColorF32,
     rasterizer::{Settings, cpu::populate_nodes},
     scene::{BoundingBox, Camera, DEFAULT_BACKGROUND_COLOR, Texture},
     window::AppObserver,
@@ -162,11 +162,11 @@ pub trait ParIterEngine {
                         // );
                         let ix = i * settings.oversampling;
 
-                        let color_avg: Vec4u = (0..(settings.oversampling * size.width as usize))
+                        let color_avg: ColorF32 = (0..(settings.oversampling * size.width as usize))
                             .step_by(size.width as usize)
                             .flat_map(|jo| {
                                 (0..settings.oversampling).map(move |io| {
-                                    Vec4u::from_color_u32(u64_to_color(
+                                    ColorF32::from_argb_u32(u64_to_color(
                                         depth_color_buffer[jx + jo + ix + io]
                                             .load(Ordering::Relaxed),
                                     ))
@@ -277,11 +277,11 @@ fn rasterize_triangle(
             let col = match tri_raster.material {
                 Texture::Color(col) => col,
                 Texture::VertexColor(c0, c1, c2) => {
-                    let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
+                    let col_2 = ColorF32::from_argb_u32(c2) / tri_raster.p2.z;
 
                     ((col_2
-                        + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
-                        + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
+                        + (ColorF32::from_argb_u32(c0) / tri_raster.p0.z - col_2) * a12
+                        + (ColorF32::from_argb_u32(c1) / tri_raster.p1.z - col_2) * a20)
                         * depth)
                         .as_color_u32()
                 }
@@ -418,9 +418,9 @@ fn draw_vertice_basic(
         let color = match texture {
             Texture::Color(col) => *col,
             // TODO: Better color calculus
-            Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
-                + Vec4u::from_color_u32(*c1)
-                + Vec4u::from_color_u32(*c2))
+            Texture::VertexColor(c0, c1, c2) => ((ColorF32::from_argb_u32(*c0)
+                + ColorF32::from_argb_u32(*c1)
+                + ColorF32::from_argb_u32(*c2))
                 / 3.)
                 .as_color_u32(),
         } as u64;

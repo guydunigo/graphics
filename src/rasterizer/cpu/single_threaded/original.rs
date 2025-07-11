@@ -1,7 +1,7 @@
 //! First implementation, putting the whole triangle rasterizing in a single function.
 
 use crate::{
-    maths::Vec4u,
+    maths::ColorF32,
     rasterizer::{
         Settings,
         cpu::{MINIMAL_AMBIANT_LIGHT, edge_function, vec_cross_z, world_to_raster_triangle},
@@ -137,12 +137,12 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     match &mut tri_raster.material {
         Texture::Color(col) => {
             tri_raster.material =
-                Texture::Color((Vec4u::from_color_u32(*col) * light).as_color_u32());
+                Texture::Color((ColorF32::from_argb_u32(*col) * light).as_color_u32());
         }
         Texture::VertexColor(c0, c1, c2) => {
-            *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
-            *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
-            *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();
+            *c0 = (ColorF32::from_argb_u32(*c0) * light).as_color_u32();
+            *c1 = (ColorF32::from_argb_u32(*c1) * light).as_color_u32();
+            *c2 = (ColorF32::from_argb_u32(*c2) * light).as_color_u32();
         }
     }
 
@@ -213,9 +213,9 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 Texture::Color(col) => col,
                 Texture::VertexColor(c0, c1, c2) => {
                     // TODO: Optimize color calculus
-                    let col_0 = Vec4u::from_color_u32(c0) / tri_raster.p0.z;
-                    let col_1 = Vec4u::from_color_u32(c1) / tri_raster.p1.z;
-                    let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
+                    let col_0 = ColorF32::from_argb_u32(c0) / tri_raster.p0.z;
+                    let col_1 = ColorF32::from_argb_u32(c1) / tri_raster.p1.z;
+                    let col_2 = ColorF32::from_argb_u32(c2) / tri_raster.p2.z;
 
                     ((col_2 + (col_0 - col_2) * a12 + (col_1 - col_2) * a20) * depth).as_color_u32()
                 }

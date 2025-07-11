@@ -14,7 +14,7 @@ use winit::dpi::PhysicalSize;
 
 use crate::{
     font::{self, TextWriter},
-    maths::Vec4u,
+    maths::ColorF32,
     rasterizer::{
         cpu::{
             MINIMAL_AMBIANT_LIGHT, cursor_buffer_index, format_debug,
@@ -192,12 +192,12 @@ impl ParIterEngine0 {
                 match texture {
                     Texture::Color(col) => {
                         *texture =
-                            Texture::Color((Vec4u::from_color_u32(*col) * light).as_color_u32());
+                            Texture::Color((ColorF32::from_argb_u32(*col) * light).as_color_u32());
                     }
                     Texture::VertexColor(c0, c1, c2) => {
-                        *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
-                        *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
-                        *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();
+                        *c0 = (ColorF32::from_argb_u32(*c0) * light).as_color_u32();
+                        *c1 = (ColorF32::from_argb_u32(*c1) * light).as_color_u32();
+                        *c2 = (ColorF32::from_argb_u32(*c2) * light).as_color_u32();
                     }
                 }
             });
@@ -306,11 +306,11 @@ impl ParIterEngine0 {
                         // );
                         let ix = i * settings.oversampling;
 
-                        let color_avg: Vec4u = (0..(settings.oversampling * size.width as usize))
+                        let color_avg: ColorF32 = (0..(settings.oversampling * size.width as usize))
                             .step_by(size.width as usize)
                             .flat_map(|jo| {
                                 (0..settings.oversampling).map(move |io| {
-                                    Vec4u::from_color_u32(u64_to_color(
+                                    ColorF32::from_argb_u32(u64_to_color(
                                         depth_color_buffer[jx + jo + ix + io]
                                             .load(Ordering::Relaxed),
                                     ))

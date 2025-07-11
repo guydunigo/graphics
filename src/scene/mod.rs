@@ -8,6 +8,7 @@ use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 pub use mesh::*;
 use winit::dpi::PhysicalSize;
 
+pub mod gltf_file;
 mod mesh_library;
 pub mod obj_file;
 
