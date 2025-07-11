@@ -1,8 +1,4 @@
 //! Grouping tasks on all, step by steps
-//!
-//! Quite memry hungry
-//! TODO: we could re-allocate some everytime.
-//! TODO: don't reserve too much before filters ?
 
 use glam::Vec3;
 use std::ops::DerefMut;
@@ -60,7 +56,6 @@ impl SingleThreadedEngine for StepsEngine {
 
         self.t_raster.clear();
         self.t_raster.reserve(self.triangles.len());
-        // TODO: explode ?
         self.t_raster.extend(
             self.triangles
                 .iter()

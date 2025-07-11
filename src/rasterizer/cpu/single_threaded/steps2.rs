@@ -52,7 +52,7 @@ impl Steps2Engine {
         self.to_cam_trs.clear();
         self.textures.clear();
         world.scene.top_nodes().iter().for_each(|n| {
-            populate_nodes(
+            populate_nodes_split(
                 settings,
                 &world.camera,
                 size,
@@ -146,6 +146,7 @@ impl Steps2Engine {
                 *p1 = (tr * p1.extend(1.)).xyz();
                 *p2 = (tr * p2.extend(1.)).xyz();
             });
+        // No need for self.world_trs anymore.
 
         ////////////////////////////////
         // Sunlight
@@ -182,6 +183,7 @@ impl Steps2Engine {
                     light
                 },
             ));
+        // No need for self.triangles anymore.
 
         self.t_raster
             .drain(..)
@@ -254,7 +256,7 @@ impl Steps2Engine {
     }
 }
 
-fn populate_nodes(
+pub fn populate_nodes_split(
     settings: &Settings,
     camera: &Camera,
     size: PhysicalSize<u32>,
@@ -302,7 +304,7 @@ fn populate_nodes(
     }
 
     node.children.iter().for_each(|c| {
-        populate_nodes(
+        populate_nodes_split(
             settings,
             camera,
             size,

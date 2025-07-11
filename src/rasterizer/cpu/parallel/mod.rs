@@ -1,3 +1,5 @@
+mod par_iter_0;
+mod par_iter_1;
 mod par_iter_2;
 mod par_iter_3;
 mod par_iter_4;
@@ -14,6 +16,8 @@ use std::{
     time::Instant,
 };
 
+pub use par_iter_0::ParIterEngine0;
+pub use par_iter_1::ParIterEngine1;
 pub use par_iter_2::ParIterEngine2;
 pub use par_iter_3::ParIterEngine3;
 pub use par_iter_4::ParIterEngine4;

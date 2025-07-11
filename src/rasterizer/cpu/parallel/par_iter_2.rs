@@ -1,9 +1,4 @@
-//! Like steps but parallel
-//!
-//!
-//! Quite memry hungry
-//! TODO: we could re-allocate some everytime.
-//! TODO: don't reserve too much before filters ?
+//! Like steps but parallel : par_bridge
 use glam::Vec3;
 use rayon::prelude::*;
 use std::sync::{Arc, atomic::AtomicU64};

@@ -1,9 +1,4 @@
-//! Like steps but parallel
-//!
-//!
-//! Quite memry hungry
-//! TODO: we could re-allocate some everytime.
-//! TODO: don't reserve too much before filters ?
+//! Like steps but parallel : par_drain
 use glam::Vec3;
 use rayon::prelude::*;
 use std::sync::{Arc, atomic::AtomicU64};
@@ -134,9 +129,8 @@ impl ParIterEngine for ParIterEngine3 {
         self.light.reserve(self.triangles.len());
         self.light.par_extend(
             self.t_raster
-                .iter_mut()
-                .zip(self.triangles.iter())
-                .par_bridge()
+                .par_iter_mut()
+                .zip(self.triangles.par_iter())
                 .map(|(t_raster, t)| {
                     let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
                     let light = sun_direction

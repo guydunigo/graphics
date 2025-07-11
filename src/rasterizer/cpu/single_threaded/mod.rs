@@ -7,7 +7,7 @@ use glam::Vec3;
 pub use iterator::IteratorEngine;
 pub use original::OriginalEngine;
 pub use steps::StepsEngine;
-pub use steps2::Steps2Engine;
+pub use steps2::{Steps2Engine, populate_nodes_split};
 
 use std::{ops::DerefMut, time::Instant};
 use winit::dpi::PhysicalSize;
