@@ -71,7 +71,6 @@ pub trait ParIterEngine {
     ) {
         let original_size = size;
 
-        // If x4 is set :
         let mut font_size = font::PX;
         size.width *= settings.oversampling as u32;
         size.height *= settings.oversampling as u32;
@@ -162,7 +161,8 @@ pub trait ParIterEngine {
                         // );
                         let ix = i * settings.oversampling;
 
-                        let color_avg: ColorF32 = (0..(settings.oversampling * size.width as usize))
+                        let color_avg: ColorF32 = (0..(settings.oversampling
+                            * size.width as usize))
                             .step_by(size.width as usize)
                             .flat_map(|jo| {
                                 (0..settings.oversampling).map(move |io| {
