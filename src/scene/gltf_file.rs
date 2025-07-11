@@ -7,9 +7,6 @@ use crate::{
 use glam::{Mat4, Vec3, Vec4};
 use gltf::{Document, buffer};
 
-/// Override colors with normal value
-const OVERRIDE_COLORS: bool = false;
-
 // TODO: better error handling
 pub fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
     println!("Loading glTF : {}", path.as_ref().to_string_lossy());
@@ -133,11 +130,7 @@ fn load_meshes(
                             });
                         }
 
-                        if OVERRIDE_COLORS {
-                            vertices[initial_vtx..]
-                                .iter_mut()
-                                .for_each(|v| v.color = v.normal.extend(1.));
-                        } else if let Some(iter) = reader.read_colors(0) {
+                        if let Some(iter) = reader.read_colors(0) {
                             iter.into_rgba_f32().enumerate().for_each(|(i, c)| {
                                 vertices[initial_vtx + i].color = Vec4::from_array(c)
                             });

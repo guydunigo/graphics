@@ -290,7 +290,36 @@ pub fn populate_nodes_split(
                             ));
                             world_trs.push(node.world_transform);
                             to_cam_trs.push(to_cam_tr);
-                            textures.push(s.material);
+
+                            let material = if settings.vertex_color {
+                                let (c0, c1, c2) = if settings.vertex_color_normal {
+                                    (
+                                        mesh.vertices[is[0]].normal.extend(1.),
+                                        mesh.vertices[is[1]].normal.extend(1.),
+                                        mesh.vertices[is[2]].normal.extend(1.),
+                                    )
+                                } else {
+                                    (
+                                        mesh.vertices[is[0]].color,
+                                        mesh.vertices[is[1]].color,
+                                        mesh.vertices[is[2]].color,
+                                    )
+                                };
+                                if c0 == c1 && c0 == c2 {
+                                    Texture::Color(
+                                        ColorF32::from_rgba(c0.to_array()).as_color_u32(),
+                                    )
+                                } else {
+                                    Texture::VertexColor(
+                                        ColorF32::from_rgba(c0.to_array()).as_color_u32(),
+                                        ColorF32::from_rgba(c1.to_array()).as_color_u32(),
+                                        ColorF32::from_rgba(c2.to_array()).as_color_u32(),
+                                    )
+                                }
+                            } else {
+                                s.material
+                            };
+                            textures.push(material);
                         });
                 });
         }

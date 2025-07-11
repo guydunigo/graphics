@@ -13,6 +13,8 @@ pub struct Settings {
     pub culling_meshes: bool,
     pub culling_surfaces: bool,
     pub culling_triangles: bool,
+    pub vertex_color: bool,
+    pub vertex_color_normal: bool,
 }
 
 impl Default for Settings {
@@ -26,6 +28,8 @@ impl Default for Settings {
             culling_meshes: true,
             culling_surfaces: true,
             culling_triangles: true,
+            vertex_color: false,
+            vertex_color_normal: false,
         }
     }
 }

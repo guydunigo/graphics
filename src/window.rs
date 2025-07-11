@@ -373,6 +373,10 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::Digit4 => w.settings.culling_meshes = !w.settings.culling_meshes,
                     KeyCode::Digit5 => w.settings.culling_surfaces = !w.settings.culling_surfaces,
                     KeyCode::Digit6 => w.settings.culling_triangles = !w.settings.culling_triangles,
+                    KeyCode::Digit7 => w.settings.vertex_color = !w.settings.vertex_color,
+                    KeyCode::Digit8 => {
+                        w.settings.vertex_color_normal = !w.settings.vertex_color_normal
+                    }
                     #[cfg(feature = "cpu")]
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
