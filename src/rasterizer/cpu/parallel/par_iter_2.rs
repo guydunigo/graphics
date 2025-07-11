@@ -63,17 +63,16 @@ impl ParIterEngine for ParIterEngine2 {
                 .store(self.triangles.len(), Ordering::Relaxed);
         }
 
-        self.t_raster.clear();
-        self.t_raster.reserve(self.triangles.len());
-        // TODO: explode ?
+        // self.t_raster.clear();
+        // self.t_raster.reserve(self.triangles.len());
         self.t_raster.par_extend(
             self.triangles
                 .par_iter()
                 .map(|t| world_to_raster_triangle(t, camera, size, ratio_w_h)),
         );
 
-        self.bounding_boxes.clear();
-        self.bounding_boxes.reserve(self.triangles.len());
+        // self.bounding_boxes.clear();
+        // self.bounding_boxes.reserve(self.triangles.len());
         while self.bounding_boxes.len() < self.triangles.len() {
             let i = self.bounding_boxes.len();
             // TODO: max_z >= MAX_DEPTH ?
@@ -97,8 +96,8 @@ impl ParIterEngine for ParIterEngine2 {
         // Back face culling
         // If triangle normal and camera sight are in same direction (cross product > 0),
         // it's invisible.
-        self.p01p20.clear();
-        self.p01p20.reserve(self.triangles.len());
+        // self.p01p20.clear();
+        // self.p01p20.reserve(self.triangles.len());
         while self.p01p20.len() < self.triangles.len() {
             let i = self.p01p20.len();
             let t = &self.t_raster[i];
@@ -125,12 +124,12 @@ impl ParIterEngine for ParIterEngine2 {
         // vector to face normal vector to see if they are opposed (face is lit).
         //
         // Also simplifying colours.
-        self.light.clear();
-        self.light.reserve(self.triangles.len());
+        // self.light.clear();
+        // self.light.reserve(self.triangles.len());
         self.light.par_extend(
             self.t_raster
                 .iter_mut()
-                .zip(self.triangles.iter())
+                .zip(self.triangles.drain(..))
                 .par_bridge()
                 .map(|(t_raster, t)| {
                     let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();

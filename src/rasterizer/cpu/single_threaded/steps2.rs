@@ -47,10 +47,10 @@ impl Steps2Engine {
         ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        self.triangles.clear();
-        self.world_trs.clear();
-        self.to_cam_trs.clear();
-        self.textures.clear();
+        // self.triangles.clear();
+        // self.world_trs.clear();
+        // self.to_cam_trs.clear();
+        // self.textures.clear();
         world.scene.top_nodes().iter().for_each(|n| {
             populate_nodes_split(
                 settings,
@@ -70,25 +70,22 @@ impl Steps2Engine {
             stats.nb_triangles_tot = self.triangles.len();
         }
 
-        self.t_raster.clear();
-        self.t_raster.reserve(self.triangles.len());
+        // self.t_raster.clear();
+        // self.t_raster.reserve(self.triangles.len());
         self.t_raster
-            .extend(
-                self.triangles
-                    .iter()
-                    .zip(self.to_cam_trs.iter())
-                    .map(|((p0, p1, p2), tr)| {
-                        (
-                            to_raster(*p0, &world.camera, tr, size, ratio_w_h),
-                            to_raster(*p1, &world.camera, tr, size, ratio_w_h),
-                            to_raster(*p2, &world.camera, tr, size, ratio_w_h),
-                        )
-                    }),
-            );
+            .extend(self.triangles.iter().zip(self.to_cam_trs.drain(..)).map(
+                |((p0, p1, p2), tr)| {
+                    (
+                        to_raster(*p0, &world.camera, &tr, size, ratio_w_h),
+                        to_raster(*p1, &world.camera, &tr, size, ratio_w_h),
+                        to_raster(*p2, &world.camera, &tr, size, ratio_w_h),
+                    )
+                },
+            ));
         // No need for self.to_cam_trs anymore.
 
-        self.bounding_boxes.clear();
-        self.bounding_boxes.reserve(self.triangles.len());
+        // self.bounding_boxes.clear();
+        // self.bounding_boxes.reserve(self.triangles.len());
         while self.bounding_boxes.len() < self.triangles.len() {
             let i = self.bounding_boxes.len();
             // TODO: max_z >= MAX_DEPTH ?
@@ -116,8 +113,8 @@ impl Steps2Engine {
         // Back face culling
         // If triangle normal and camera sight are in same direction (cross product > 0),
         // it's invisible.
-        self.p01p20.clear();
-        self.p01p20.reserve(self.triangles.len());
+        // self.p01p20.clear();
+        // self.p01p20.reserve(self.triangles.len());
         while self.p01p20.len() < self.triangles.len() {
             let i = self.p01p20.len();
             let (p0, p1, p2) = &self.t_raster[i];
@@ -140,7 +137,7 @@ impl Steps2Engine {
 
         self.triangles
             .iter_mut()
-            .zip(self.world_trs.iter())
+            .zip(self.world_trs.drain(..))
             .for_each(|((p0, p1, p2), tr)| {
                 *p0 = (tr * p0.extend(1.)).xyz();
                 *p1 = (tr * p1.extend(1.)).xyz();
@@ -154,10 +151,10 @@ impl Steps2Engine {
         // vector to face normal vector to see if they are opposed (face is lit).
         //
         // Also simplifying colours.
-        self.light.clear();
-        self.light.reserve(self.triangles.len());
+        // self.light.clear();
+        // self.light.reserve(self.triangles.len());
         self.light
-            .extend(self.textures.iter_mut().zip(self.triangles.iter()).map(
+            .extend(self.textures.iter_mut().zip(self.triangles.drain(..)).map(
                 |(texture, (p0, p1, p2))| {
                     let triangle_normal = (p1 - p0).cross(p0 - p2).normalize();
                     let light = world
@@ -276,10 +273,10 @@ pub fn populate_nodes_split(
                     .is_visible_cpu(camera, &to_cam_tr, size, ratio_w_h))
         {
             let vert_count = mesh.surfaces.iter().map(|s| s.count).sum::<usize>() / 3;
-            triangles.reserve(vert_count);
-            world_trs.reserve(vert_count);
-            to_cam_trs.reserve(vert_count);
-            textures.reserve(vert_count);
+            // triangles.reserve(vert_count);
+            // world_trs.reserve(vert_count);
+            // to_cam_trs.reserve(vert_count);
+            // textures.reserve(vert_count);
             mesh.surfaces
                 .iter()
                 .filter(|s| {

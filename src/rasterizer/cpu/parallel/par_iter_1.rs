@@ -59,10 +59,10 @@ impl ParIterEngine1 {
         ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &ParStats,
     ) {
-        self.triangles.clear();
-        self.world_trs.clear();
-        self.to_cam_trs.clear();
-        self.textures.clear();
+        // self.triangles.clear();
+        // self.world_trs.clear();
+        // self.to_cam_trs.clear();
+        // self.textures.clear();
         world.scene.top_nodes().iter().for_each(|n| {
             populate_nodes_split(
                 settings,
@@ -85,24 +85,24 @@ impl ParIterEngine1 {
         }
 
         let camera = &world.camera;
-        self.t_raster.clear();
-        self.t_raster.reserve(self.triangles.len());
+        // self.t_raster.clear();
+        // self.t_raster.reserve(self.triangles.len());
         self.t_raster.par_extend(
             self.triangles
                 .par_iter()
-                .zip(self.to_cam_trs.par_iter())
+                .zip(self.to_cam_trs.par_drain(..))
                 .map(|((p0, p1, p2), tr)| {
                     (
-                        to_raster(*p0, camera, tr, size, ratio_w_h),
-                        to_raster(*p1, camera, tr, size, ratio_w_h),
-                        to_raster(*p2, camera, tr, size, ratio_w_h),
+                        to_raster(*p0, camera, &tr, size, ratio_w_h),
+                        to_raster(*p1, camera, &tr, size, ratio_w_h),
+                        to_raster(*p2, camera, &tr, size, ratio_w_h),
                     )
                 }),
         );
         // No need for self.to_cam_trs anymore.
 
-        self.bounding_boxes.clear();
-        self.bounding_boxes.reserve(self.triangles.len());
+        // self.bounding_boxes.clear();
+        // self.bounding_boxes.reserve(self.triangles.len());
         while self.bounding_boxes.len() < self.triangles.len() {
             let i = self.bounding_boxes.len();
             // TODO: max_z >= MAX_DEPTH ?
@@ -128,8 +128,8 @@ impl ParIterEngine1 {
         // Back face culling
         // If triangle normal and camera sight are in same direction (cross product > 0),
         // it's invisible.
-        self.p01p20.clear();
-        self.p01p20.reserve(self.triangles.len());
+        // self.p01p20.clear();
+        // self.p01p20.reserve(self.triangles.len());
         while self.p01p20.len() < self.triangles.len() {
             let i = self.p01p20.len();
             let (p0, p1, p2) = &self.t_raster[i];
@@ -154,7 +154,7 @@ impl ParIterEngine1 {
 
         self.triangles
             .par_iter_mut()
-            .zip(self.world_trs.par_iter())
+            .zip(self.world_trs.par_drain(..))
             .for_each(|((p0, p1, p2), tr)| {
                 *p0 = (tr * p0.extend(1.)).xyz();
                 *p1 = (tr * p1.extend(1.)).xyz();
@@ -174,7 +174,7 @@ impl ParIterEngine1 {
         self.light.par_extend(
             self.textures
                 .par_iter_mut()
-                .zip(self.triangles.par_iter())
+                .zip(self.triangles.par_drain(..))
                 .map(|(texture, (p0, p1, p2))| {
                     let triangle_normal = (p1 - p0).cross(p0 - p2).normalize();
                     let light = sun_direction

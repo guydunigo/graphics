@@ -55,7 +55,7 @@ pub trait SingleThreadedEngine {
 
         {
             let triangles = self.triangles_mut();
-            triangles.clear();
+            // triangles.clear();
             world
                 .scene
                 .top_nodes()
