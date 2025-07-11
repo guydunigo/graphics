@@ -100,9 +100,16 @@ impl ParIterEngine for ParIterEngine5 {
                 t_raster.material = Texture::Color(c0);
             }
 
-            if let Texture::Color(col) = t_raster.material {
-                t_raster.material =
-                    Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
+            match &mut t_raster.material {
+                Texture::Color(col) => {
+                    t_raster.material =
+                        Texture::Color((Vec4u::from_color_u32(*col) * light).as_color_u32());
+                }
+                Texture::VertexColor(c0, c1, c2) => {
+                    *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
+                    *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
+                    *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();
+                }
             }
 
             rasterize_triangle(
@@ -114,7 +121,6 @@ impl ParIterEngine for ParIterEngine5 {
                 #[cfg(feature = "stats")]
                 stats,
                 &bb,
-                light,
                 p01,
                 p20,
             );

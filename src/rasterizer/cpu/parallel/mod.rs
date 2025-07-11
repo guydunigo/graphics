@@ -209,7 +209,6 @@ fn rasterize_triangle(
     settings: &Settings,
     #[cfg(feature = "stats")] stats: &ParStats,
     bb: &Rect,
-    light: f32,
     p01: Vec3,
     p20: Vec3,
 ) {
@@ -278,13 +277,12 @@ fn rasterize_triangle(
             let col = match tri_raster.material {
                 Texture::Color(col) => col,
                 Texture::VertexColor(c0, c1, c2) => {
-                    // TODO: Optimize color calculus
                     let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
 
                     ((col_2
                         + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
                         + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
-                        * (depth * light))
+                        * depth)
                         .as_color_u32()
                 }
             } as u64

@@ -76,7 +76,7 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     ratio_w_h: f32,
     #[cfg(feature = "stats")] stats: &mut Stats,
 ) {
-    let tri_raster = world_to_raster_triangle(triangle, cam, size, ratio_w_h);
+    let mut tri_raster = world_to_raster_triangle(triangle, cam, size, ratio_w_h);
 
     let bb = bounding_box_triangle(&tri_raster, size);
     // TODO: max_z >= MAX_DEPTH ?
@@ -129,10 +129,26 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     let tri_area = edge_function(p20, p01);
 
     // TODO: Optimize color calculus
-    let texture = match tri_raster.material {
-        Texture::Color(col) => Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32()),
-        _ => tri_raster.material,
-    };
+    // If a `Texture::VertexColor` has the same color for all vertices, then we can
+    // consider it like a `Texture::Color`.
+    if let Texture::VertexColor(c0, c1, c2) = tri_raster.material
+        && c0 == c1
+        && c1 == c2
+    {
+        tri_raster.material = Texture::Color(c0);
+    }
+
+    match &mut tri_raster.material {
+        Texture::Color(col) => {
+            tri_raster.material =
+                Texture::Color((Vec4u::from_color_u32(*col) * light).as_color_u32());
+        }
+        Texture::VertexColor(c0, c1, c2) => {
+            *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
+            *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
+            *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();
+        }
+    }
 
     (bb.min_x..=bb.max_x)
         .flat_map(|x| (bb.min_y..=bb.max_y).map(move |y| vec3(x as f32, y as f32, 0.)))
@@ -197,17 +213,15 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
                 stats.nb_pixels_written += 1;
             }
 
-            let col = match texture {
+            let col = match tri_raster.material {
                 Texture::Color(col) => col,
                 Texture::VertexColor(c0, c1, c2) => {
                     // TODO: Optimize color calculus
+                    let col_0 = Vec4u::from_color_u32(c0) / tri_raster.p0.z;
+                    let col_1 = Vec4u::from_color_u32(c1) / tri_raster.p1.z;
                     let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
 
-                    ((col_2
-                        + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
-                        + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
-                        * (depth * light))
-                        .as_color_u32()
+                    ((col_2 + (col_0 - col_2) * a12 + (col_1 - col_2) * a20) * depth).as_color_u32()
                 }
             };
 

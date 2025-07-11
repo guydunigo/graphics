@@ -30,7 +30,6 @@ pub struct ParIterEngine3 {
     t_raster: Vec<Triangle>,
     bounding_boxes: Vec<Rect>,
     p01p20: Vec<(Vec3, Vec3)>,
-    light: Vec<f32>,
     depth_color_buffer: Arc<[AtomicU64]>,
 }
 
@@ -124,44 +123,43 @@ impl ParIterEngine for ParIterEngine3 {
         // vector to face normal vector to see if they are opposed (face is lit).
         //
         // Also simplifying colours.
-        // self.light.clear();
-        // self.light.reserve(self.triangles.len());
-        self.light.par_extend(
-            self.t_raster
-                .par_iter_mut()
-                .zip(self.triangles.par_drain(..))
-                .map(|(t_raster, t)| {
-                    let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
-                    let light = sun_direction
-                        .dot(triangle_normal)
-                        .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
+        self.t_raster
+            .par_iter_mut()
+            .zip(self.triangles.par_drain(..))
+            .for_each(|(t_raster, t)| {
+                let triangle_normal = (t.p1 - t.p0).cross(t.p0 - t.p2).normalize();
+                let light = sun_direction
+                    .dot(triangle_normal)
+                    .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
 
-                    // TODO: remove this test, just load correctly ?
-                    // If a `Texture::VertexColor` has the same color for all vertices, then we can
-                    // consider it like a `Texture::Color`.
-                    if let Texture::VertexColor(c0, c1, c2) = t_raster.material
-                        && c0 == c1
-                        && c1 == c2
-                    {
-                        t_raster.material = Texture::Color(c0);
-                    }
+                // TODO: remove this test, just load correctly ?
+                // If a `Texture::VertexColor` has the same color for all vertices, then we can
+                // consider it like a `Texture::Color`.
+                if let Texture::VertexColor(c0, c1, c2) = t_raster.material
+                    && c0 == c1
+                    && c1 == c2
+                {
+                    t_raster.material = Texture::Color(c0);
+                }
 
-                    if let Texture::Color(col) = t.material {
+                match &mut t_raster.material {
+                    Texture::Color(col) => {
                         t_raster.material =
-                            Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
+                            Texture::Color((Vec4u::from_color_u32(*col) * light).as_color_u32());
                     }
+                    Texture::VertexColor(c0, c1, c2) => {
+                        *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
+                        *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
+                        *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();
+                    }
+                }
+            });
 
-                    light
-                }),
-        );
-
-        // TODO: 1fps less than par_bridge
         self.t_raster
             .par_drain(..)
             .zip(self.bounding_boxes.par_drain(..))
             .zip(self.p01p20.par_drain(..))
-            .zip(self.light.par_drain(..))
-            .for_each(|(((t_raster, bb), (p01, p20)), light)| {
+            .for_each(|((t_raster, bb), (p01, p20))| {
                 rasterize_triangle(
                     &t_raster,
                     &self.depth_color_buffer[..],
@@ -171,7 +169,6 @@ impl ParIterEngine for ParIterEngine3 {
                     #[cfg(feature = "stats")]
                     stats,
                     &bb,
-                    light,
                     p01,
                     p20,
                 )

@@ -46,7 +46,6 @@ pub struct ParIterEngine1 {
     t_raster: Vec<(Vec3, Vec3, Vec3)>,
     bounding_boxes: Vec<Rect>,
     p01p20: Vec<(Vec3, Vec3)>,
-    light: Vec<f32>,
     depth_color_buffer: Arc<[AtomicU64]>,
 }
 
@@ -169,36 +168,37 @@ impl ParIterEngine1 {
         //
         // Also simplifying colours.
         let sun_direction = world.sun_direction;
-        self.light.clear();
-        self.light.reserve(self.triangles.len());
-        self.light.par_extend(
-            self.textures
-                .par_iter_mut()
-                .zip(self.triangles.par_drain(..))
-                .map(|(texture, (p0, p1, p2))| {
-                    let triangle_normal = (p1 - p0).cross(p0 - p2).normalize();
-                    let light = sun_direction
-                        .dot(triangle_normal)
-                        .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
+        self.textures
+            .par_iter_mut()
+            .zip(self.triangles.par_drain(..))
+            .for_each(|(texture, (p0, p1, p2))| {
+                let triangle_normal = (p1 - p0).cross(p0 - p2).normalize();
+                let light = sun_direction
+                    .dot(triangle_normal)
+                    .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
 
-                    // TODO: remove this test, just load correctly ?
-                    // If a `Texture::VertexColor` has the same color for all triangles, then we can
-                    // consider it like a `Texture::Color`.
-                    if let Texture::VertexColor(c0, c1, c2) = texture
-                        && c0 == c1
-                        && c1 == c2
-                    {
-                        *texture = Texture::Color(*c0);
-                    }
+                // TODO: remove this test, just load correctly ?
+                // If a `Texture::VertexColor` has the same color for all triangles, then we can
+                // consider it like a `Texture::Color`.
+                if let Texture::VertexColor(c0, c1, c2) = texture
+                    && c0 == c1
+                    && c1 == c2
+                {
+                    *texture = Texture::Color(*c0);
+                }
 
-                    if let Texture::Color(col) = texture {
+                match texture {
+                    Texture::Color(col) => {
                         *texture =
                             Texture::Color((Vec4u::from_color_u32(*col) * light).as_color_u32());
                     }
-
-                    light
-                }),
-        );
+                    Texture::VertexColor(c0, c1, c2) => {
+                        *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
+                        *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
+                        *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();
+                    }
+                }
+            });
         // No need for self.triangles anymore.
 
         self.t_raster
@@ -206,8 +206,7 @@ impl ParIterEngine1 {
             .zip(self.textures.par_drain(..))
             .zip(self.bounding_boxes.par_drain(..))
             .zip(self.p01p20.par_drain(..))
-            .zip(self.light.par_drain(..))
-            .for_each(|(((((p0, p1, p2), material), bb), (p01, p20)), light)| {
+            .for_each(|((((p0, p1, p2), material), bb), (p01, p20))| {
                 rasterize_triangle(
                     &Triangle {
                         p0,
@@ -222,7 +221,6 @@ impl ParIterEngine1 {
                     #[cfg(feature = "stats")]
                     stats,
                     &bb,
-                    light,
                     p01,
                     p20,
                 )
