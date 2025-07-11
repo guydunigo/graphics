@@ -33,11 +33,11 @@ use crate::{
     font::{self, TextWriter},
     maths::Vec4u,
     rasterizer::{Settings, cpu::populate_nodes},
-    scene::{Camera, DEFAULT_BACKGROUND_COLOR, Texture},
+    scene::{BoundingBox, Camera, DEFAULT_BACKGROUND_COLOR, Texture},
     window::AppObserver,
 };
 
-use super::{Rect, Triangle, buffer_index, cursor_buffer_index, edge_function, format_debug};
+use super::{Triangle, buffer_index, cursor_buffer_index, edge_function, format_debug};
 
 const DEPTH_PRECISION: f32 = 2048.;
 const DEFAULT_DEPTH: u32 = u32::MAX;
@@ -208,7 +208,7 @@ fn rasterize_triangle(
     size: PhysicalSize<u32>,
     settings: &Settings,
     #[cfg(feature = "stats")] stats: &ParStats,
-    bb: &Rect,
+    bb: &BoundingBox<u32>,
     p01: Vec3,
     p20: Vec3,
 ) {

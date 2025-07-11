@@ -15,11 +15,8 @@ use winit::dpi::PhysicalSize;
 use crate::{
     font::{self, TextWriter},
     maths::Vec4u,
-    rasterizer::{
-        Settings,
-        cpu::{Rect, edge_function},
-    },
-    scene::{DEFAULT_BACKGROUND_COLOR, Texture, World},
+    rasterizer::{Settings, cpu::edge_function},
+    scene::{BoundingBox, DEFAULT_BACKGROUND_COLOR, Texture, World},
     window::AppObserver,
 };
 
@@ -164,7 +161,7 @@ pub fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
     z_near: f32,
     size: PhysicalSize<u32>,
     #[cfg(feature = "stats")] stats: &mut Stats,
-    bb: &Rect,
+    bb: &BoundingBox<u32>,
     p01: Vec3,
     p20: Vec3,
 ) {

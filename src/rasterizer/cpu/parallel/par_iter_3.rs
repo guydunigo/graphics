@@ -7,13 +7,10 @@ use winit::dpi::PhysicalSize;
 use crate::{
     maths::Vec4u,
     rasterizer::{
-        cpu::{
-            MINIMAL_AMBIANT_LIGHT, Rect, Triangle, bounding_box_triangle, vec_cross_z,
-            world_to_raster_triangle,
-        },
+        cpu::{MINIMAL_AMBIANT_LIGHT, vec_cross_z, world_to_raster_triangle},
         settings::Settings,
     },
-    scene::{Camera, Texture},
+    scene::{BoundingBox, Camera, Texture, Triangle},
 };
 
 use super::{ParIterEngine, rasterize_triangle};
@@ -28,7 +25,7 @@ use std::sync::atomic::Ordering;
 pub struct ParIterEngine3 {
     triangles: Vec<Triangle>,
     t_raster: Vec<Triangle>,
-    bounding_boxes: Vec<Rect>,
+    bounding_boxes: Vec<BoundingBox<u32>>,
     p01p20: Vec<(Vec3, Vec3)>,
     depth_color_buffer: Arc<[AtomicU64]>,
 }
@@ -74,9 +71,8 @@ impl ParIterEngine for ParIterEngine3 {
         // self.bounding_boxes.reserve(self.triangles.len());
         while self.bounding_boxes.len() < self.triangles.len() {
             let i = self.bounding_boxes.len();
-            // TODO: max_z >= MAX_DEPTH ?
-            let bb = bounding_box_triangle(&self.t_raster[i], size);
-            if !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= camera.z_near) {
+            let bb = BoundingBox::new(&self.t_raster[i], size);
+            if !settings.culling_triangles || bb.is_visible(camera.z_near) {
                 self.bounding_boxes.push(bb);
             } else {
                 self.triangles.swap_remove(i);

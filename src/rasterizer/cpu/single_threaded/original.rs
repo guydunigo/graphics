@@ -4,12 +4,9 @@ use crate::{
     maths::Vec4u,
     rasterizer::{
         Settings,
-        cpu::{
-            MINIMAL_AMBIANT_LIGHT, Triangle, bounding_box_triangle, edge_function, vec_cross_z,
-            world_to_raster_triangle,
-        },
+        cpu::{MINIMAL_AMBIANT_LIGHT, edge_function, vec_cross_z, world_to_raster_triangle},
     },
-    scene::{Camera, Texture, World},
+    scene::{BoundingBox, Camera, Texture, Triangle, World},
 };
 use glam::vec3;
 use std::ops::DerefMut;
@@ -78,9 +75,8 @@ fn rasterize_triangle<B: DerefMut<Target = [u32]>>(
 ) {
     let mut tri_raster = world_to_raster_triangle(triangle, cam, size, ratio_w_h);
 
-    let bb = bounding_box_triangle(&tri_raster, size);
-    // TODO: max_z >= MAX_DEPTH ?
-    if bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= cam.z_near {
+    let bb = BoundingBox::new(&tri_raster, size);
+    if !settings.culling_triangles || !bb.is_visible(cam.z_near) {
         return;
     }
 

@@ -7,10 +7,10 @@ use winit::dpi::PhysicalSize;
 use crate::{
     maths::Vec4u,
     rasterizer::{
-        cpu::{MINIMAL_AMBIANT_LIGHT, Triangle, bounding_box_triangle, world_to_raster_triangle},
+        cpu::{MINIMAL_AMBIANT_LIGHT, world_to_raster_triangle},
         settings::Settings,
     },
-    scene::{Camera, Texture},
+    scene::{BoundingBox, Camera, Texture, Triangle},
 };
 
 use super::{ParIterEngine, rasterize_triangle};
@@ -53,12 +53,9 @@ impl ParIterEngine for ParIterEngine5 {
             #[cfg(feature = "stats")]
             stats.nb_triangles_tot.fetch_add(1, Ordering::Relaxed);
 
-            // TODO: explode ?
             let mut t_raster = world_to_raster_triangle(&t, camera, size, ratio_w_h);
-            let bb = bounding_box_triangle(&t_raster, size);
-
-            // TODO: max_z >= MAX_DEPTH ?
-            if bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= camera.z_near {
+            let bb = BoundingBox::new(&t_raster, size);
+            if settings.culling_triangles && !bb.is_visible(camera.z_near) {
                 return;
             }
 

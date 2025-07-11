@@ -8,12 +8,9 @@ use crate::{
     maths::Vec4u,
     rasterizer::{
         Settings,
-        cpu::{
-            MINIMAL_AMBIANT_LIGHT, Triangle, bounding_box_triangle, vec_cross_z,
-            world_to_raster_triangle,
-        },
+        cpu::{MINIMAL_AMBIANT_LIGHT, vec_cross_z, world_to_raster_triangle},
     },
-    scene::{Texture, World},
+    scene::{BoundingBox, Texture, Triangle, World},
 };
 
 use super::{SingleThreadedEngine, rasterize_triangle};
@@ -61,14 +58,10 @@ impl SingleThreadedEngine for IteratorEngine {
                 }
             })
             .map(|t| {
-                // TODO: explode ?
                 let t_raster = world_to_raster_triangle(&t, &world.camera, size, ratio_w_h);
-                (t, t_raster, bounding_box_triangle(&t_raster, size))
+                (t, t_raster, BoundingBox::new(&t_raster, size))
             })
-            .filter(|(_, _, bb)| {
-                // TODO: max_z >= MAX_DEPTH ?
-                !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near)
-            })
+            .filter(|(_, _, bb)| !settings.culling_triangles || bb.is_visible(world.camera.z_near))
             .inspect(|_| {
                 #[cfg(feature = "stats")]
                 {
@@ -113,12 +106,12 @@ impl SingleThreadedEngine for IteratorEngine {
                     t_raster.material = Texture::Color(c0);
                 }
 
-                match &mut t_raster.material {
+                match t_raster.material {
                     Texture::Color(col) => {
                         t_raster.material =
-                            Texture::Color((Vec4u::from_color_u32(*col) * light).as_color_u32());
+                            Texture::Color((Vec4u::from_color_u32(col) * light).as_color_u32());
                     }
-                    Texture::VertexColor(c0, c1, c2) => {
+                    Texture::VertexColor(ref mut c0, ref mut c1, ref mut c2) => {
                         *c0 = (Vec4u::from_color_u32(*c0) * light).as_color_u32();
                         *c1 = (Vec4u::from_color_u32(*c1) * light).as_color_u32();
                         *c2 = (Vec4u::from_color_u32(*c2) * light).as_color_u32();

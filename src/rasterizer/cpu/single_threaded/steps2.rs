@@ -10,13 +10,12 @@ use crate::{
     rasterizer::{
         Settings,
         cpu::{
-            MINIMAL_AMBIANT_LIGHT, Rect, Triangle, bounding_box_triangle_2, cursor_buffer_index,
-            format_debug,
+            MINIMAL_AMBIANT_LIGHT, cursor_buffer_index, format_debug,
             single_threaded::{clean_resize_buffers, rasterize_triangle},
             vec_cross_z,
         },
     },
-    scene::{Camera, Node, Texture, World, to_cam_tr, to_raster},
+    scene::{BoundingBox, Camera, Node, Texture, Triangle, World, to_cam_tr, to_raster},
     window::AppObserver,
 };
 
@@ -33,7 +32,7 @@ pub struct Steps2Engine {
     textures: Vec<Texture>,
 
     t_raster: Vec<(Vec3, Vec3, Vec3)>,
-    bounding_boxes: Vec<Rect>,
+    bounding_boxes: Vec<BoundingBox<u32>>,
     p01p20: Vec<(Vec3, Vec3)>,
     depth_buffer: Vec<f32>,
 }
@@ -89,13 +88,8 @@ impl Steps2Engine {
         // self.bounding_boxes.reserve(self.triangles.len());
         while self.bounding_boxes.len() < self.triangles.len() {
             let i = self.bounding_boxes.len();
-            // TODO: max_z >= MAX_DEPTH ?
-            let bb = bounding_box_triangle_2(&self.t_raster[i], size);
-            if !settings.culling_triangles
-                || !(bb.min_x == bb.max_x
-                    || bb.min_y == bb.max_y
-                    || bb.max_z <= world.camera.z_near)
-            {
+            let bb = BoundingBox::new_2(self.t_raster[i], size);
+            if !settings.culling_triangles || bb.is_visible(world.camera.z_near) {
                 self.bounding_boxes.push(bb);
             } else {
                 self.triangles.swap_remove(i);

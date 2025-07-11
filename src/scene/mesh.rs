@@ -225,10 +225,69 @@ impl Bounds {
             .unwrap()
             .clamp(Vec3::splat(-1.), Vec3::splat(1.));
 
-        // TODO: max_z >= MAX_DEPTH ?
-        !(min.x == max.x || min.y == max.y || max.z <= camera.z_near)
+        BoundingBox {
+            min_x: min.x,
+            min_y: min.y,
+            max_x: max.x,
+            max_y: max.y,
+            max_z: max.z,
+        }
+        .is_visible(camera.z_near)
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct BoundingBox<T> {
+    pub min_x: T,
+    pub min_y: T,
+    pub max_x: T,
+    pub max_y: T,
+    pub max_z: f32,
+}
+
+impl BoundingBox<u32> {
+    pub fn new(t: &Triangle, size: PhysicalSize<u32>) -> Self {
+        Self::new_2((t.p0, t.p1, t.p2), size)
+    }
+
+    pub fn new_2((p0, p1, p2): (Vec3, Vec3, Vec3), size: PhysicalSize<u32>) -> Self {
+        // TODO: MAX_DEPTH
+        let max_vec = vec3(size.width as f32 - 1., size.height as f32 - 1., 1000.);
+        let min = p0.min(p1).min(p2).clamp(Vec3::ZERO, max_vec);
+        let max = p0.max(p1).max(p2).clamp(Vec3::ZERO, max_vec);
+        BoundingBox {
+            min_x: min.x as u32,
+            min_y: min.y as u32,
+            max_x: max.x as u32,
+            max_y: max.y as u32,
+            max_z: max.z,
+        }
+    }
+}
+
+impl<T: PartialEq> BoundingBox<T> {
+    /// Is visible in box has a width or height non null and is in front of camera :
+    pub fn is_visible(&self, z_near: f32) -> bool {
+        // TODO: max_z >= MAX_DEPTH ?
+        !(self.min_x == self.max_x || self.min_y == self.max_y || self.max_z <= z_near)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Triangle {
+    pub p0: Vec3,
+    pub p1: Vec3,
+    pub p2: Vec3,
+    pub material: Texture,
+}
+
+/*
+impl Triangle {
+    pub fn min_z(&self) -> f32 {
+        f32::min(self.p0.z, f32::min(self.p1.z, self.p2.z))
+    }
+}
+*/
 
 pub struct Node {
     /// If there is no parent or it was destroyed, weak won't upgrade.

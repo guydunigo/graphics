@@ -7,7 +7,7 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use super::Settings;
 use crate::{
-    scene::{Camera, Node, Texture, World, world_to_raster},
+    scene::{Camera, Node, Triangle, World, world_to_raster},
     window::AppObserver,
 };
 pub use cpu_engine::CPUEngine;
@@ -43,36 +43,6 @@ fn world_to_raster_triangle(
         p1: world_to_raster(triangle.p1, cam, size, ratio_w_h),
         p2: world_to_raster(triangle.p2, cam, size, ratio_w_h),
         material: triangle.material,
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Rect {
-    pub min_x: u32,
-    pub min_y: u32,
-    pub max_x: u32,
-    pub max_y: u32,
-    pub max_z: f32,
-}
-
-// TODO: delete
-fn bounding_box_triangle(t: &Triangle, size: PhysicalSize<u32>) -> Rect {
-    Rect {
-        min_x: (t.p0.x.min(t.p1.x).min(t.p2.x) as u32).clamp(0, size.width - 1),
-        max_x: (t.p0.x.max(t.p1.x).max(t.p2.x) as u32).clamp(0, size.width - 1),
-        min_y: (t.p0.y.min(t.p1.y).min(t.p2.y) as u32).clamp(0, size.height - 1),
-        max_y: (t.p0.y.max(t.p1.y).max(t.p2.y) as u32).clamp(0, size.height - 1),
-        max_z: t.p0.z.max(t.p1.z).max(t.p2.z),
-    }
-}
-
-fn bounding_box_triangle_2((p0, p1, p2): &(Vec3, Vec3, Vec3), size: PhysicalSize<u32>) -> Rect {
-    Rect {
-        min_x: (p0.x.min(p1.x).min(p2.x) as u32).clamp(0, size.width - 1),
-        max_x: (p0.x.max(p1.x).max(p2.x) as u32).clamp(0, size.width - 1),
-        min_y: (p0.y.min(p1.y).min(p2.y) as u32).clamp(0, size.height - 1),
-        max_y: (p0.y.max(p1.y).max(p2.y) as u32).clamp(0, size.height - 1),
-        max_z: p0.z.max(p1.z).max(p2.z),
     }
 }
 
@@ -143,23 +113,6 @@ fn format_debug(
         stats
     )
 }
-
-// TODO: group by texture to avoid duplicates ? Closer to data
-#[derive(Clone, Copy)]
-pub struct Triangle {
-    pub p0: Vec3,
-    pub p1: Vec3,
-    pub p2: Vec3,
-    pub material: Texture,
-}
-
-/*
-impl Triangle {
-    pub fn min_z(&self) -> f32 {
-        f32::min(self.p0.z, f32::min(self.p1.z, self.p2.z))
-    }
-}
-*/
 
 pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
     {

@@ -8,12 +8,9 @@ use crate::{
     maths::Vec4u,
     rasterizer::{
         Settings,
-        cpu::{
-            MINIMAL_AMBIANT_LIGHT, Rect, Triangle, bounding_box_triangle, vec_cross_z,
-            world_to_raster_triangle,
-        },
+        cpu::{MINIMAL_AMBIANT_LIGHT, Triangle, vec_cross_z, world_to_raster_triangle},
     },
-    scene::{Texture, World},
+    scene::{BoundingBox, Texture, World},
 };
 
 use super::{SingleThreadedEngine, rasterize_triangle};
@@ -25,7 +22,7 @@ use crate::rasterizer::cpu::Stats;
 pub struct StepsEngine {
     triangles: Vec<Triangle>,
     t_raster: Vec<Triangle>,
-    bounding_boxes: Vec<Rect>,
+    bounding_boxes: Vec<BoundingBox<u32>>,
     p01p20: Vec<(Vec3, Vec3)>,
     depth_buffer: Vec<f32>,
 }
@@ -65,9 +62,8 @@ impl SingleThreadedEngine for StepsEngine {
         self.bounding_boxes.reserve(self.triangles.len());
         while self.bounding_boxes.len() < self.triangles.len() {
             let i = self.bounding_boxes.len();
-            // TODO: max_z >= MAX_DEPTH ?
-            let bb = bounding_box_triangle(&self.t_raster[i], size);
-            if !(bb.min_x == bb.max_x || bb.min_y == bb.max_y || bb.max_z <= world.camera.z_near) {
+            let bb = BoundingBox::new(&self.t_raster[i], size);
+            if !settings.culling_triangles || bb.is_visible(world.camera.z_near) {
                 self.bounding_boxes.push(bb);
             } else {
                 self.triangles.swap_remove(i);
