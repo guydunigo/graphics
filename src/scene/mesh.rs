@@ -1,6 +1,9 @@
 use std::sync::{Arc, RwLock, Weak};
 
-use glam::{Mat4, Vec3, Vec4, Vec4Swizzles, vec3, vec4};
+#[cfg(feature = "vulkan")]
+use glam::Vec4Swizzles;
+use glam::{Mat4, Vec3, Vec4, vec3, vec4};
+
 use winit::dpi::PhysicalSize;
 
 use crate::scene::{Camera, local_to_clipspace};
@@ -84,6 +87,7 @@ pub struct Bounds {
 }
 
 impl Bounds {
+    #[cfg(feature = "vulkan")]
     pub fn from_vertices(vertices: &[Vertex]) -> Self {
         let (min, max) = vertices.iter().fold(
             (vertices[0].position, vertices[0].position),
@@ -119,6 +123,7 @@ impl Bounds {
     // TODO: is it optimal ?
     // TODO: glitchy for large objects in front and behind camera
     /// From vulkan guide
+    #[cfg(feature = "vulkan")]
     pub fn is_visible(&self, view_proj: &Mat4, transform: &Mat4) -> bool {
         let mut corners = [
             vec3(1., 1., 1.),
@@ -151,6 +156,7 @@ impl Bounds {
         min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.
     }
 
+    #[cfg(feature = "vulkan")]
     pub fn clip_space_origin_depth(&self, view_proj: &Mat4, transform: &Mat4) -> f32 {
         let projected_origin = view_proj * transform * self.origin.extend(1.);
         projected_origin.z

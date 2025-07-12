@@ -14,18 +14,34 @@ enum WaitingOrReady {
     Ready(Scene),
 }
 
+/// Defaults waits for nothing
+impl Default for WaitingOrReady {
+    fn default() -> Self {
+        WaitingOrReady::Waiting(None)
+    }
+}
+
+#[derive(Default)]
 pub struct SceneStandIn {
     state: RwLock<WaitingOrReady>,
 }
 
 impl SceneStandIn {
-    pub fn new(path: &str, scene_loader: impl FnOnce(String) -> Scene + Send + 'static) -> Self {
-        let p = path.to_string();
+    pub fn new(
+        name: &str,
+        path: &str,
+        scene_loader: impl FnOnce(String) -> Scene + Send + 'static,
+    ) -> Self {
+        let name = name.to_string();
+        let path = path.to_string();
         let h = thread::spawn(move || {
             let t = Instant::now();
             // thread::sleep(std::time::Duration::from_millis(2000));
-            let res = scene_loader(p.clone());
-            println!("Scene `{p}` loaded in {}μs", t.elapsed().as_micros());
+            let res = scene_loader(path.clone());
+            println!(
+                "Scene `{name}` in `{path}` loaded in {}μs",
+                t.elapsed().as_micros()
+            );
             res
         });
         SceneStandIn::new_waiting(h)

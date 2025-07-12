@@ -9,9 +9,29 @@ use glam::{Mat4, Quat, Vec3, vec3};
 use rand::RngCore;
 
 use super::{GeoSurface, MeshAsset, Node, Scene, Texture, Vertex, obj_file};
-use crate::maths::PI;
+use crate::{
+    maths::PI,
+    scene::{gltf_file, scene::SceneStandIn},
+};
 
-pub fn base_scene() -> Scene {
+#[rustfmt::skip]
+pub const SCENES: &[(&str, &str, fn(String) -> Scene)] = &[
+    ("base", "base", base_scene),
+    ("structure", "resources/structure.glb", gltf_file::import_mesh_and_diffuse),
+    ("basicmesh", "./resources/basicmesh.glb", gltf_file::import_mesh_and_diffuse),
+    ("helmet", "./resources/DamagedHelmet.glb", gltf_file::import_mesh_and_diffuse),
+    ("corridor", "./resources/Sponza/Sponza.gltf", gltf_file::import_mesh_and_diffuse),
+    ("house2", "./resources/house2.glb", gltf_file::import_mesh_and_diffuse),
+];
+
+pub fn load_scene(name: &str) -> Option<SceneStandIn> {
+    SCENES
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(n, p, f)| SceneStandIn::new(n, p, f))
+}
+
+fn base_scene(_: String) -> Scene {
     let suzanne: Node = obj_file::import_mesh_and_diffuse(obj_file::SUZANNE_OBJ_PATH).into();
     let suzanne = Arc::new(RwLock::new(suzanne));
 

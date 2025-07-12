@@ -21,7 +21,7 @@ use ash::{Device, vk};
 use glam::{Mat4, Vec4, vec4};
 
 // TODO: proper resource path mngmt and all
-const SCENES: [(&str, &str); 5] = [
+const SCENES: &[(&str, &str)] = [
     ("basicmesh", "./resources/basicmesh.glb"),
     ("structure", "./resources/structure.glb"),
     ("helmet", "./resources/DamagedHelmet.glb"),

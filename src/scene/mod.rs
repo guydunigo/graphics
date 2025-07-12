@@ -10,7 +10,7 @@ use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 pub use mesh::*;
 use winit::dpi::PhysicalSize;
 
-use crate::scene::scene::SceneStandIn;
+use crate::scene::{mesh_library::load_scene, scene::SceneStandIn};
 
 pub mod gltf_file;
 mod mesh_library;
@@ -28,13 +28,9 @@ pub struct World {
 impl Default for World {
     fn default() -> Self {
         let t = Instant::now();
+        let scene = load_scene("base").unwrap_or_default();
         let w = World {
-            scene: SceneStandIn::new(
-                "resources/structure.glb",
-                gltf_file::import_mesh_and_diffuse,
-            ),
-            // scene: SceneStandIn::new_ready(mesh_library::base_scene()),
-            // TODO: scene: mesh_library::base_scene(),
+            scene,
             camera: Default::default(),
             sun_direction: vec3(-1., -1., -1.).normalize(),
         };
