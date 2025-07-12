@@ -72,7 +72,7 @@ impl ParIterEngine1 {
                     &mut self.world_trs,
                     &mut self.to_cam_trs,
                     &mut self.textures,
-                    &n.borrow(),
+                    &n.read().unwrap(),
                 )
             })
         });

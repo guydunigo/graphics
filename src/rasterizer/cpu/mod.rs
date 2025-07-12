@@ -142,5 +142,5 @@ pub fn populate_nodes(triangles: &mut Vec<Triangle>, node: &Node) {
 
     node.children
         .iter()
-        .for_each(|c| populate_nodes(triangles, &c.borrow()));
+        .for_each(|c| populate_nodes(triangles, &c.read().unwrap()));
 }

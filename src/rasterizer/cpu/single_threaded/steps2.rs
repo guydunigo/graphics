@@ -62,7 +62,7 @@ impl Steps2Engine {
                     &mut self.world_trs,
                     &mut self.to_cam_trs,
                     &mut self.textures,
-                    &n.borrow(),
+                    &n.read().unwrap(),
                 )
             });
             println!("Populated nodes in : {}μs", t.elapsed().as_micros());
@@ -339,7 +339,7 @@ pub fn populate_nodes_split(
             world_trs,
             to_cam_trs,
             textures,
-            &c.borrow(),
+            &c.read().unwrap(),
         )
     });
 }

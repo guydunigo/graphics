@@ -87,7 +87,7 @@ pub trait ParIterEngine {
             world.scene.if_present(|s| {
                 s.top_nodes()
                     .iter()
-                    .for_each(|n| populate_nodes(triangles, &n.borrow()))
+                    .for_each(|n| populate_nodes(triangles, &n.read().unwrap()))
             });
 
             /*

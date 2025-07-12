@@ -1,7 +1,4 @@
-use std::{
-    cell::RefCell,
-    rc::{Rc, Weak},
-};
+use std::sync::{Arc, RwLock, Weak};
 
 use glam::{Mat4, Vec3, Vec4, Vec4Swizzles, vec3, vec4};
 use winit::dpi::PhysicalSize;
@@ -268,15 +265,15 @@ impl Triangle {
 
 pub struct Node {
     /// If there is no parent or it was destroyed, weak won't upgrade.
-    pub parent: Weak<RefCell<Node>>,
-    pub children: Vec<Rc<RefCell<Node>>>,
+    pub parent: Weak<RwLock<Node>>,
+    pub children: Vec<Arc<RwLock<Node>>>,
 
     pub local_transform: Mat4,
     /// Cache :
     pub world_transform: Mat4,
 
     /// Actual mesh if any at this node
-    pub mesh: Option<Rc<MeshAsset>>,
+    pub mesh: Option<Arc<MeshAsset>>,
 }
 
 impl Node {
@@ -292,18 +289,18 @@ impl Node {
         }
     }
 
-    pub fn new_mesh(mesh: Rc<MeshAsset>, local_transform: Mat4) -> Self {
+    pub fn new_mesh(mesh: Arc<MeshAsset>, local_transform: Mat4) -> Self {
         Self {
             mesh: Some(mesh),
             ..Self::new(local_transform)
         }
     }
 
-    pub fn parent_of(mut children: Vec<Rc<RefCell<Node>>>) -> Rc<RefCell<Self>> {
-        Rc::new_cyclic(|f| {
+    pub fn parent_of(mut children: Vec<Arc<RwLock<Node>>>) -> Arc<RwLock<Self>> {
+        Arc::new_cyclic(|f| {
             children
                 .iter_mut()
-                .for_each(|c| c.borrow_mut().parent = f.clone());
+                .for_each(|c| c.write().unwrap().parent = f.clone());
             let node = Node {
                 parent: Default::default(),
                 children,
@@ -313,7 +310,7 @@ impl Node {
 
                 mesh: None,
             };
-            RefCell::new(node)
+            RwLock::new(node)
         })
     }
 
@@ -321,7 +318,7 @@ impl Node {
         self.world_transform = parent_mat * self.local_transform;
         self.children
             .iter()
-            .for_each(|c| c.borrow_mut().refresh_transform(&self.world_transform));
+            .for_each(|c| c.write().unwrap().refresh_transform(&self.world_transform));
     }
 
     pub fn transform(&mut self, tr: &Mat4) {
@@ -344,7 +341,7 @@ impl From<MeshAsset> for Node {
             local_transform: Default::default(),
             world_transform: Default::default(),
 
-            mesh: Some(Rc::new(value)),
+            mesh: Some(Arc::new(value)),
         }
     }
 }

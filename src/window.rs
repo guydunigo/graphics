@@ -303,7 +303,7 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::ArrowLeft => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut().transform(&Mat4::from_rotation_y(-0.1));
+                                m.write().unwrap().transform(&Mat4::from_rotation_y(-0.1));
                             }
                         });
                     }
@@ -311,7 +311,7 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::ArrowRight => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut().transform(&Mat4::from_rotation_y(0.1));
+                                m.write().unwrap().transform(&Mat4::from_rotation_y(0.1));
                             }
                         });
                     }
@@ -319,7 +319,7 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::ArrowUp => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut().transform(&Mat4::from_rotation_x(-0.1));
+                                m.write().unwrap().transform(&Mat4::from_rotation_x(-0.1));
                             }
                         });
                     }
@@ -327,7 +327,7 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::ArrowDown => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut().transform(&Mat4::from_rotation_x(0.1));
+                                m.write().unwrap().transform(&Mat4::from_rotation_x(0.1));
                             }
                         });
                     }
@@ -335,7 +335,8 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::NumpadAdd => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut()
+                                m.write()
+                                    .unwrap()
                                     .transform(&Mat4::from_scale(Vec3::splat(1.1)));
                             }
                         });
@@ -344,7 +345,8 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::NumpadSubtract => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut()
+                                m.write()
+                                    .unwrap()
                                     .transform(&Mat4::from_scale(Vec3::splat(0.9)));
                             }
                         });
@@ -353,7 +355,8 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::Numpad4 => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut()
+                                m.write()
+                                    .unwrap()
                                     .transform(&Mat4::from_translation(vec3(-0.1, 0., 0.)));
                             }
                         });
@@ -362,7 +365,8 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::Numpad6 => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut()
+                                m.write()
+                                    .unwrap()
                                     .transform(&Mat4::from_translation(vec3(0.1, 0., 0.)));
                             }
                         });
@@ -371,7 +375,8 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::Numpad8 => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut()
+                                m.write()
+                                    .unwrap()
                                     .transform(&Mat4::from_translation(vec3(0., 0., -0.1)));
                             }
                         });
@@ -380,7 +385,8 @@ impl ApplicationHandler for App<'_> {
                     KeyCode::Numpad2 => {
                         self.world.scene.if_present(|s| {
                             if let Some(m) = s.get_named_node("suzanne") {
-                                m.borrow_mut()
+                                m.write()
+                                    .unwrap()
                                     .transform(&Mat4::from_translation(vec3(0., 0., 0.1)));
                             }
                         });

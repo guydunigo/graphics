@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, iter::once, rc::Rc};
+use std::{
+    collections::HashMap,
+    iter::once,
+    sync::{Arc, RwLock},
+};
 
 use glam::{Mat4, Quat, Vec3, vec3};
 /// Set of constructor functions to get testing objects
@@ -9,9 +13,9 @@ use crate::maths::PI;
 
 pub fn base_scene() -> Scene {
     let suzanne: Node = obj_file::import_mesh_and_diffuse(obj_file::SUZANNE_OBJ_PATH).into();
-    let suzanne = Rc::new(RefCell::new(suzanne));
+    let suzanne = Arc::new(RwLock::new(suzanne));
 
-    let pyramid = Rc::new(RefCell::new(base_pyramid()));
+    let pyramid = Arc::new(RwLock::new(base_pyramid()));
 
     let top = Node::parent_of(
         vec![
@@ -22,7 +26,7 @@ pub fn base_scene() -> Scene {
             right_wall(),
         ]
         .drain(..)
-        .map(|n| Rc::new(RefCell::new(n)))
+        .map(|n| Arc::new(RwLock::new(n)))
         .chain(once(suzanne.clone()))
         .chain(once(pyramid.clone()))
         .collect(),
@@ -53,7 +57,7 @@ fn base_triangle() -> Node {
     )];
 
     Node::new_mesh(
-        Rc::new(MeshAsset::new(vertices, indices, surfaces)),
+        Arc::new(MeshAsset::new(vertices, indices, surfaces)),
         Mat4::from_translation(vec3(0., 0., -10.)),
     )
 }
@@ -114,7 +118,7 @@ fn base_pyramid() -> Node {
     ];
 
     Node::new_mesh(
-        Rc::new(MeshAsset::new(vertices, indices, surfaces)),
+        Arc::new(MeshAsset::new(vertices, indices, surfaces)),
         Mat4::from_scale_rotation_translation(
             Vec3::splat(0.7),
             Quat::from_rotation_z(-PI / 3.),
@@ -165,7 +169,7 @@ fn triangles_plane_mesh(color_mask: u32) -> MeshAsset {
 
 fn triangles_plane(color_mask: u32, pos: Vec3, rot: Quat, scale: f32) -> Node {
     Node::new_mesh(
-        Rc::new(triangles_plane_mesh(color_mask)),
+        Arc::new(triangles_plane_mesh(color_mask)),
         Mat4::from_scale_rotation_translation(Vec3::splat(scale), rot, pos),
     )
 }
