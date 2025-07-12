@@ -19,8 +19,6 @@ use crate::{
     window::AppObserver,
 };
 
-// use super::iterator::rasterize_triangle;
-
 #[cfg(feature = "stats")]
 use crate::rasterizer::cpu::Stats;
 
@@ -51,19 +49,25 @@ impl Steps2Engine {
         // self.world_trs.clear();
         // self.to_cam_trs.clear();
         // self.textures.clear();
-        world.scene.top_nodes().iter().for_each(|n| {
-            populate_nodes_split(
-                settings,
-                &world.camera,
-                size,
-                ratio_w_h,
-                &mut self.triangles,
-                &mut self.world_trs,
-                &mut self.to_cam_trs,
-                &mut self.textures,
-                &n.borrow(),
-            )
+        let t = Instant::now();
+        world.scene.if_present(|s| {
+            let t = Instant::now();
+            s.top_nodes().iter().for_each(|n| {
+                populate_nodes_split(
+                    settings,
+                    &world.camera,
+                    size,
+                    ratio_w_h,
+                    &mut self.triangles,
+                    &mut self.world_trs,
+                    &mut self.to_cam_trs,
+                    &mut self.textures,
+                    &n.borrow(),
+                )
+            });
+            println!("Populated nodes in : {}μs", t.elapsed().as_micros());
         });
+        println!(" - After node closure : {}μs", t.elapsed().as_micros());
 
         #[cfg(feature = "stats")]
         {

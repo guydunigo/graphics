@@ -301,119 +301,89 @@ impl ApplicationHandler for App<'_> {
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowLeft => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut().transform(&Mat4::from_rotation_y(-0.1));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut().transform(&Mat4::from_rotation_y(-0.1));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowRight => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut().transform(&Mat4::from_rotation_y(0.1));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut().transform(&Mat4::from_rotation_y(0.1));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowUp => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut().transform(&Mat4::from_rotation_x(-0.1));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut().transform(&Mat4::from_rotation_x(-0.1));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::ArrowDown => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut().transform(&Mat4::from_rotation_x(0.1));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut().transform(&Mat4::from_rotation_x(0.1));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::NumpadAdd => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut()
-                                .transform(&Mat4::from_scale(Vec3::splat(1.1)));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut()
+                                    .transform(&Mat4::from_scale(Vec3::splat(1.1)));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::NumpadSubtract => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut()
-                                .transform(&Mat4::from_scale(Vec3::splat(0.9)));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut()
+                                    .transform(&Mat4::from_scale(Vec3::splat(0.9)));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::Numpad4 => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut()
-                                .transform(&Mat4::from_translation(vec3(-0.1, 0., 0.)));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut()
+                                    .transform(&Mat4::from_translation(vec3(-0.1, 0., 0.)));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::Numpad6 => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut()
-                                .transform(&Mat4::from_translation(vec3(0.1, 0., 0.)));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut()
+                                    .transform(&Mat4::from_translation(vec3(0.1, 0., 0.)));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::Numpad8 => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut()
-                                .transform(&Mat4::from_translation(vec3(0., 0., -0.1)));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut()
+                                    .transform(&Mat4::from_translation(vec3(0., 0., -0.1)));
+                            }
+                        });
                     }
                     #[cfg(feature = "cpu")]
                     KeyCode::Numpad2 => {
-                        if let Some(m) = self
-                            .world
-                            .scene
-                            .get()
-                            .and_then(|t| t.get_named_node("suzanne"))
-                        {
-                            m.borrow_mut()
-                                .transform(&Mat4::from_translation(vec3(0., 0., 0.1)));
-                        }
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.borrow_mut()
+                                    .transform(&Mat4::from_translation(vec3(0., 0., 0.1)));
+                            }
+                        });
                     }
                     KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,
                     KeyCode::Digit1 => w.set_next_engine(),

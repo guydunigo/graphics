@@ -20,34 +20,39 @@ impl WaitingOrReady {
 }
 
 pub struct SceneStandIn {
-    state: WaitingOrReady,
+    state: RefCell<WaitingOrReady>,
 }
 
 impl SceneStandIn {
     pub fn new_waiting(handle: JoinHandle<Scene>) -> Self {
         Self {
-            state: WaitingOrReady::Waiting(Some(handle)),
+            state: RefCell::new(WaitingOrReady::Waiting(Some(handle))),
         }
     }
 
     pub fn new_ready(scene: Scene) -> Self {
         Self {
-            state: WaitingOrReady::Ready(scene),
+            state: RefCell::new(WaitingOrReady::Ready(scene)),
         }
     }
 
-    /// Get if ready.
-    pub fn get(&mut self) -> Option<&Scene> {
-        if let WaitingOrReady::Waiting(handle) = &mut self.state
+    // If thread is finished, read result.
+    fn set_if_ready(&self) {
+        if let WaitingOrReady::Waiting(ref mut handle) = *self.state.borrow_mut()
             && let Some(handle) = handle.take_if(|h| h.is_finished())
         {
-            std::mem::replace(
-                &mut self.state,
-                WaitingOrReady::Ready(handle.join().unwrap()),
-            );
+            self.state
+                .replace(WaitingOrReady::Ready(handle.join().unwrap()));
         }
+    }
+    pub fn if_present<T>(&self, closure: impl FnOnce(&Scene) -> T) -> Option<T> {
+        self.set_if_ready();
 
-        self.state.get_ready()
+        if let WaitingOrReady::Ready(scene) = &*self.state.borrow() {
+            Some(closure(scene))
+        } else {
+            None
+        }
     }
 }
 

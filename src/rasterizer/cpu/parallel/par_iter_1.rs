@@ -61,18 +61,20 @@ impl ParIterEngine1 {
         // self.world_trs.clear();
         // self.to_cam_trs.clear();
         // self.textures.clear();
-        world.scene.top_nodes().iter().for_each(|n| {
-            populate_nodes_split(
-                settings,
-                &world.camera,
-                size,
-                ratio_w_h,
-                &mut self.triangles,
-                &mut self.world_trs,
-                &mut self.to_cam_trs,
-                &mut self.textures,
-                &n.borrow(),
-            )
+        world.scene.if_present(|s| {
+            s.top_nodes().iter().for_each(|n| {
+                populate_nodes_split(
+                    settings,
+                    &world.camera,
+                    size,
+                    ratio_w_h,
+                    &mut self.triangles,
+                    &mut self.world_trs,
+                    &mut self.to_cam_trs,
+                    &mut self.textures,
+                    &n.borrow(),
+                )
+            })
         });
 
         #[cfg(feature = "stats")]
@@ -301,7 +303,8 @@ impl ParIterEngine1 {
                         // );
                         let ix = i * settings.oversampling;
 
-                        let color_avg: ColorF32 = (0..(settings.oversampling * size.width as usize))
+                        let color_avg: ColorF32 = (0..(settings.oversampling
+                            * size.width as usize))
                             .step_by(size.width as usize)
                             .flat_map(|jo| {
                                 (0..settings.oversampling).map(move |io| {

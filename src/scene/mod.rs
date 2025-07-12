@@ -1,9 +1,6 @@
 /// Describing the world
 mod camera;
-use std::{
-    sync::{Arc, RwLock},
-    time::Instant,
-};
+use std::time::Instant;
 
 mod scene;
 pub use camera::Camera;
@@ -33,6 +30,7 @@ impl Default for World {
         let t = Instant::now();
         let w = World {
             scene: gltf_file::import_mesh_and_diffuse_async("resources/structure.glb"),
+            // scene: SceneStandIn::new_ready(mesh_library::base_scene()),
             // TODO: scene: mesh_library::base_scene(),
             camera: Default::default(),
             sun_direction: vec3(-1., -1., -1.).normalize(),
