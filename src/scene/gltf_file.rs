@@ -32,11 +32,11 @@ fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
     // let (document, buffers, _) = gltf::import(path).unwrap();
 
     let t = Instant::now();
-    let (materials_vec, _materials) = load_materials(&document);
+    let materials_vec = load_materials(&document);
     println!(" - Materials loaded in : {}μs", t.elapsed().as_micros());
 
     let t = Instant::now();
-    let (meshes_vec, _meshes) = load_meshes(&document, buffers, materials_vec);
+    let meshes_vec = load_meshes(&document, buffers, materials_vec);
     println!(" - Meshes loaded in : {}μs", t.elapsed().as_micros());
 
     let t = Instant::now();
@@ -51,29 +51,27 @@ fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
     scene
 }
 
-fn load_materials(document: &Document) -> (Vec<Texture>, HashMap<String, Texture>) {
-    let mut materials = HashMap::new();
+fn load_materials(document: &Document) -> Vec<Texture> {
     let mut materials_vec = Vec::with_capacity(document.materials().count());
     materials_vec.extend(document.materials().map(|mat| {
         let new_mat = ColorF32::from_rgba(mat.pbr_metallic_roughness().base_color_factor());
-        let new_mat = Texture::Color(new_mat.as_color_u32());
+        // let new_mat = Texture::Color(new_mat.as_color_u32());
+        // if let Some(name) = mat.name() {
+        //     materials.insert(name.into(), new_mat);
+        // }
+        // new_mat
 
-        if let Some(name) = mat.name() {
-            materials.insert(name.into(), new_mat);
-        }
-
-        new_mat
+        Texture::Color(new_mat.as_color_u32())
     }));
 
-    (materials_vec, materials)
+    materials_vec
 }
 
 fn load_meshes(
     document: &Document,
     buffers: Vec<buffer::Data>,
     materials_vec: Vec<Texture>,
-) -> (Vec<Rc<MeshAsset>>, HashMap<String, Rc<MeshAsset>>) {
-    let mut meshes = HashMap::new();
+) -> Vec<Rc<MeshAsset>> {
     let mut meshes_vec = Vec::with_capacity(document.meshes().count());
     meshes_vec.extend(document.meshes().map(|mesh| {
         let mut indices = Vec::new();
@@ -133,15 +131,16 @@ fn load_meshes(
             })
             .collect();
 
-        let new_mesh = Rc::new(MeshAsset::new(vertices, indices, surfaces));
-        if let Some(name) = mesh.name().map(String::from) {
-            meshes.insert(name, new_mesh.clone());
-        }
+        // let new_mesh = Rc::new(MeshAsset::new(vertices, indices, surfaces));
+        // if let Some(name) = mesh.name().map(String::from) {
+        //     meshes.insert(name, new_mesh.clone());
+        // }
+        // new_mesh
 
-        new_mesh
+        Rc::new(MeshAsset::new(vertices, indices, surfaces))
     }));
 
-    (meshes_vec, meshes)
+    meshes_vec
 }
 
 fn load_nodes(
