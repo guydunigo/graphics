@@ -84,11 +84,12 @@ pub trait ParIterEngine {
             // TODO: let t = Instant::now();
             let triangles = self.triangles_mut();
             triangles.clear();
-            world
-                .scene
-                .top_nodes()
-                .iter()
-                .for_each(|n| populate_nodes(triangles, &n.borrow()));
+            if let Some(scene) = world.scene.get() {
+                scene
+                    .top_nodes()
+                    .iter()
+                    .for_each(|n| populate_nodes(triangles, &n.borrow()));
+            }
 
             /*
             // TODO: Can't sort, not from camera view

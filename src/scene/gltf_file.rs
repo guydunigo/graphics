@@ -1,14 +1,23 @@
-use std::{cell::RefCell, collections::HashMap, iter::zip, path::Path, rc::Rc, time::Instant};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    iter::zip,
+    path::Path,
+    rc::Rc,
+    sync::{Arc, RwLock},
+    thread,
+    time::Instant,
+};
 
 use crate::{
     maths::ColorF32,
-    scene::{GeoSurface, MeshAsset, Node, Scene, Texture, Vertex},
+    scene::{GeoSurface, MeshAsset, Node, Scene, Texture, Vertex, scene::SceneStandIn},
 };
 use glam::{Mat4, Vec3, Vec4};
 use gltf::{Document, buffer};
 
 // TODO: better error handling
-pub fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
+fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
     let t0 = Instant::now();
     println!("Loading glTF : {}", path.as_ref().to_string_lossy());
 
@@ -179,4 +188,10 @@ fn load_nodes(
         .collect();
 
     (top_nodes, nodes)
+}
+
+pub fn import_mesh_and_diffuse_async<P: AsRef<Path>>(path: P) -> SceneStandIn {
+    // let h = thread::spawn(|| import_mesh_and_diffuse(path));
+    // SceneStandIn::new_waiting(h)
+    SceneStandIn::new_ready(import_mesh_and_diffuse(path))
 }

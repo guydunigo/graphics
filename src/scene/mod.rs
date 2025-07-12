@@ -1,12 +1,19 @@
 /// Describing the world
 mod camera;
-use std::{cell::RefCell, collections::HashMap, rc::Rc, time::Instant};
+use std::{
+    sync::{Arc, RwLock},
+    time::Instant,
+};
 
+mod scene;
 pub use camera::Camera;
+pub use scene::Scene;
 mod mesh;
 use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 pub use mesh::*;
 use winit::dpi::PhysicalSize;
+
+use crate::scene::scene::SceneStandIn;
 
 pub mod gltf_file;
 mod mesh_library;
@@ -15,8 +22,8 @@ pub mod obj_file;
 pub const DEFAULT_BACKGROUND_COLOR: u32 = 0xff181818;
 
 pub struct World {
-    pub scene: Scene,
-    // TODO: copy vulkan camera and world info
+    pub scene: SceneStandIn,
+    // TODO: copy vulkan world info
     pub camera: Camera,
     pub sun_direction: Vec3,
 }
@@ -25,8 +32,8 @@ impl Default for World {
     fn default() -> Self {
         let t = Instant::now();
         let w = World {
-            scene: gltf_file::import_mesh_and_diffuse("resources/structure.glb"),
-            // scene: mesh_library::base_scene(),
+            scene: gltf_file::import_mesh_and_diffuse_async("resources/structure.glb"),
+            // TODO: scene: mesh_library::base_scene(),
             camera: Default::default(),
             sun_direction: vec3(-1., -1., -1.).normalize(),
         };
@@ -49,38 +56,6 @@ pub enum Texture {
 impl Default for Texture {
     fn default() -> Self {
         Self::Color(DEFAULT_COLOR)
-    }
-}
-
-pub struct Scene {
-    // meshes: HashMap<String, Rc<MeshAsset>>,
-    named_nodes: HashMap<String, Rc<RefCell<Node>>>,
-
-    top_nodes: Vec<Rc<RefCell<Node>>>,
-}
-
-impl Scene {
-    pub fn new(
-        named_nodes: HashMap<String, Rc<RefCell<Node>>>,
-        top_nodes: Vec<Rc<RefCell<Node>>>,
-    ) -> Self {
-        // Update world transform infos to all nodes.
-        top_nodes
-            .iter()
-            .for_each(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY));
-
-        Scene {
-            named_nodes,
-            top_nodes,
-        }
-    }
-
-    pub fn top_nodes(&self) -> &[Rc<RefCell<Node>>] {
-        &self.top_nodes
-    }
-
-    pub fn get_named_node(&self, name: &str) -> Option<&Rc<RefCell<Node>>> {
-        self.named_nodes.get(name)
     }
 }
 
