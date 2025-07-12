@@ -19,7 +19,8 @@ pub fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
     let gltf::Gltf { document, blob } = gltf::Gltf::open(&path).unwrap();
 
     let t1 = Instant::now();
-    let buffers = gltf::import_buffers(&document, Some(path.as_ref()), blob).unwrap();
+    let buffers =
+        gltf::import_buffers(&document, Some(path.as_ref().parent().unwrap()), blob).unwrap();
 
     // let (document, buffers, _) = gltf::import(path).unwrap();
 

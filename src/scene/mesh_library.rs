@@ -24,12 +24,19 @@ pub const SCENES: &[(&str, &str, fn(String) -> Scene)] = &[
     ("house2", "./resources/house2.glb", gltf_file::import_mesh_and_diffuse),
 ];
 
-pub fn load_scene(name: &str) -> Option<SceneStandIn> {
+pub fn load_scene_index_looping(index: usize) -> SceneStandIn {
+    let (n, p, f) = SCENES[index % SCENES.len()];
+    SceneStandIn::new(n, p, f)
+}
+
+/*
+pub fn load_scene_by_name(name: &str) -> Option<SceneStandIn> {
     SCENES
         .iter()
         .find(|(n, _, _)| *n == name)
         .map(|(n, p, f)| SceneStandIn::new(n, p, f))
 }
+*/
 
 fn base_scene(_: String) -> Scene {
     let suzanne: Node = obj_file::import_mesh_and_diffuse(obj_file::SUZANNE_OBJ_PATH).into();

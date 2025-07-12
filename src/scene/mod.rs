@@ -10,7 +10,7 @@ use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 pub use mesh::*;
 use winit::dpi::PhysicalSize;
 
-use crate::scene::{mesh_library::load_scene, scene::SceneStandIn};
+use crate::scene::{mesh_library::load_scene_index_looping, scene::SceneStandIn};
 
 pub mod gltf_file;
 mod mesh_library;
@@ -20,6 +20,7 @@ pub const DEFAULT_BACKGROUND_COLOR: u32 = 0xff181818;
 
 pub struct World {
     pub scene: SceneStandIn,
+    pub scene_index: usize,
     // TODO: copy vulkan world info
     pub camera: Camera,
     pub sun_direction: Vec3,
@@ -28,14 +29,21 @@ pub struct World {
 impl Default for World {
     fn default() -> Self {
         let t = Instant::now();
-        let scene = load_scene("base").unwrap_or_default();
         let w = World {
-            scene,
+            scene: load_scene_index_looping(0),
+            scene_index: 0,
             camera: Default::default(),
             sun_direction: vec3(-1., -1., -1.).normalize(),
         };
         println!("World loaded in : {}μs", t.elapsed().as_micros());
         w
+    }
+}
+
+impl World {
+    pub fn load_next_scene(&mut self) {
+        self.scene_index += 1;
+        self.scene = load_scene_index_looping(self.scene_index);
     }
 }
 
