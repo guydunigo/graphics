@@ -67,7 +67,9 @@ impl Steps2Engine {
             });
             println!("Populated nodes in : {}μs", t.elapsed().as_micros());
         });
-        println!(" - After node closure : {}μs", t.elapsed().as_micros());
+        if !self.triangles.is_empty() {
+            println!("  -> After node closure : {}μs", t.elapsed().as_micros());
+        }
 
         #[cfg(feature = "stats")]
         {

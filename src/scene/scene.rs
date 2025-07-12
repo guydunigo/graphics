@@ -1,7 +1,8 @@
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    thread::JoinHandle,
+    thread::{self, JoinHandle},
+    time::Instant,
 };
 
 use glam::Mat4;
@@ -13,32 +14,36 @@ enum WaitingOrReady {
     Ready(Scene),
 }
 
-impl WaitingOrReady {
-    fn get_ready(&self) -> Option<&Scene> {
-        if let WaitingOrReady::Ready(scene) = self {
-            Some(scene)
-        } else {
-            None
-        }
-    }
-}
-
 pub struct SceneStandIn {
     state: RwLock<WaitingOrReady>,
 }
 
 impl SceneStandIn {
-    pub fn new_waiting(handle: JoinHandle<Scene>) -> Self {
+    pub fn new(path: &str, scene_loader: impl FnOnce(String) -> Scene + Send + 'static) -> Self {
+        let p = path.to_string();
+        let h = thread::spawn(move || {
+            let t = Instant::now();
+            // thread::sleep(std::time::Duration::from_millis(2000));
+            let res = scene_loader(p.clone());
+            println!("Scene `{p}` loaded in {}μs", t.elapsed().as_micros());
+            res
+        });
+        SceneStandIn::new_waiting(h)
+    }
+
+    fn new_waiting(handle: JoinHandle<Scene>) -> Self {
         Self {
             state: RwLock::new(WaitingOrReady::Waiting(Some(handle))),
         }
     }
 
+    /*
     pub fn new_ready(scene: Scene) -> Self {
         Self {
             state: RwLock::new(WaitingOrReady::Ready(scene)),
         }
     }
+    */
 
     // If thread is finished, read result.
     fn set_if_ready(&self) {

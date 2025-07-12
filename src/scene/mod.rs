@@ -29,7 +29,10 @@ impl Default for World {
     fn default() -> Self {
         let t = Instant::now();
         let w = World {
-            scene: gltf_file::import_mesh_and_diffuse_async("resources/structure.glb"),
+            scene: SceneStandIn::new(
+                "resources/structure.glb",
+                gltf_file::import_mesh_and_diffuse,
+            ),
             // scene: SceneStandIn::new_ready(mesh_library::base_scene()),
             // TODO: scene: mesh_library::base_scene(),
             camera: Default::default(),

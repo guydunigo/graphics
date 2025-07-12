@@ -1,50 +1,58 @@
 use std::{
     collections::HashMap,
     iter::zip,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, RwLock},
-    thread,
     time::Instant,
 };
 
 use crate::{
     maths::ColorF32,
-    scene::{GeoSurface, MeshAsset, Node, Scene, Texture, Vertex, scene::SceneStandIn},
+    scene::{GeoSurface, MeshAsset, Node, Scene, Texture, Vertex},
 };
 use glam::{Mat4, Vec3, Vec4};
 use gltf::{Document, buffer};
 
 // TODO: better error handling
-fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
+pub fn import_mesh_and_diffuse<P: AsRef<Path>>(path: P) -> Scene {
     let t0 = Instant::now();
-    println!("Loading glTF : {}", path.as_ref().to_string_lossy());
-
-    let t = Instant::now();
     let gltf::Gltf { document, blob } = gltf::Gltf::open(&path).unwrap();
-    println!(" - Document loaded in : {}μs", t.elapsed().as_micros());
 
-    let t = Instant::now();
+    let t1 = Instant::now();
     let buffers = gltf::import_buffers(&document, Some(path.as_ref()), blob).unwrap();
-    println!(" - Buffers loaded in : {}μs", t.elapsed().as_micros());
 
     // let (document, buffers, _) = gltf::import(path).unwrap();
 
-    let t = Instant::now();
+    let t2 = Instant::now();
     let materials_vec = load_materials(&document);
-    println!(" - Materials loaded in : {}μs", t.elapsed().as_micros());
 
-    let t = Instant::now();
+    let t3 = Instant::now();
     let meshes_vec = load_meshes(&document, buffers, materials_vec);
-    println!(" - Meshes loaded in : {}μs", t.elapsed().as_micros());
 
-    let t = Instant::now();
+    let t4 = Instant::now();
     let (top_nodes, nodes) = load_nodes(&document, &meshes_vec[..]);
-    println!(" - Nodes loaded in : {}μs", t.elapsed().as_micros());
 
-    let t = Instant::now();
+    let t5 = Instant::now();
     let scene = Scene::new(nodes, top_nodes);
-    println!(" - Remainder loaded in : {}μs", t.elapsed().as_micros());
-    println!(" = Total : {}μs", t0.elapsed().as_micros());
+
+    println!(
+        "Loading glTF : {}
+  - Document loaded in : {}μs
+  - Buffers loaded in : {}μs
+  - Materials loaded in : {}μs
+  - Meshes loaded in : {}μs
+  - Nodes loaded in : {}μs
+  - Remainder loaded in : {}μs
+  = Total : {}μs",
+        path.as_ref().to_string_lossy(),
+        t1.duration_since(t0).as_micros(),
+        t2.duration_since(t1).as_micros(),
+        t3.duration_since(t2).as_micros(),
+        t4.duration_since(t3).as_micros(),
+        t5.duration_since(t4).as_micros(),
+        t5.elapsed().as_micros(),
+        t0.elapsed().as_micros()
+    );
 
     scene
 }
@@ -185,11 +193,4 @@ fn load_nodes(
         .collect();
 
     (top_nodes, nodes)
-}
-
-pub fn import_mesh_and_diffuse_async<P: AsRef<Path>>(path: P) -> SceneStandIn {
-    let p = PathBuf::from(path.as_ref());
-    let h = thread::spawn(|| import_mesh_and_diffuse(p));
-    SceneStandIn::new_waiting(h)
-    // SceneStandIn::new_ready(import_mesh_and_diffuse(path))
 }
