@@ -21,7 +21,7 @@ use ash::{Device, vk};
 use glam::{Mat4, Vec4, vec4};
 
 // TODO: proper resource path mngmt and all
-const SCENES: &[(&str, &str)] = [
+const SCENES: &[(&str, &str)] = &[
     ("basicmesh", "./resources/basicmesh.glb"),
     ("structure", "./resources/structure.glb"),
     ("helmet", "./resources/DamagedHelmet.glb"),
@@ -133,10 +133,9 @@ impl Scene<'_> {
     pub fn update_scene(&mut self, draw_extent: vk::Extent2D, view: Mat4, scene: &String) {
         self.main_draw_ctx.clear();
 
-        self.loaded_scenes
-            .get(scene)
-            .iter()
-            .for_each(|s| s.draw(&Mat4::IDENTITY, &mut self.main_draw_ctx));
+        if let Some(s) = self.loaded_scenes.get(scene) {
+            s.draw(&Mat4::IDENTITY, &mut self.main_draw_ctx);
+        }
 
         // Camera projection
         let mut proj = Mat4::perspective_rh(

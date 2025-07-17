@@ -20,7 +20,7 @@ use super::ParStats;
 #[cfg(feature = "stats")]
 use std::sync::atomic::Ordering;
 
-/// par_bridge
+/// par_drain
 #[derive(Default, Clone)]
 pub struct ParIterEngine3 {
     triangles: Vec<Triangle>,

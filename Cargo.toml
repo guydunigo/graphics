@@ -56,5 +56,5 @@ vulkan_stats = []
 vulkan_validation_layers = []
 
 default = ["cpu"]
-# default = ["vulkan", "vulkan_stats", "vulkan_validation_layers"]
-# default = ["vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]
+# default = ["cpu", "vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]
+# No shader compile : default = ["vulkan", "vulkan_stats", "vulkan_validation_layers"]

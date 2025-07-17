@@ -125,7 +125,7 @@ impl Bounds {
     /// From vulkan guide
     #[cfg(feature = "vulkan")]
     pub fn is_visible(&self, view_proj: &Mat4, transform: &Mat4) -> bool {
-        let mut corners = [
+        let corners = [
             vec3(1., 1., 1.),
             vec3(1., 1., -1.),
             vec3(1., -1., 1.),
@@ -138,19 +138,13 @@ impl Bounds {
 
         let matrix = view_proj * transform;
 
-        corners.iter_mut().for_each(|c| {
-            let v = matrix * (self.origin + *c * self.extents).extend(1.);
-            *c = v.xyz() / v.w;
+        let min = Vec3::splat(1.5);
+        let max = Vec3::splat(-1.5);
+        let (min, max) = corners.iter().fold((min, max), |(min, max), c| {
+            let v = matrix * (self.origin + c * self.extents).extend(1.);
+            let v = v.xyz() / v.w;
+            (min.min(v), max.max(v))
         });
-
-        let min = corners
-            .iter()
-            .copied()
-            .fold(vec3(1.5, 1.5, 1.5), |a, b| a.min(b));
-        let max = corners
-            .iter()
-            .copied()
-            .fold(vec3(-1.5, -1.5, -1.5), |a, b| a.min(b));
 
         // Clip space box in view
         min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.

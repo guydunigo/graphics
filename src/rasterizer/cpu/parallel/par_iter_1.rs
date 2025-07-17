@@ -1,4 +1,4 @@
-//! Like steps2 but parallel : par_bridge
+//! Like steps2 but parallel : par_drain
 use glam::{Mat4, Vec3, Vec4Swizzles};
 use rayon::prelude::*;
 use std::{
@@ -34,7 +34,6 @@ use super::ParStats;
 #[cfg(feature = "stats")]
 use std::sync::atomic::Ordering;
 
-/// par_bridge
 #[derive(Default, Clone)]
 pub struct ParIterEngine1 {
     triangles: Vec<(Vec3, Vec3, Vec3)>,
@@ -61,7 +60,9 @@ impl ParIterEngine1 {
         // self.world_trs.clear();
         // self.to_cam_trs.clear();
         // self.textures.clear();
+        let t = Instant::now();
         world.scene.if_present(|s| {
+            let t = Instant::now();
             s.top_nodes().iter().for_each(|n| {
                 populate_nodes_split(
                     settings,
@@ -74,8 +75,12 @@ impl ParIterEngine1 {
                     &mut self.textures,
                     &n.read().unwrap(),
                 )
-            })
+            });
+            println!("Populated nodes in : {}μs", t.elapsed().as_micros());
         });
+        if !self.triangles.is_empty() {
+            println!("  -> After node closure : {}μs", t.elapsed().as_micros());
+        }
 
         #[cfg(feature = "stats")]
         {

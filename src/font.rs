@@ -1,4 +1,5 @@
-// pub const FONT_NAME: &str = "DejaVuSansMono";
+#[cfg(feature = "vulkan")]
+pub const FONT_NAME: &str = "DejaVuSansMono";
 pub const FONT: &[u8] = include_bytes!("../resources/DejaVuSansMono.ttf") as &[u8];
 
 #[cfg(feature = "cpu")]

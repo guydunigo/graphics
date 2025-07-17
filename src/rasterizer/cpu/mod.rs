@@ -88,7 +88,8 @@ fn format_debug(
 
     // TODO: describe each numbers
     format!(
-        "fps : {} | {}μs - {}μs - {}μs / {}μs / {}μs - {}μs{}\nWindow : {}x{}\nCamera : {} p: {} y: {}\n{:#?}\n{}",
+        "fps : {}:{} | {}μs - {}μs - {}μs / {}μs / {}μs:{}μs{}\nWindow : {}x{}\nCamera : {} p: {} y: {}\n{:#?}\n{}",
+        1_000_000 / app.last_frame_micros(),
         app.fps_avg().round(),
         app.last_buffer_fill_micros,
         app.last_rendering_micros,

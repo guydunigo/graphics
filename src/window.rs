@@ -207,11 +207,16 @@ impl App<'_> {
             .as_micros();
         self.last_frame_start_time = last_frame_start_time;
 
-        self.frame_avg_micros = (self.frame_avg_micros as f32 * (1. - BLENDING_RATIO)
-            + self.last_frame_micros as f32 * BLENDING_RATIO)
-            as u128;
-        self.fps_avg = self.fps_avg * (1. - BLENDING_RATIO)
-            + BLENDING_RATIO * 1_000_000. / (self.last_frame_micros as f32);
+        let fps = 1_000_000. / (self.last_frame_micros as f32);
+        if (self.fps_avg - fps).abs() > 10. {
+            self.frame_avg_micros = self.last_frame_micros;
+            self.fps_avg = fps;
+        } else {
+            self.frame_avg_micros = (self.frame_avg_micros as f32 * (1. - BLENDING_RATIO)
+                + self.last_frame_micros as f32 * BLENDING_RATIO)
+                as u128;
+            self.fps_avg = self.fps_avg * (1. - BLENDING_RATIO) + BLENDING_RATIO * fps;
+        }
     }
 }
 

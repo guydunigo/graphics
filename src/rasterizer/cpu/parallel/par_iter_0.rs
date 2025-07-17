@@ -35,7 +35,6 @@ use super::ParStats;
 #[cfg(feature = "stats")]
 use std::sync::atomic::Ordering;
 
-/// par_bridge
 #[derive(Default, Clone)]
 pub struct ParIterEngine0 {
     triangles: Vec<(Vec3, Vec3, Vec3)>,
