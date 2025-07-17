@@ -55,6 +55,7 @@ pub enum EngineType {
     Steps2,
     ParIter0,
     ParIter1,
+    ThreadPool,
     ParIter2,
     ParIter3,
     ParIter4,
