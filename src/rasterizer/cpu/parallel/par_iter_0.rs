@@ -33,7 +33,7 @@ use super::rasterize_triangle;
 #[cfg(feature = "stats")]
 use super::ParStats;
 #[cfg(feature = "stats")]
-use std::sync::atomic::Ordering;
+use crate::rasterizer::Stats;
 
 #[derive(Default, Clone)]
 pub struct ParIterEngine0 {
