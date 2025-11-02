@@ -132,7 +132,8 @@ mod cond {
     /// It will take care of destroying it on drop, so keep it around long enough.
     pub struct ShaderModule {
         device_copy: Rc<Device>,
-        // name: ShaderName,
+        #[cfg(feature = "vulkan_dbg_mem")]
+        name: ShaderName,
         module: vk::ShaderModule,
     }
 
@@ -153,7 +154,8 @@ mod cond {
 
             Self {
                 device_copy: device,
-                // name,
+                #[cfg(feature = "vulkan_dbg_mem")]
+                name,
                 module,
             }
         }

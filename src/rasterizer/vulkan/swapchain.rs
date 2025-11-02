@@ -101,9 +101,11 @@ impl VulkanSwapchain {
                 && self.draw_img.extent.width >= window_size.width
             {
                 println!("--- Resize swapchain only ---");
+                self.inner.drop_early();
                 self.inner = SwapchainData::new(base);
             } else {
                 println!("--- Resize swapchain and draw image ---");
+                self.inner.drop_early();
                 *self = VulkanSwapchain::new(base, shaders, allocator, Some(self.draw_img.extent));
             }
 
@@ -229,6 +231,8 @@ struct SwapchainData {
     swapchain_images: Vec<(vk::Image, vk::ImageView, vk::Semaphore)>,
     pub swapchain_img_format: vk::Format,
     pub swapchain_extent: vk::Extent2D,
+
+    destroyed: bool,
 }
 
 impl SwapchainData {
@@ -336,12 +340,18 @@ impl SwapchainData {
             swapchain_images,
             swapchain_img_format,
             swapchain_extent,
+
+            destroyed: false,
         }
     }
-}
 
-impl Drop for SwapchainData {
-    fn drop(&mut self) {
+    // Assign calls drop AFTER creating the new one, but that crashed under Niri/Wayland.
+    fn drop_early(&mut self) {
+        if self.destroyed {
+            return;
+            // panic!("Already destroyed object !");
+        }
+
         #[cfg(feature = "vulkan_dbg_mem")]
         println!("drop SwapchainData");
         unsafe {
@@ -353,5 +363,13 @@ impl Drop for SwapchainData {
                 self.device_copy.destroy_semaphore(s, None);
             });
         }
+
+        self.destroyed = true;
+    }
+}
+
+impl Drop for SwapchainData {
+    fn drop(&mut self) {
+        self.drop_early();
     }
 }
