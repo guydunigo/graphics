@@ -1,4 +1,7 @@
-//! Like steps2 but parallel : par_drain
+//! Like steps2 but splitting work across fixed manual threads.
+//!
+//! Each thread acts like separate steps2.
+//! Then we merge resulting buffers based on depth buffers comp.
 use glam::{Mat4, Vec3, Vec4Swizzles};
 use rayon::prelude::*;
 use std::{
@@ -6,7 +9,9 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
+        mpsc::{Receiver, SyncSender, TryRecvError, sync_channel},
     },
+    thread::{JoinHandle, spawn},
     time::Instant,
 };
 use winit::dpi::PhysicalSize;
@@ -34,202 +39,77 @@ use super::ParStats;
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
 
-#[derive(Default, Clone)]
-pub struct ThreadPoolEngine {
-    triangles: Vec<(Vec3, Vec3, Vec3)>,
-    world_trs: Vec<Mat4>,
-    to_cam_trs: Vec<Mat4>,
-    textures: Vec<Texture>,
+const NB_THREADS: usize = 3;
 
-    t_raster: Vec<(Vec3, Vec3, Vec3)>,
-    bounding_boxes: Vec<BoundingBox<u32>>,
-    p01p20: Vec<(Vec3, Vec3)>,
+pub struct ThreadPoolEngine {
+    /// List of spawned threads with :
+    /// - Orders channel : Sender to send orders (start_index, count). Thread-side recv blocking.
+    /// - Sync channel : Receiver to syncronize end of frame. Main-thread recv-blocking
+    ///
+    /// The thread should only block on the order channel.
+    /// When sending count=0, asks the thread to stop, to be joined with the `JoinHandle`
+    ///
+    /// After an order, there should be an sync channel recv before the next order, or a quit command.
+    thread_sync: Vec<(JoinHandle<()>, SyncSender<(usize, usize)>, Receiver<()>)>,
+
+    // triangles: Vec<(Vec3, Vec3, Vec3)>,
+    // world_trs: Vec<Mat4>,
+    // to_cam_trs: Vec<Mat4>,
+    // textures: Vec<Texture>,
+
+    // t_raster: Vec<(Vec3, Vec3, Vec3)>,
+    // bounding_boxes: Vec<BoundingBox<u32>>,
+    // p01p20: Vec<(Vec3, Vec3)>,
     depth_color_buffer: Arc<[AtomicU64]>,
+}
+
+impl Default for ThreadPoolEngine {
+    fn default() -> Self {
+        // TODO: based on cpu count ?
+        let thread_sync = (0..NB_THREADS)
+            .map(|i| {
+                let (trig_tx, trig_rx) = sync_channel(1);
+                let (end_tx, end_rx) = sync_channel(1);
+
+                let jh = spawn(move || thread_step2(i, trig_rx, end_tx));
+
+                return (jh, trig_tx, end_rx);
+            })
+            .collect();
+
+        Self {
+            thread_sync,
+            depth_color_buffer: Default::default(),
+        }
+    }
+}
+
+impl Drop for ThreadPoolEngine {
+    fn drop(&mut self) {
+        self.thread_sync.drain(..).for_each(|(jh, tx, _)| {
+            // Sending count=0 to tell it to quit.
+            // Returns Err() if already disconnected : no need to report error.
+            let _ = tx.send((0, 0));
+            jh.join().unwrap();
+        });
+    }
 }
 
 impl ThreadPoolEngine {
     fn rasterize_world(
         &mut self,
-        settings: &Settings,
-        world: &World,
-        size: PhysicalSize<u32>,
-        ratio_w_h: f32,
+        _settings: &Settings,
+        _world: &World,
+        _size: PhysicalSize<u32>,
+        _ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &ParStats,
     ) {
-        // self.triangles.clear();
-        // self.world_trs.clear();
-        // self.to_cam_trs.clear();
-        // self.textures.clear();
-        let t = Instant::now();
-        world.scene.if_present(|s| {
-            let t = Instant::now();
-            s.top_nodes().iter().for_each(|n| {
-                populate_nodes_split(
-                    settings,
-                    &world.camera,
-                    size,
-                    ratio_w_h,
-                    &mut self.triangles,
-                    &mut self.world_trs,
-                    &mut self.to_cam_trs,
-                    &mut self.textures,
-                    &n.read().unwrap(),
-                )
-            });
-            println!("Populated nodes in : {}μs", t.elapsed().as_micros());
-        });
-        if !self.triangles.is_empty() {
-            println!("  -> After node closure : {}μs", t.elapsed().as_micros());
-        }
-
-        #[cfg(feature = "stats")]
-        {
-            stats
-                .nb_triangles_tot
-                .store(self.triangles.len(), Ordering::Relaxed);
-        }
-
-        let camera = &world.camera;
-        // self.t_raster.clear();
-        // self.t_raster.reserve(self.triangles.len());
-        self.t_raster.par_extend(
-            self.triangles
-                .par_iter()
-                .zip(self.to_cam_trs.par_drain(..))
-                .map(|((p0, p1, p2), tr)| {
-                    (
-                        to_raster(*p0, camera, &tr, size, ratio_w_h),
-                        to_raster(*p1, camera, &tr, size, ratio_w_h),
-                        to_raster(*p2, camera, &tr, size, ratio_w_h),
-                    )
-                }),
-        );
-        // No need for self.to_cam_trs anymore.
-
-        // self.bounding_boxes.clear();
-        // self.bounding_boxes.reserve(self.triangles.len());
-        while self.bounding_boxes.len() < self.triangles.len() {
-            let i = self.bounding_boxes.len();
-            let bb = BoundingBox::new_2(self.t_raster[i], size);
-            if !settings.culling_triangles || bb.is_visible(camera.z_near) {
-                self.bounding_boxes.push(bb);
-            } else {
-                self.triangles.swap_remove(i);
-                self.world_trs.swap_remove(i);
-                self.textures.swap_remove(i);
-                self.t_raster.swap_remove(i);
-            }
-        }
-
-        #[cfg(feature = "stats")]
-        {
-            stats
-                .nb_triangles_sight
-                .store(self.triangles.len(), Ordering::Relaxed);
-        }
-
-        ////////////////////////////////
-        // Back face culling
-        // If triangle normal and camera sight are in same direction (cross product > 0),
-        // it's invisible.
-        // self.p01p20.clear();
-        // self.p01p20.reserve(self.triangles.len());
-        while self.p01p20.len() < self.triangles.len() {
-            let i = self.p01p20.len();
-            let (p0, p1, p2) = &self.t_raster[i];
-            let (p01, p20) = (p1 - p0, p0 - p2);
-            if vec_cross_z(p01, p20) >= 0. {
-                self.p01p20.push((p01, p20));
-            } else {
-                self.triangles.swap_remove(i);
-                self.world_trs.swap_remove(i);
-                self.textures.swap_remove(i);
-                self.t_raster.swap_remove(i);
-                self.bounding_boxes.swap_remove(i);
-            }
-        }
-
-        #[cfg(feature = "stats")]
-        {
-            stats
-                .nb_triangles_facing
-                .store(self.triangles.len(), Ordering::Relaxed);
-        }
-
-        self.triangles
-            .par_iter_mut()
-            .zip(self.world_trs.par_drain(..))
-            .for_each(|((p0, p1, p2), tr)| {
-                *p0 = (tr * p0.extend(1.)).xyz();
-                *p1 = (tr * p1.extend(1.)).xyz();
-                *p2 = (tr * p2.extend(1.)).xyz();
-            });
-        // No need for self.world_trs anymore.
-
-        ////////////////////////////////
-        // Sunlight
-        // Dot product gives negative if two vectors are opposed, so we compare light
-        // vector to face normal vector to see if they are opposed (face is lit).
-        //
-        // Also simplifying colours.
-        let sun_direction = world.sun_direction;
-        self.textures
-            .par_iter_mut()
-            .zip(self.triangles.par_drain(..))
-            .for_each(|(texture, (p0, p1, p2))| {
-                let triangle_normal = (p1 - p0).cross(p0 - p2).normalize();
-                let light = sun_direction
-                    .dot(triangle_normal)
-                    .clamp(MINIMAL_AMBIANT_LIGHT, 1.);
-
-                // TODO: remove this test, just load correctly ?
-                // If a `Texture::VertexColor` has the same color for all triangles, then we can
-                // consider it like a `Texture::Color`.
-                if let Texture::VertexColor(c0, c1, c2) = texture
-                    && c0 == c1
-                    && c1 == c2
-                {
-                    *texture = Texture::Color(*c0);
-                }
-
-                match texture {
-                    Texture::Color(col) => {
-                        *texture =
-                            Texture::Color((ColorF32::from_argb_u32(*col) * light).as_color_u32());
-                    }
-                    Texture::VertexColor(c0, c1, c2) => {
-                        *c0 = (ColorF32::from_argb_u32(*c0) * light).as_color_u32();
-                        *c1 = (ColorF32::from_argb_u32(*c1) * light).as_color_u32();
-                        *c2 = (ColorF32::from_argb_u32(*c2) * light).as_color_u32();
-                    }
-                }
-            });
-        // No need for self.triangles anymore.
-
-        self.t_raster
-            .par_drain(..)
-            .zip(self.textures.par_drain(..))
-            .zip(self.bounding_boxes.par_drain(..))
-            .zip(self.p01p20.par_drain(..))
-            .for_each(|((((p0, p1, p2), material), bb), (p01, p20))| {
-                rasterize_triangle(
-                    &Triangle {
-                        p0,
-                        p1,
-                        p2,
-                        material,
-                    },
-                    &self.depth_color_buffer[..],
-                    camera.z_near,
-                    size,
-                    settings,
-                    #[cfg(feature = "stats")]
-                    stats,
-                    &bb,
-                    p01,
-                    p20,
-                )
-            });
+        self.thread_sync
+            .iter()
+            .for_each(|(_, tx, _)| tx.send((0, 10)).unwrap());
+        self.thread_sync
+            .iter()
+            .for_each(|(_, _, rx)| rx.recv().unwrap());
     }
 
     pub fn rasterize<B: DerefMut<Target = [u32]>>(
@@ -346,4 +226,17 @@ impl ThreadPoolEngine {
             text_writer.rasterize(buffer, original_size, font_size, &display[..]);
         }
     }
+}
+
+fn thread_step2(thread_i: usize, trig_rx: Receiver<(usize, usize)>, end_tx: SyncSender<()>) {
+    loop {
+        let (index, count) = trig_rx.recv().unwrap();
+        println!("Thread {thread_i} recieved (index, count) = ({index}, {count})");
+        if count == 0 {
+            println!("Thread {thread_i} count == 0, quitting...");
+            break;
+        }
+        end_tx.send(()).unwrap();
+    }
+    println!("Thread {thread_i} dying...");
 }
