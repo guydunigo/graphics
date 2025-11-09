@@ -117,13 +117,13 @@ fn clean_resize_buffers<B: DerefMut<Target = [u32]>>(
     let t = Instant::now();
     buffer.fill(DEFAULT_BACKGROUND_COLOR);
 
-    depth_buffer.resize(size.width as usize * size.height as usize, f32::INFINITY);
     depth_buffer.fill(f32::INFINITY);
+    depth_buffer.resize(size.width as usize * size.height as usize, f32::INFINITY);
 
     t.elapsed().as_micros()
 }
 
-fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
+pub fn draw_vertice_basic<B: DerefMut<Target = [u32]>>(
     buffer: &mut B,
     size: PhysicalSize<u32>,
     v: Vec3,
