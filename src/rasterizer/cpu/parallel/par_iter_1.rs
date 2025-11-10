@@ -60,9 +60,9 @@ impl ParIterEngine1 {
         // self.world_trs.clear();
         // self.to_cam_trs.clear();
         // self.textures.clear();
-        let t = Instant::now();
+        // let t = Instant::now();
         world.scene.if_present(|s| {
-            let t = Instant::now();
+            // let t = Instant::now();
             s.top_nodes().iter().for_each(|n| {
                 populate_nodes_split(
                     settings,
@@ -76,11 +76,11 @@ impl ParIterEngine1 {
                     &n.read().unwrap(),
                 )
             });
-            println!("Populated nodes in : {}μs", t.elapsed().as_micros());
+            // println!("Populated nodes in : {}μs", t.elapsed().as_micros());
         });
-        if !self.triangles.is_empty() {
-            println!("  -> After node closure : {}μs", t.elapsed().as_micros());
-        }
+        // if !self.triangles.is_empty() {
+        //     println!("  -> After node closure : {}μs", t.elapsed().as_micros());
+        // }
 
         #[cfg(feature = "stats")]
         {

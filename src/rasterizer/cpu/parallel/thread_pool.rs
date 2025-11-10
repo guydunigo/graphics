@@ -15,6 +15,8 @@ use std::{
 };
 use winit::dpi::PhysicalSize;
 
+#[cfg(feature = "stats")]
+use crate::rasterizer::Stats;
 use crate::{
     font::{self, TextWriter},
     maths::ColorF32,
@@ -32,11 +34,6 @@ use crate::{
     window::AppObserver,
 };
 
-#[cfg(feature = "stats")]
-use super::ParStats;
-#[cfg(feature = "stats")]
-use crate::rasterizer::Stats;
-
 const NB_THREADS: usize = 4;
 
 #[derive(Debug, Clone)]
@@ -49,25 +46,41 @@ enum Msg {
 }
 
 // Pointers aren't supposed to be sent...
+// I know what I'm doing, trust me...
 unsafe impl Send for Msg {}
 
-#[cfg(not(feature = "stats"))]
-type Finished = ();
-#[cfg(feature = "stats")]
-type Finished = Stats;
+#[derive(Default)]
+struct ThreadLocalSharedData {
+    buffer: Vec<u32>,
+    depth: Vec<f32>,
+    #[cfg(feature = "stats")]
+    nb_triangles_sight: usize,
+    #[cfg(feature = "stats")]
+    nb_triangles_facing: usize,
+    #[cfg(feature = "stats")]
+    nb_triangles_drawn: usize,
+    #[cfg(feature = "stats")]
+    nb_pixels_tested: usize,
+    #[cfg(feature = "stats")]
+    nb_pixels_in: usize,
+    #[cfg(feature = "stats")]
+    nb_pixels_front: usize,
+    #[cfg(feature = "stats")]
+    nb_pixels_written: usize,
+}
 
 /// Data needed inside the thread
 struct ThreadLocalData {
     thread_i: usize,
 
     order_rx: Receiver<Msg>,
-    end_tx: SyncSender<Finished>,
+    end_tx: SyncSender<()>,
 
     shared: Arc<RwLock<SharedData>>,
 
-    buffer_and_depth: Arc<RwLock<(Vec<u32>, Vec<f32>)>>,
+    thread_shared: Arc<RwLock<ThreadLocalSharedData>>,
 
-    all_buffer_and_depth: Vec<Arc<RwLock<(Vec<u32>, Vec<f32>)>>>,
+    all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
 
     indices: Vec<usize>,
     triangles: Vec<(Vec3, Vec3, Vec3)>,
@@ -82,9 +95,9 @@ impl ThreadLocalData {
     pub fn new(
         thread_i: usize,
         order_rx: Receiver<Msg>,
-        end_tx: SyncSender<Finished>,
+        end_tx: SyncSender<()>,
         shared: Arc<RwLock<SharedData>>,
-        all_buffer_and_depth: Vec<Arc<RwLock<(Vec<u32>, Vec<f32>)>>>,
+        all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
     ) -> Self {
         Self {
             thread_i,
@@ -92,8 +105,8 @@ impl ThreadLocalData {
             end_tx,
             shared,
 
-            buffer_and_depth: all_buffer_and_depth[thread_i].clone(),
-            all_buffer_and_depth,
+            thread_shared: all_thread_shared[thread_i].clone(),
+            all_thread_shared,
 
             indices: Default::default(),
             triangles: Default::default(),
@@ -127,7 +140,7 @@ impl ThreadLocalData {
 
     fn merge(&mut self, dst_ptr_range: Range<*mut u32>) {
         let src_buffers: Vec<_> = self
-            .all_buffer_and_depth
+            .all_thread_shared
             .iter()
             .map(|b| b.read().unwrap())
             .collect();
@@ -140,7 +153,7 @@ impl ThreadLocalData {
             .for_each(|(pix_i, b)| {
                 *b = src_buffers
                     .iter()
-                    .map(|buffers| (buffers.0[pix_i], buffers.1[pix_i]))
+                    .map(|buffers| (buffers.buffer[pix_i], buffers.depth[pix_i]))
                     .min_by(|(_, depth1), (_, depth2)| f32::total_cmp(depth1, depth2))
                     .map(|(pix, _)| pix)
                     .unwrap();
@@ -149,10 +162,10 @@ impl ThreadLocalData {
 
     fn clear(&mut self) {
         // let t_start = Instant::now();
-        let mut buffers = self.buffer_and_depth.write().unwrap();
+        let mut thread_shared = self.thread_shared.write().unwrap();
         // let t_lock = Instant::now();
-        buffers.0.fill(DEFAULT_BACKGROUND_COLOR);
-        buffers.1.fill(f32::INFINITY);
+        thread_shared.buffer.fill(DEFAULT_BACKGROUND_COLOR);
+        thread_shared.depth.fill(f32::INFINITY);
         // println!(
         //     "Thread {} clear buffers : lock {}μs - tot {}μs",
         //     self.thread_i,
@@ -162,9 +175,11 @@ impl ThreadLocalData {
     }
 
     fn resize(&mut self, new_buf_len: usize) {
-        let mut buffers = self.buffer_and_depth.write().unwrap();
-        buffers.0.resize(new_buf_len, DEFAULT_BACKGROUND_COLOR);
-        buffers.1.resize(new_buf_len, f32::INFINITY);
+        let mut thread_shared = self.thread_shared.write().unwrap();
+        thread_shared
+            .buffer
+            .resize(new_buf_len, DEFAULT_BACKGROUND_COLOR);
+        thread_shared.depth.resize(new_buf_len, f32::INFINITY);
 
         self.indices.clear();
     }
@@ -173,7 +188,7 @@ impl ThreadLocalData {
         // let t_start = Instant::now();
 
         let shared = self.shared.read().unwrap();
-        let mut buffers = self.buffer_and_depth.write().unwrap();
+        let mut thread_shared = self.thread_shared.write().unwrap();
 
         // let t_lock = Instant::now();
 
@@ -214,7 +229,7 @@ impl ThreadLocalData {
 
         #[cfg(feature = "stats")]
         {
-            stats.nb_triangles_sight = self.triangles.len();
+            thread_shared.nb_triangles_sight = self.indices.len();
         }
 
         ////////////////////////////////
@@ -238,7 +253,7 @@ impl ThreadLocalData {
 
         #[cfg(feature = "stats")]
         {
-            stats.nb_triangles_facing = self.triangles.len();
+            thread_shared.nb_triangles_facing = self.indices.len();
         }
 
         self.triangles.extend(
@@ -318,11 +333,9 @@ impl ThreadLocalData {
                         p2,
                         material,
                     },
-                    &mut buffers,
+                    &mut thread_shared,
                     shared.camera.z_near,
                     shared.size,
-                    #[cfg(feature = "stats")]
-                    stats,
                     &bb,
                     p01,
                     p20,
@@ -348,13 +361,13 @@ struct WorkerThread {
 impl WorkerThread {
     pub fn spawn(
         thread_i: usize,
-        all_buffer_and_depth: Vec<Arc<RwLock<(Vec<u32>, Vec<f32>)>>>,
+        all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
         shared: Arc<RwLock<SharedData>>,
     ) -> Self {
         let (order_tx, order_rx) = sync_channel(1);
         let (end_tx, end_rx) = sync_channel(1);
 
-        let mut th = ThreadLocalData::new(thread_i, order_rx, end_tx, shared, all_buffer_and_depth);
+        let mut th = ThreadLocalData::new(thread_i, order_rx, end_tx, shared, all_thread_shared);
         let handle = spawn(move || th.rasterize_loop());
 
         return Self {
@@ -397,6 +410,8 @@ pub struct ThreadPoolEngine {
     ///
     /// After an order, there should be an sync channel recv before the next order, or a quit command.
     thread_sync: Vec<WorkerThread>,
+    #[cfg(feature = "stats")]
+    all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
     shared: Arc<RwLock<SharedData>>,
 }
 
@@ -404,15 +419,17 @@ impl Default for ThreadPoolEngine {
     fn default() -> Self {
         let shared: Arc<RwLock<SharedData>> = Default::default();
 
-        let all_buffer_and_depth: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
+        let all_thread_shared: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
 
         // TODO: based on cpu count ?
         let thread_sync = (0..NB_THREADS)
-            .map(|i| WorkerThread::spawn(i, all_buffer_and_depth.clone(), shared.clone()))
+            .map(|i| WorkerThread::spawn(i, all_thread_shared.clone(), shared.clone()))
             .collect();
 
         Self {
             thread_sync,
+            #[cfg(feature = "stats")]
+            all_thread_shared,
             shared,
         }
     }
@@ -480,7 +497,7 @@ impl ThreadPoolEngine {
 
             #[cfg(feature = "stats")]
             {
-                stats.nb_triangles_tot = self.triangles.len();
+                stats.nb_triangles_tot = shared.triangles.len();
             }
         };
 
@@ -496,7 +513,7 @@ impl ThreadPoolEngine {
         let buffers: Vec<_> = self
             .thread_sync
             .iter()
-            .map(|t| t.buffer_and_depth.read().unwrap())
+            .map(|t| t.thread_shared.read().unwrap())
             .collect();
         // buffer.fill(DEFAULT_BACKGROUND_COLOR);
         buffer.iter_mut().enumerate().for_each(|(pix_i, b)| {
@@ -528,7 +545,16 @@ impl ThreadPoolEngine {
             .for_each(|worker| worker.order_tx.send(Msg::Clear).unwrap());
 
         #[cfg(feature = "stats")]
-        todo!("merge stats");
+        self.all_thread_shared.iter().for_each(|t| {
+            let thread_shared = t.read().unwrap();
+            stats.nb_triangles_sight += thread_shared.nb_triangles_sight;
+            stats.nb_triangles_facing += thread_shared.nb_triangles_facing;
+            stats.nb_triangles_drawn += thread_shared.nb_triangles_drawn;
+            stats.nb_pixels_tested += thread_shared.nb_pixels_tested;
+            stats.nb_pixels_in += thread_shared.nb_pixels_in;
+            stats.nb_pixels_front += thread_shared.nb_pixels_front;
+            stats.nb_pixels_written += thread_shared.nb_pixels_written;
+        });
     }
 
     pub fn rasterize<B: DerefMut<Target = [u32]>>(
@@ -662,13 +688,12 @@ fn populate_nodes_split(
 }
 
 // From single_threaded/mod.rs
-fn rasterize_triangle<B: DerefMut<Target = (Vec<u32>, Vec<f32>)>>(
+fn rasterize_triangle<B: DerefMut<Target = ThreadLocalSharedData>>(
     settings: &Settings,
     tri_raster: &Triangle,
-    buffers: &mut B,
+    thread_shared: &mut B,
     z_near: f32,
     size: PhysicalSize<u32>,
-    #[cfg(feature = "stats")] stats: &mut Stats,
     bb: &BoundingBox<u32>,
     p01: Vec3,
     p20: Vec3,
@@ -687,7 +712,7 @@ fn rasterize_triangle<B: DerefMut<Target = (Vec<u32>, Vec<f32>)>>(
 
             #[cfg(feature = "stats")]
             {
-                stats.nb_pixels_tested += 1;
+                thread_shared.nb_pixels_tested += 1;
             }
 
             let e01 = edge_function(p01, pixel - tri_raster.p0);
@@ -701,7 +726,7 @@ fn rasterize_triangle<B: DerefMut<Target = (Vec<u32>, Vec<f32>)>>(
 
             #[cfg(feature = "stats")]
             {
-                stats.nb_pixels_in += 1;
+                thread_shared.nb_pixels_in += 1;
             }
 
             let a12 = e12 / tri_area;
@@ -730,19 +755,19 @@ fn rasterize_triangle<B: DerefMut<Target = (Vec<u32>, Vec<f32>)>>(
 
             #[cfg(feature = "stats")]
             {
-                stats.nb_pixels_front += 1;
+                thread_shared.nb_pixels_front += 1;
             }
 
             let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
-            if depth >= buffers.1[index] {
+            if depth >= thread_shared.depth[index] {
                 return;
             }
 
             #[cfg(feature = "stats")]
             {
                 was_drawn = true;
-                stats.nb_pixels_written += 1;
+                thread_shared.nb_pixels_written += 1;
             }
 
             let col = match tri_raster.material {
@@ -757,18 +782,33 @@ fn rasterize_triangle<B: DerefMut<Target = (Vec<u32>, Vec<f32>)>>(
                 }
             };
 
-            buffers.0[index] = col;
-            buffers.1[index] = depth;
+            thread_shared.buffer[index] = col;
+            thread_shared.depth[index] = depth;
         });
 
     #[cfg(feature = "stats")]
     if was_drawn {
-        stats.nb_triangles_drawn += 1;
+        thread_shared.nb_triangles_drawn += 1;
     }
 
     if settings.show_vertices {
-        draw_vertice_basic(&mut buffers.0, size, tri_raster.p0, &tri_raster.material);
-        draw_vertice_basic(&mut buffers.0, size, tri_raster.p1, &tri_raster.material);
-        draw_vertice_basic(&mut buffers.0, size, tri_raster.p2, &tri_raster.material);
+        draw_vertice_basic(
+            &mut thread_shared.buffer,
+            size,
+            tri_raster.p0,
+            &tri_raster.material,
+        );
+        draw_vertice_basic(
+            &mut thread_shared.buffer,
+            size,
+            tri_raster.p1,
+            &tri_raster.material,
+        );
+        draw_vertice_basic(
+            &mut thread_shared.buffer,
+            size,
+            tri_raster.p2,
+            &tri_raster.material,
+        );
     }
 }
