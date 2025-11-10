@@ -350,182 +350,6 @@ impl SharedData {
     }
 }
 
-pub struct ThreadPoolEngine1 {
-    /// List of spawned threads with :
-    /// - Orders channel : Sender to send orders (start_index, count). Thread-side recv blocking.
-    /// - Sync channel : Receiver to syncronize end of frame. Main-thread recv-blocking
-    ///
-    /// The thread should only block on the order channel.
-    ///
-    /// After an order, there should be an sync channel recv before the next order, or a quit command.
-    thread_sync: Vec<WorkerThread>,
-    #[cfg(feature = "stats")]
-    all_stats: Vec<Arc<RwLock<ThreadStats>>>,
-    shared: Arc<RwLock<SharedData>>,
-    depth_color_buffer: Arc<[AtomicU64]>,
-}
-
-impl Default for ThreadPoolEngine1 {
-    fn default() -> Self {
-        let shared: Arc<RwLock<SharedData>> = Default::default();
-
-        #[cfg(feature = "stats")]
-        let all_stats: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
-
-        // TODO: based on cpu count ?
-        let thread_sync = (0..NB_THREADS)
-            .map(|i| {
-                WorkerThread::spawn(
-                    i,
-                    shared.clone(),
-                    #[cfg(feature = "stats")]
-                    all_stats[thread_i].clone(),
-                )
-            })
-            .collect();
-
-        Self {
-            thread_sync,
-            #[cfg(feature = "stats")]
-            all_stats,
-            shared,
-            depth_color_buffer: Default::default(),
-        }
-    }
-}
-
-impl Drop for ThreadPoolEngine1 {
-    fn drop(&mut self) {
-        self.thread_sync.drain(..).for_each(|worker| {
-            // Sending count=0 to tell it to quit.
-            // Returns Err() if already disconnected : no need to report error.
-            let _ = worker.order_tx.send(Msg::Quit);
-            worker.handle.join().unwrap();
-        });
-    }
-}
-
-impl ThreadPoolEngine1 {
-    fn rasterize_world(
-        &mut self,
-        settings: &Settings,
-        world: &World,
-        size: PhysicalSize<u32>,
-        ratio_w_h: f32,
-        #[cfg(feature = "stats")] stats: &mut Stats,
-    ) {
-        // Fill triangles to work on :
-        {
-            // let t = Instant::now();
-            let mut shared = self.shared.write().unwrap();
-            // Since we share, we can't drain, so we need to clean directly.
-            shared.clear();
-            world.scene.if_present(|s| {
-                // let t = Instant::now();
-                s.top_nodes().iter().for_each(|n| {
-                    populate_nodes_split(
-                        settings,
-                        &world.camera,
-                        size,
-                        ratio_w_h,
-                        &mut shared,
-                        &n.read().unwrap(),
-                    )
-                });
-                // println!("Populated nodes in : {}μs", t.elapsed().as_micros());
-            });
-            // if !shared.triangles.is_empty() {
-            //     println!("  -> After node closure : {}μs", t.elapsed().as_micros());
-            // }
-
-            shared.settings = *settings;
-            shared.size = size;
-            shared.ratio_w_h = ratio_w_h;
-            shared.camera = world.camera;
-            shared.sun_direction = world.sun_direction;
-
-            #[cfg(feature = "stats")]
-            {
-                stats.nb_triangles_tot = shared.triangles.len();
-            }
-        };
-
-        self.thread_sync.iter().for_each(|worker| {
-            worker
-                .order_tx
-                .send(Msg::Compute {
-                    depth_color_buffer: self.depth_color_buffer.clone(),
-                })
-                .unwrap()
-        });
-        self.thread_sync
-            .iter()
-            .for_each(|worker| worker.end_rx.recv().unwrap());
-
-        #[cfg(feature = "stats")]
-        self.all_stats.iter().for_each(|t| {
-            let stats = t.read().unwrap();
-            stats.nb_triangles_sight += stats.nb_triangles_sight;
-            stats.nb_triangles_facing += stats.nb_triangles_facing;
-            stats.nb_triangles_drawn += stats.nb_triangles_drawn;
-            stats.nb_pixels_tested += stats.nb_pixels_tested;
-            stats.nb_pixels_in += stats.nb_pixels_in;
-            stats.nb_pixels_front += stats.nb_pixels_front;
-            stats.nb_pixels_written += stats.nb_pixels_written;
-        });
-    }
-
-    pub fn rasterize<B: DerefMut<Target = [u32]>>(
-        &mut self,
-        settings: &Settings,
-        text_writer: &TextWriter,
-        world: &World,
-        buffer: &mut B,
-        size: PhysicalSize<u32>,
-        app: &mut AppObserver,
-        #[cfg(feature = "stats")] stats: &mut Stats,
-    ) {
-        app.last_buffer_fill_micros = clean_resize_buffer(&mut self.depth_color_buffer, size);
-
-        let ratio_w_h = size.width as f32 / size.height as f32;
-
-        let t = Instant::now();
-        self.rasterize_world(
-            settings,
-            world,
-            size,
-            ratio_w_h,
-            #[cfg(feature = "stats")]
-            stats,
-        );
-        app.last_rendering_micros = t.elapsed().as_micros();
-
-        let t = Instant::now();
-        (0..(size.width * size.height) as usize).for_each(|i| {
-            buffer[i] = u64_to_color(self.depth_color_buffer[i].load(Ordering::Relaxed));
-        });
-        app.last_buffer_copy_micros = t.elapsed().as_micros();
-        println!(
-            "Copied atomic to buffer : {}μs",
-            app.last_buffer_copy_micros
-        );
-
-        {
-            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
-            let display = format_debug(
-                settings,
-                world,
-                app,
-                size,
-                cursor_color,
-                #[cfg(feature = "stats")]
-                stats,
-            );
-            text_writer.rasterize(buffer, size, font::PX, &display[..]);
-        }
-    }
-}
-
 // From steps2
 // TODO: rapporter dans steps2 ?
 fn populate_nodes_split(
@@ -733,5 +557,224 @@ fn rasterize_triangle(
             tri_raster.p2,
             &tri_raster.material,
         );
+    }
+}
+
+pub struct ThreadPoolEngine1 {
+    /// List of spawned threads with :
+    /// - Orders channel : Sender to send orders (start_index, count). Thread-side recv blocking.
+    /// - Sync channel : Receiver to syncronize end of frame. Main-thread recv-blocking
+    ///
+    /// The thread should only block on the order channel.
+    ///
+    /// After an order, there should be an sync channel recv before the next order, or a quit command.
+    thread_sync: Vec<WorkerThread>,
+    #[cfg(feature = "stats")]
+    all_stats: Vec<Arc<RwLock<ThreadStats>>>,
+    shared: Arc<RwLock<SharedData>>,
+    depth_color_buffer: Arc<[AtomicU64]>,
+    last_cursor_color: Option<u32>,
+}
+
+impl Default for ThreadPoolEngine1 {
+    fn default() -> Self {
+        let shared: Arc<RwLock<SharedData>> = Default::default();
+
+        #[cfg(feature = "stats")]
+        let all_stats: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
+
+        // TODO: based on cpu count ?
+        let thread_sync = (0..NB_THREADS)
+            .map(|i| {
+                WorkerThread::spawn(
+                    i,
+                    shared.clone(),
+                    #[cfg(feature = "stats")]
+                    all_stats[thread_i].clone(),
+                )
+            })
+            .collect();
+
+        Self {
+            thread_sync,
+            #[cfg(feature = "stats")]
+            all_stats,
+            shared,
+            depth_color_buffer: Default::default(),
+            last_cursor_color: Default::default(),
+        }
+    }
+}
+
+impl Drop for ThreadPoolEngine1 {
+    fn drop(&mut self) {
+        self.thread_sync.drain(..).for_each(|worker| {
+            // Sending count=0 to tell it to quit.
+            // Returns Err() if already disconnected : no need to report error.
+            let _ = worker.order_tx.send(Msg::Quit);
+            worker.handle.join().unwrap();
+        });
+    }
+}
+
+impl ThreadPoolEngine1 {
+    pub fn rasterize<B: DerefMut<Target = [u32]>>(
+        &mut self,
+        settings: &Settings,
+        text_writer: &TextWriter,
+        world: &World,
+        mut buffer: &mut B,
+        mut size: PhysicalSize<u32>,
+        app: &mut AppObserver,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    ) {
+        let original_size = size;
+
+        // If x4 is set :
+        let mut font_size = font::PX;
+        size.width *= settings.oversampling as u32;
+        size.height *= settings.oversampling as u32;
+        if settings.parallel_text {
+            font_size *= settings.oversampling as f32;
+        }
+
+        app.last_buffer_fill_micros = clean_resize_buffer(&mut self.depth_color_buffer, size);
+
+        let ratio_w_h = size.width as f32 / size.height as f32;
+
+        let t = Instant::now();
+        // Fill triangles to work on :
+        {
+            // let t = Instant::now();
+            let mut shared = self.shared.write().unwrap();
+            // Since we share, we can't drain, so we need to clean directly.
+            shared.clear();
+            world.scene.if_present(|s| {
+                // let t = Instant::now();
+                s.top_nodes().iter().for_each(|n| {
+                    populate_nodes_split(
+                        settings,
+                        &world.camera,
+                        size,
+                        ratio_w_h,
+                        &mut shared,
+                        &n.read().unwrap(),
+                    )
+                });
+                // println!("Populated nodes in : {}μs", t.elapsed().as_micros());
+            });
+            // if !shared.triangles.is_empty() {
+            //     println!("  -> After node closure : {}μs", t.elapsed().as_micros());
+            // }
+
+            shared.settings = *settings;
+            shared.size = size;
+            shared.ratio_w_h = ratio_w_h;
+            shared.camera = world.camera;
+            shared.sun_direction = world.sun_direction;
+
+            #[cfg(feature = "stats")]
+            {
+                stats.nb_triangles_tot = shared.triangles.len();
+            }
+        };
+
+        self.thread_sync.iter().for_each(|worker| {
+            worker
+                .order_tx
+                .send(Msg::Compute {
+                    depth_color_buffer: self.depth_color_buffer.clone(),
+                })
+                .unwrap()
+        });
+
+        buffer.fill(0);
+        if settings.parallel_text {
+            let display = format_debug(
+                settings,
+                world,
+                app,
+                size,
+                self.last_cursor_color,
+                #[cfg(feature = "stats")]
+                stats,
+            );
+            // text_writer.rasterize_atomic(&self.depth_color_buffer, size, font_size, &display[..]);
+            text_writer.rasterize(&mut buffer, size, font_size, &display[..]);
+        }
+
+        self.thread_sync
+            .iter()
+            .for_each(|worker| worker.end_rx.recv().unwrap());
+
+        #[cfg(feature = "stats")]
+        self.all_stats.iter().for_each(|t| {
+            let stats = t.read().unwrap();
+            stats.nb_triangles_sight += stats.nb_triangles_sight;
+            stats.nb_triangles_facing += stats.nb_triangles_facing;
+            stats.nb_triangles_drawn += stats.nb_triangles_drawn;
+            stats.nb_pixels_tested += stats.nb_pixels_tested;
+            stats.nb_pixels_in += stats.nb_pixels_in;
+            stats.nb_pixels_front += stats.nb_pixels_front;
+            stats.nb_pixels_written += stats.nb_pixels_written;
+        });
+        app.last_rendering_micros = t.elapsed().as_micros();
+
+        // TODO: parallel (safe split ref vec)
+        let t = Instant::now();
+        if settings.oversampling > 1 {
+            let oversampling_2 = settings.oversampling * settings.oversampling;
+
+            let depth_color_buffer = &self.depth_color_buffer[..];
+            (0..((original_size.height * original_size.width) as usize))
+                .step_by(original_size.width as usize)
+                .for_each(|j| {
+                    let jx = j * oversampling_2;
+                    (0..(original_size.width as usize)).for_each(|i| {
+                        // println!(
+                        //     "{jx4},{ix4} {} {} {} {}",
+                        //     jx4 * 4 + ix4 * 2,
+                        //     jx4 * 4 + ix4 * 2 + 1,
+                        //     jx4 * 4 + size.width as usize + ix4 * 2,
+                        //     jx4 * 4 + size.width as usize + ix4 * 2 + 1,
+                        // );
+                        let ix = i * settings.oversampling;
+
+                        let color_avg: ColorF32 = (0..(settings.oversampling
+                            * size.width as usize))
+                            .step_by(size.width as usize)
+                            .flat_map(|jo| {
+                                (0..settings.oversampling).map(move |io| {
+                                    ColorF32::from_argb_u32(u64_to_color(
+                                        depth_color_buffer[jx + jo + ix + io]
+                                            .load(Ordering::Relaxed),
+                                    ))
+                                })
+                            })
+                            .sum();
+                        let color_avg = color_avg / oversampling_2 as f32;
+                        buffer[j + i] |= color_avg.as_color_u32();
+                    });
+                });
+        } else {
+            (0..(size.width * size.height) as usize).for_each(|i| {
+                buffer[i] |= u64_to_color(self.depth_color_buffer[i].load(Ordering::Relaxed));
+            });
+        }
+        app.last_buffer_copy_micros = t.elapsed().as_micros();
+
+        self.last_cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
+        if !settings.parallel_text {
+            let display = format_debug(
+                settings,
+                world,
+                app,
+                size,
+                self.last_cursor_color,
+                #[cfg(feature = "stats")]
+                stats,
+            );
+            text_writer.rasterize(buffer, size, font::PX, &display[..]);
+        }
     }
 }
