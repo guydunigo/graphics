@@ -49,9 +49,9 @@ impl Steps2Engine {
         // self.world_trs.clear();
         // self.to_cam_trs.clear();
         // self.textures.clear();
-        let t = Instant::now();
+        // let t = Instant::now();
         world.scene.if_present(|s| {
-            let t = Instant::now();
+            // let t = Instant::now();
             s.top_nodes().iter().for_each(|n| {
                 populate_nodes_split(
                     settings,
@@ -65,16 +65,18 @@ impl Steps2Engine {
                     &n.read().unwrap(),
                 )
             });
-            println!("Populated nodes in : {}μs", t.elapsed().as_micros());
+            // println!("Populated nodes in : {}μs", t.elapsed().as_micros());
         });
-        if !self.triangles.is_empty() {
-            println!("  -> After node closure : {}μs", t.elapsed().as_micros());
-        }
+        // if !self.triangles.is_empty() {
+        //     println!("  -> After node closure : {}μs", t.elapsed().as_micros());
+        // }
 
         #[cfg(feature = "stats")]
         {
             stats.nb_triangles_tot = self.triangles.len();
         }
+
+        // let t_start_comp = Instant::now();
 
         // self.t_raster.clear();
         // self.t_raster.reserve(self.triangles.len());
@@ -186,6 +188,7 @@ impl Steps2Engine {
             });
         // No need for self.triangles anymore.
 
+        // let nb_triangles_drawn = self.t_raster.len();
         self.t_raster
             .drain(..)
             .zip(self.textures.drain(..))
@@ -211,6 +214,12 @@ impl Steps2Engine {
                     p20,
                 )
             });
+
+        // println!(
+        //     "Draw {} triangles in : {}μs",
+        //     nb_triangles_drawn,
+        //     t_start_comp.elapsed().as_micros()
+        // );
     }
 
     pub fn rasterize<B: DerefMut<Target = [u32]>>(

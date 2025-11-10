@@ -6,7 +6,7 @@ use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 use std::{
     ops::DerefMut,
     sync::{
-        Arc, RwLock,
+        Arc, RwLock, RwLockReadGuard,
         mpsc::{Receiver, SyncSender, sync_channel},
     },
     thread::{JoinHandle, spawn},
@@ -36,11 +36,13 @@ use super::ParStats;
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
 
-const NB_THREADS: usize = 3;
+const NB_THREADS: usize = 4;
 
 #[derive(Debug, Copy, Clone)]
 enum Msg {
+    Resize { new_buf_len: usize },
     Compute,
+    Clear,
     Quit,
 }
 
@@ -97,32 +99,53 @@ impl ThreadLocalData {
     fn rasterize_loop(&mut self) {
         loop {
             let msg = self.order_rx.recv().unwrap();
-            println!("Thread {} recieved msg : {:?}", self.thread_i, msg);
+            // println!("Thread {} recieved msg : {:?}", self.thread_i, msg);
             match msg {
+                Msg::Resize { new_buf_len } => self.resize(new_buf_len),
                 Msg::Compute => {
                     self.rasterize_world();
                     self.end_tx.send(()).unwrap();
                 }
+                Msg::Clear => self.clear(),
                 Msg::Quit => break,
             }
         }
         println!("Thread {} dying...", self.thread_i);
     }
 
-    fn rasterize_world(&mut self) {
-        let shared = self.shared.read().unwrap();
-
-        let tot = (shared.size.width * shared.size.height) as usize;
+    fn clear(&mut self) {
+        // let t_start = Instant::now();
         let mut buffers = self.buffer_and_depth.write().unwrap();
+        // let t_lock = Instant::now();
         buffers.0.fill(DEFAULT_BACKGROUND_COLOR);
-        buffers.0.resize(tot, DEFAULT_BACKGROUND_COLOR);
         buffers.1.fill(f32::INFINITY);
-        buffers.1.resize(tot, f32::INFINITY);
+        // println!(
+        //     "Thread {} clear buffers : lock {}μs - tot {}μs",
+        //     self.thread_i,
+        //     t_lock.duration_since(t_start).as_micros(),
+        //     t_start.elapsed().as_micros()
+        // );
+    }
+
+    fn resize(&mut self, new_buf_len: usize) {
+        let mut buffers = self.buffer_and_depth.write().unwrap();
+        buffers.0.resize(new_buf_len, DEFAULT_BACKGROUND_COLOR);
+        buffers.1.resize(new_buf_len, f32::INFINITY);
+
+        self.indices.clear();
+    }
+
+    fn rasterize_world(&mut self) {
+        // let t_start = Instant::now();
+
+        let shared = self.shared.read().unwrap();
+        let mut buffers = self.buffer_and_depth.write().unwrap();
+
+        // let t_lock = Instant::now();
 
         // We will work on every NB_THREADS of triangle collection : 0, 3, 6, ...
-        self.indices.clear();
         self.indices
-            .extend((0..shared.triangles.len()).step_by(NB_THREADS));
+            .extend((self.thread_i..shared.triangles.len()).step_by(NB_THREADS));
 
         // self.triangles.clear();
         // self.textures.clear();
@@ -246,6 +269,7 @@ impl ThreadLocalData {
             );
         // No need for self.triangles anymore.
 
+        // let nb_triangles_drawn = self.t_raster.len();
         self.t_raster
             .drain(..)
             .zip(self.textures.drain(..))
@@ -270,6 +294,13 @@ impl ThreadLocalData {
                     p20,
                 )
             });
+        // println!(
+        //     "Thread {} processed {} triangles in : lock {}μs - tot {}μs",
+        //     self.thread_i,
+        //     nb_triangles_drawn,
+        //     t_lock.duration_since(t_start).as_micros(),
+        //     t_start.elapsed().as_micros()
+        // );
     }
 }
 
@@ -373,14 +404,23 @@ impl ThreadPoolEngine {
         ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
+        self.thread_sync.iter().for_each(|worker| {
+            worker
+                .order_tx
+                .send(Msg::Resize {
+                    new_buf_len: buffer.len(),
+                })
+                .unwrap()
+        });
+
         // Fill triangles to work on :
         {
-            let t = Instant::now();
+            // let t = Instant::now();
             let mut shared = self.shared.write().unwrap();
             // Since we share, we can't drain, so we need to clean directly.
             shared.clear();
             world.scene.if_present(|s| {
-                let t = Instant::now();
+                // let t = Instant::now();
                 s.top_nodes().iter().for_each(|n| {
                     populate_nodes_split(
                         settings,
@@ -391,11 +431,11 @@ impl ThreadPoolEngine {
                         &n.read().unwrap(),
                     )
                 });
-                println!("Populated nodes in : {}μs", t.elapsed().as_micros());
+                // println!("Populated nodes in : {}μs", t.elapsed().as_micros());
             });
-            if !shared.triangles.is_empty() {
-                println!("  -> After node closure : {}μs", t.elapsed().as_micros());
-            }
+            // if !shared.triangles.is_empty() {
+            //     println!("  -> After node closure : {}μs", t.elapsed().as_micros());
+            // }
 
             shared.settings = *settings;
             shared.size = size;
@@ -416,15 +456,29 @@ impl ThreadPoolEngine {
             .iter()
             .for_each(|worker| worker.end_rx.recv().unwrap());
 
-        let first = self.thread_sync[0].buffer_and_depth.read().unwrap();
-        buffer.copy_from_slice(&first.0[..]);
-        // self.depth_buffer.copy_from_slice(&first.1[..]);
+        // TODO: very inefficient merge
+        let t_start_merge = Instant::now();
+        let buffers: Vec<RwLockReadGuard<_>> = self
+            .thread_sync
+            .iter()
+            .map(|t| t.buffer_and_depth.read().unwrap())
+            .collect();
+        // buffer.fill(DEFAULT_BACKGROUND_COLOR);
+        buffer.iter_mut().enumerate().for_each(|(pix_i, b)| {
+            *b = buffers
+                .iter()
+                .map(|buffers| (buffers.0[pix_i], buffers.1[pix_i]))
+                .min_by(|(_, depth1), (_, depth2)| f32::total_cmp(depth1, depth2))
+                .map(|(pix, _)| pix)
+                .unwrap();
+        });
+        println!("Merged : {}μs", t_start_merge.elapsed().as_micros());
 
-        // TODO
-        // todo!("Try SIMD to merge");
+        self.thread_sync
+            .iter()
+            .for_each(|worker| worker.order_tx.send(Msg::Clear).unwrap());
 
         #[cfg(feature = "stats")]
-        // buffer.fill(DEFAULT_BACKGROUND_COLOR);
         todo!("merge stats");
     }
 
