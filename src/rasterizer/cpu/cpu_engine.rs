@@ -122,20 +122,20 @@ impl AnyEngine {
     /// Returns true if looping back to first
     pub fn set_next(&mut self) -> bool {
         match self {
-            AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
-            AnyEngine::Iterator(_) => *self = AnyEngine::Steps(Default::default()),
-            AnyEngine::Steps(_) => *self = AnyEngine::Steps2(Default::default()),
-            AnyEngine::Steps2(_) => *self = AnyEngine::ParIter0(Default::default()),
-            AnyEngine::ParIter0(_) => *self = AnyEngine::ParIter1(Default::default()),
+            // AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
+            // AnyEngine::Iterator(_) => *self = AnyEngine::Steps(Default::default()),
+            // AnyEngine::Steps(_) => *self = AnyEngine::Steps2(Default::default()),
+            AnyEngine::Steps2(_) => *self = AnyEngine::ParIter1(Default::default()),
+            // AnyEngine::ParIter0(_) => *self = AnyEngine::ParIter1(Default::default()),
             AnyEngine::ParIter1(_) => *self = AnyEngine::ThreadPool(Default::default()),
             AnyEngine::ThreadPool(_) => *self = AnyEngine::ThreadPool1(Default::default()),
             AnyEngine::ThreadPool1(_) => *self = AnyEngine::ThreadPool2(Default::default()),
-            AnyEngine::ThreadPool2(_) => *self = AnyEngine::ParIter2(Default::default()),
-            AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
-            AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
-            AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
-            AnyEngine::ParIter5(_) => {
-                *self = AnyEngine::Original(Default::default());
+            // AnyEngine::ThreadPool2(_) => *self = AnyEngine::ParIter2(Default::default()),
+            // AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
+            // AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
+            // AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
+            _ => {
+                *self = AnyEngine::Steps2(Default::default());
                 return true;
             }
         }

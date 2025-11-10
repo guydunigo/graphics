@@ -1,16 +1,19 @@
-//! Like thread_pool
+//! Like thread_pool, but we use an atomic array, so each thread merges its
+//! own buffer into it.
 use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 use std::{
-    ops::{DerefMut, Range},
-    slice,
+    ops::DerefMut,
     sync::{
         Arc, RwLock,
+        atomic::{AtomicU64, Ordering},
         mpsc::{Receiver, SyncSender, sync_channel},
     },
     thread::{JoinHandle, spawn},
     time::Instant,
 };
 use winit::dpi::PhysicalSize;
+
+const NB_THREADS: usize = 4;
 
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
@@ -20,25 +23,28 @@ use crate::{
     rasterizer::{
         cpu::{
             MINIMAL_AMBIANT_LIGHT, cursor_buffer_index, edge_function, format_debug,
-            single_threaded::draw_vertice_basic, vec_cross_z,
+            parallel::{
+                clean_resize_buffer,
+                depth_to_u64,
+                draw_vertice_basic, // thread_pool::NB_THREADS,
+                u64_to_color,
+            },
+            vec_cross_z,
         },
         settings::Settings,
     },
-    scene::{
-        BoundingBox, Camera, DEFAULT_BACKGROUND_COLOR, Node, Texture, Triangle, World, to_cam_tr,
-        to_raster,
-    },
+    scene::{BoundingBox, Camera, Node, Texture, Triangle, World, to_cam_tr, to_raster},
     window::AppObserver,
 };
 
-const NB_THREADS: usize = 4;
-
 #[derive(Debug, Clone)]
 enum Msg {
-    Resize { new_buf_len: usize },
-    Compute,
-    Merge { dst_ptr_range: Range<*mut u32> },
-    Clear,
+    Resize {
+        new_buf_len: usize,
+    },
+    Compute {
+        depth_color_buffer: Arc<[AtomicU64]>,
+    },
     Quit,
 }
 
@@ -46,10 +52,9 @@ enum Msg {
 // I know what I'm doing, trust me...
 unsafe impl Send for Msg {}
 
+#[cfg(feature = "stats")]
 #[derive(Default)]
-struct ThreadLocalSharedData {
-    buffer: Vec<u32>,
-    depth: Vec<f32>,
+struct ThreadStats {
     #[cfg(feature = "stats")]
     nb_triangles_sight: usize,
     #[cfg(feature = "stats")]
@@ -75,9 +80,10 @@ struct ThreadLocalData {
 
     shared: Arc<RwLock<SharedData>>,
 
-    thread_shared: Arc<RwLock<ThreadLocalSharedData>>,
+    #[cfg(feature = "stats")]
+    stats: Arc<RwLock<ThreadStats>>,
 
-    all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
+    depth_buffer: Vec<f32>,
 
     indices: Vec<usize>,
     triangles: Vec<(Vec3, Vec3, Vec3)>,
@@ -94,7 +100,7 @@ impl ThreadLocalData {
         order_rx: Receiver<Msg>,
         end_tx: SyncSender<()>,
         shared: Arc<RwLock<SharedData>>,
-        all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
+        #[cfg(feature = "stats")] stats: Arc<RwLock<ThreadStats>>,
     ) -> Self {
         Self {
             thread_i,
@@ -102,8 +108,9 @@ impl ThreadLocalData {
             end_tx,
             shared,
 
-            thread_shared: all_thread_shared[thread_i].clone(),
-            all_thread_shared,
+            #[cfg(feature = "stats")]
+            stats,
+            depth_buffer: Default::default(),
 
             indices: Default::default(),
             triangles: Default::default(),
@@ -120,49 +127,21 @@ impl ThreadLocalData {
             // println!("Thread {} recieved msg : {:?}", self.thread_i, msg);
             match msg {
                 Msg::Resize { new_buf_len } => self.resize(new_buf_len),
-                Msg::Compute => {
-                    self.rasterize_world();
+                Msg::Compute { depth_color_buffer } => {
+                    self.rasterize_world(&depth_color_buffer);
                     self.end_tx.send(()).unwrap();
+                    self.clear();
                 }
-                Msg::Merge { dst_ptr_range } => {
-                    self.merge(dst_ptr_range);
-                    self.end_tx.send(()).unwrap();
-                }
-                Msg::Clear => self.clear(),
                 Msg::Quit => break,
             }
         }
         println!("Thread {} stopping...", self.thread_i);
     }
 
-    fn merge(&mut self, dst_ptr_range: Range<*mut u32>) {
-        let src_buffers: Vec<_> = self
-            .all_thread_shared
-            .iter()
-            .map(|b| b.read().unwrap())
-            .collect();
-        let dst_buffer = unsafe { slice::from_mut_ptr_range(dst_ptr_range) };
-        dst_buffer
-            .iter_mut()
-            .enumerate()
-            .skip(self.thread_i)
-            .step_by(NB_THREADS)
-            .for_each(|(pix_i, b)| {
-                *b = src_buffers
-                    .iter()
-                    .map(|buffers| (buffers.buffer[pix_i], buffers.depth[pix_i]))
-                    .min_by(|(_, depth1), (_, depth2)| f32::total_cmp(depth1, depth2))
-                    .map(|(pix, _)| pix)
-                    .unwrap();
-            });
-    }
-
     fn clear(&mut self) {
         // let t_start = Instant::now();
-        let mut thread_shared = self.thread_shared.write().unwrap();
         // let t_lock = Instant::now();
-        thread_shared.buffer.fill(DEFAULT_BACKGROUND_COLOR);
-        thread_shared.depth.fill(f32::INFINITY);
+        self.depth_buffer.fill(f32::INFINITY);
         // println!(
         //     "Thread {} clear buffers : lock {}μs - tot {}μs",
         //     self.thread_i,
@@ -172,20 +151,16 @@ impl ThreadLocalData {
     }
 
     fn resize(&mut self, new_buf_len: usize) {
-        let mut thread_shared = self.thread_shared.write().unwrap();
-        thread_shared
-            .buffer
-            .resize(new_buf_len, DEFAULT_BACKGROUND_COLOR);
-        thread_shared.depth.resize(new_buf_len, f32::INFINITY);
-
+        self.depth_buffer.resize(new_buf_len, f32::INFINITY);
         self.indices.clear();
     }
 
-    fn rasterize_world(&mut self) {
+    fn rasterize_world(&mut self, depth_color_buffer: &[AtomicU64]) {
         // let t_start = Instant::now();
 
         let shared = self.shared.read().unwrap();
-        let mut thread_shared = self.thread_shared.write().unwrap();
+        #[cfg(feature = "stats")]
+        let mut stats = self.stats.write().unwrap();
 
         // let t_lock = Instant::now();
 
@@ -226,7 +201,7 @@ impl ThreadLocalData {
 
         #[cfg(feature = "stats")]
         {
-            thread_shared.nb_triangles_sight = self.indices.len();
+            stats.nb_triangles_sight = self.indices.len();
         }
 
         ////////////////////////////////
@@ -250,7 +225,7 @@ impl ThreadLocalData {
 
         #[cfg(feature = "stats")]
         {
-            thread_shared.nb_triangles_facing = self.indices.len();
+            stats.nb_triangles_facing = self.indices.len();
         }
 
         self.triangles.extend(
@@ -330,7 +305,10 @@ impl ThreadLocalData {
                         p2,
                         material,
                     },
-                    &mut thread_shared,
+                    &mut self.depth_buffer[..],
+                    &depth_color_buffer,
+                    #[cfg(feature = "stats")]
+                    &mut stats,
                     shared.camera.z_near,
                     shared.size,
                     &bb,
@@ -356,15 +334,18 @@ struct WorkerThread {
 }
 
 impl WorkerThread {
-    pub fn spawn(
-        thread_i: usize,
-        all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
-        shared: Arc<RwLock<SharedData>>,
-    ) -> Self {
+    pub fn spawn(thread_i: usize, shared: Arc<RwLock<SharedData>>) -> Self {
         let (order_tx, order_rx) = sync_channel(1);
         let (end_tx, end_rx) = sync_channel(1);
 
-        let mut th = ThreadLocalData::new(thread_i, order_rx, end_tx, shared, all_thread_shared);
+        let mut th = ThreadLocalData::new(
+            thread_i,
+            order_rx,
+            end_tx,
+            shared,
+            #[cfg(feature = "stats")]
+            stats,
+        );
         let handle = spawn(move || th.rasterize_loop());
 
         return Self {
@@ -408,26 +389,36 @@ pub struct ThreadPoolEngine2 {
     /// After an order, there should be an sync channel recv before the next order, or a quit command.
     thread_sync: Vec<WorkerThread>,
     #[cfg(feature = "stats")]
-    all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
+    all_stats: Vec<Arc<RwLock<ThreadStats>>>,
     shared: Arc<RwLock<SharedData>>,
+    depth_color_buffer: Arc<[AtomicU64]>,
 }
 
 impl Default for ThreadPoolEngine2 {
     fn default() -> Self {
         let shared: Arc<RwLock<SharedData>> = Default::default();
 
-        let all_thread_shared: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
+        #[cfg(feature = "stats")]
+        let all_stats: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
 
         // TODO: based on cpu count ?
         let thread_sync = (0..NB_THREADS)
-            .map(|i| WorkerThread::spawn(i, all_thread_shared.clone(), shared.clone()))
+            .map(|i| {
+                WorkerThread::spawn(
+                    i,
+                    shared.clone(),
+                    #[cfg(feature = "stats")]
+                    all_stats[thread_i].clone(),
+                )
+            })
             .collect();
 
         Self {
             thread_sync,
             #[cfg(feature = "stats")]
-            all_thread_shared,
+            all_stats,
             shared,
+            depth_color_buffer: Default::default(),
         }
     }
 }
@@ -498,59 +489,28 @@ impl ThreadPoolEngine2 {
             }
         };
 
-        self.thread_sync
-            .iter()
-            .for_each(|worker| worker.order_tx.send(Msg::Compute).unwrap());
-        self.thread_sync
-            .iter()
-            .for_each(|worker| worker.end_rx.recv().unwrap());
-
-        let t_start_merge = Instant::now();
-        /*
-        let buffers: Vec<_> = self
-            .thread_sync
-            .iter()
-            .map(|t| t.thread_shared.read().unwrap())
-            .collect();
-        // buffer.fill(DEFAULT_BACKGROUND_COLOR);
-        buffer.iter_mut().enumerate().for_each(|(pix_i, b)| {
-            *b = buffers
-                .iter()
-                .map(|buffers| (buffers.0[pix_i], buffers.1[pix_i]))
-                .min_by(|(_, depth1), (_, depth2)| f32::total_cmp(depth1, depth2))
-                .map(|(pix, _)| pix)
-                .unwrap();
-        });
-        */
-
-        let dst_ptr_range = buffer.as_mut_ptr_range();
         self.thread_sync.iter().for_each(|worker| {
             worker
                 .order_tx
-                .send(Msg::Merge {
-                    dst_ptr_range: dst_ptr_range.clone(),
+                .send(Msg::Compute {
+                    depth_color_buffer: self.depth_color_buffer.clone(),
                 })
                 .unwrap()
         });
         self.thread_sync
             .iter()
             .for_each(|worker| worker.end_rx.recv().unwrap());
-        println!("Merged : {}μs", t_start_merge.elapsed().as_micros());
-
-        self.thread_sync
-            .iter()
-            .for_each(|worker| worker.order_tx.send(Msg::Clear).unwrap());
 
         #[cfg(feature = "stats")]
-        self.all_thread_shared.iter().for_each(|t| {
-            let thread_shared = t.read().unwrap();
-            stats.nb_triangles_sight += thread_shared.nb_triangles_sight;
-            stats.nb_triangles_facing += thread_shared.nb_triangles_facing;
-            stats.nb_triangles_drawn += thread_shared.nb_triangles_drawn;
-            stats.nb_pixels_tested += thread_shared.nb_pixels_tested;
-            stats.nb_pixels_in += thread_shared.nb_pixels_in;
-            stats.nb_pixels_front += thread_shared.nb_pixels_front;
-            stats.nb_pixels_written += thread_shared.nb_pixels_written;
+        self.all_stats.iter().for_each(|t| {
+            let stats = t.read().unwrap();
+            stats.nb_triangles_sight += stats.nb_triangles_sight;
+            stats.nb_triangles_facing += stats.nb_triangles_facing;
+            stats.nb_triangles_drawn += stats.nb_triangles_drawn;
+            stats.nb_pixels_tested += stats.nb_pixels_tested;
+            stats.nb_pixels_in += stats.nb_pixels_in;
+            stats.nb_pixels_front += stats.nb_pixels_front;
+            stats.nb_pixels_written += stats.nb_pixels_written;
         });
     }
 
@@ -564,8 +524,7 @@ impl ThreadPoolEngine2 {
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        let t = Instant::now();
-        app.last_buffer_fill_micros = t.elapsed().as_micros();
+        app.last_buffer_fill_micros = clean_resize_buffer(&mut self.depth_color_buffer, size);
 
         let ratio_w_h = size.width as f32 / size.height as f32;
 
@@ -580,6 +539,16 @@ impl ThreadPoolEngine2 {
             stats,
         );
         app.last_rendering_micros = t.elapsed().as_micros();
+
+        let t = Instant::now();
+        (0..(size.width * size.height) as usize).for_each(|i| {
+            buffer[i] = u64_to_color(self.depth_color_buffer[i].load(Ordering::Relaxed));
+        });
+        app.last_buffer_copy_micros = t.elapsed().as_micros();
+        println!(
+            "Copied atomic to buffer : {}μs",
+            app.last_buffer_copy_micros
+        );
 
         {
             let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
@@ -685,10 +654,12 @@ fn populate_nodes_split(
 }
 
 // From single_threaded/mod.rs
-fn rasterize_triangle<B: DerefMut<Target = ThreadLocalSharedData>>(
+fn rasterize_triangle(
     settings: &Settings,
     tri_raster: &Triangle,
-    thread_shared: &mut B,
+    depth_buffer: &mut [f32],
+    depth_color_buffer: &[AtomicU64],
+    #[cfg(feature = "stats")] stats: &mut impl DerefMut<Target = ThreadStats>,
     z_near: f32,
     size: PhysicalSize<u32>,
     bb: &BoundingBox<u32>,
@@ -709,7 +680,7 @@ fn rasterize_triangle<B: DerefMut<Target = ThreadLocalSharedData>>(
 
             #[cfg(feature = "stats")]
             {
-                thread_shared.nb_pixels_tested += 1;
+                stats.nb_pixels_tested += 1;
             }
 
             let e01 = edge_function(p01, pixel - tri_raster.p0);
@@ -723,7 +694,7 @@ fn rasterize_triangle<B: DerefMut<Target = ThreadLocalSharedData>>(
 
             #[cfg(feature = "stats")]
             {
-                thread_shared.nb_pixels_in += 1;
+                stats.nb_pixels_in += 1;
             }
 
             let a12 = e12 / tri_area;
@@ -752,19 +723,19 @@ fn rasterize_triangle<B: DerefMut<Target = ThreadLocalSharedData>>(
 
             #[cfg(feature = "stats")]
             {
-                thread_shared.nb_pixels_front += 1;
+                stats.nb_pixels_front += 1;
             }
 
             let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
-            if depth >= thread_shared.depth[index] {
+            if depth >= depth_buffer[index] {
                 return;
             }
 
             #[cfg(feature = "stats")]
             {
                 was_drawn = true;
-                thread_shared.nb_pixels_written += 1;
+                stats.nb_pixels_written += 1;
             }
 
             let col = match tri_raster.material {
@@ -779,30 +750,31 @@ fn rasterize_triangle<B: DerefMut<Target = ThreadLocalSharedData>>(
                 }
             };
 
-            thread_shared.buffer[index] = col;
-            thread_shared.depth[index] = depth;
+            depth_buffer[index] = depth;
+            depth_color_buffer[index]
+                .fetch_min(col as u64 | depth_to_u64(depth), Ordering::Relaxed);
         });
 
     #[cfg(feature = "stats")]
     if was_drawn {
-        thread_shared.nb_triangles_drawn += 1;
+        stats.nb_triangles_drawn += 1;
     }
 
     if settings.show_vertices {
         draw_vertice_basic(
-            &mut thread_shared.buffer,
+            depth_color_buffer,
             size,
             tri_raster.p0,
             &tri_raster.material,
         );
         draw_vertice_basic(
-            &mut thread_shared.buffer,
+            depth_color_buffer,
             size,
             tri_raster.p1,
             &tri_raster.material,
         );
         draw_vertice_basic(
-            &mut thread_shared.buffer,
+            depth_color_buffer,
             size,
             tri_raster.p2,
             &tri_raster.material,

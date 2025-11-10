@@ -21,20 +21,17 @@ use crate::{
     rasterizer::{
         cpu::{
             MINIMAL_AMBIANT_LIGHT, cursor_buffer_index, edge_function, format_debug,
-            parallel::{clean_resize_buffer, depth_to_u64, u64_to_color},
-            single_threaded::draw_vertice_basic,
+            parallel::{
+                clean_resize_buffer, depth_to_u64, draw_vertice_basic, thread_pool::NB_THREADS,
+                u64_to_color,
+            },
             vec_cross_z,
         },
         settings::Settings,
     },
-    scene::{
-        BoundingBox, Camera, DEFAULT_BACKGROUND_COLOR, Node, Texture, Triangle, World, to_cam_tr,
-        to_raster,
-    },
+    scene::{BoundingBox, Camera, Node, Texture, Triangle, World, to_cam_tr, to_raster},
     window::AppObserver,
 };
-
-const NB_THREADS: usize = 4;
 
 #[derive(Debug, Clone)]
 enum Msg {
@@ -82,7 +79,6 @@ struct ThreadLocalData {
     #[cfg(feature = "stats")]
     stats: Arc<RwLock<ThreadStats>>,
 
-    buffer: Vec<u32>,
     depth_buffer: Vec<f32>,
 
     indices: Vec<usize>,
@@ -110,7 +106,6 @@ impl ThreadLocalData {
 
             #[cfg(feature = "stats")]
             stats,
-            buffer: Default::default(),
             depth_buffer: Default::default(),
 
             indices: Default::default(),
@@ -129,8 +124,7 @@ impl ThreadLocalData {
             match msg {
                 Msg::Resize { new_buf_len } => self.resize(new_buf_len),
                 Msg::Compute { depth_color_buffer } => {
-                    self.rasterize_world();
-                    self.merge(depth_color_buffer);
+                    self.rasterize_world(&depth_color_buffer);
                     self.end_tx.send(()).unwrap();
                     self.clear();
                 }
@@ -140,26 +134,9 @@ impl ThreadLocalData {
         println!("Thread {} stopping...", self.thread_i);
     }
 
-    fn merge(&mut self, depth_color_buffer: Arc<[AtomicU64]>) {
-        let t = Instant::now();
-        self.buffer
-            .iter()
-            .zip(self.depth_buffer.iter())
-            .enumerate()
-            .for_each(|(i, (c, d))| {
-                depth_color_buffer[i].fetch_min(*c as u64 | depth_to_u64(*d), Ordering::Relaxed);
-            });
-        println!(
-            "Thread {} copied results : {}μs",
-            self.thread_i,
-            t.elapsed().as_micros()
-        );
-    }
-
     fn clear(&mut self) {
         // let t_start = Instant::now();
         // let t_lock = Instant::now();
-        self.buffer.fill(DEFAULT_BACKGROUND_COLOR);
         self.depth_buffer.fill(f32::INFINITY);
         // println!(
         //     "Thread {} clear buffers : lock {}μs - tot {}μs",
@@ -170,12 +147,11 @@ impl ThreadLocalData {
     }
 
     fn resize(&mut self, new_buf_len: usize) {
-        self.buffer.resize(new_buf_len, DEFAULT_BACKGROUND_COLOR);
         self.depth_buffer.resize(new_buf_len, f32::INFINITY);
         self.indices.clear();
     }
 
-    fn rasterize_world(&mut self) {
+    fn rasterize_world(&mut self, depth_color_buffer: &[AtomicU64]) {
         // let t_start = Instant::now();
 
         let shared = self.shared.read().unwrap();
@@ -325,8 +301,8 @@ impl ThreadLocalData {
                         p2,
                         material,
                     },
-                    &mut self.buffer[..],
                     &mut self.depth_buffer[..],
+                    &depth_color_buffer,
                     #[cfg(feature = "stats")]
                     &mut stats,
                     shared.camera.z_near,
@@ -677,8 +653,8 @@ fn populate_nodes_split(
 fn rasterize_triangle(
     settings: &Settings,
     tri_raster: &Triangle,
-    mut buffer: &mut [u32],
     depth_buffer: &mut [f32],
+    depth_color_buffer: &[AtomicU64],
     #[cfg(feature = "stats")] stats: &mut impl DerefMut<Target = ThreadStats>,
     z_near: f32,
     size: PhysicalSize<u32>,
@@ -770,8 +746,9 @@ fn rasterize_triangle(
                 }
             };
 
-            buffer[index] = col;
             depth_buffer[index] = depth;
+            depth_color_buffer[index]
+                .fetch_min(col as u64 | depth_to_u64(depth), Ordering::Relaxed);
         });
 
     #[cfg(feature = "stats")]
@@ -780,8 +757,23 @@ fn rasterize_triangle(
     }
 
     if settings.show_vertices {
-        draw_vertice_basic(&mut buffer, size, tri_raster.p0, &tri_raster.material);
-        draw_vertice_basic(&mut buffer, size, tri_raster.p1, &tri_raster.material);
-        draw_vertice_basic(&mut buffer, size, tri_raster.p2, &tri_raster.material);
+        draw_vertice_basic(
+            depth_color_buffer,
+            size,
+            tri_raster.p0,
+            &tri_raster.material,
+        );
+        draw_vertice_basic(
+            depth_color_buffer,
+            size,
+            tri_raster.p1,
+            &tri_raster.material,
+        );
+        draw_vertice_basic(
+            depth_color_buffer,
+            size,
+            tri_raster.p2,
+            &tri_raster.material,
+        );
     }
 }

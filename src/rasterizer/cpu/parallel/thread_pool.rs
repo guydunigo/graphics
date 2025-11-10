@@ -34,7 +34,7 @@ use crate::{
     window::AppObserver,
 };
 
-const NB_THREADS: usize = 4;
+pub const NB_THREADS: usize = 16;
 
 #[derive(Debug, Clone)]
 enum Msg {
