@@ -1,7 +1,4 @@
-//! Like steps2 but splitting work across fixed manual threads.
-//!
-//! Each thread acts like separate steps2.
-//! Then we merge resulting buffers based on depth buffers comp.
+//! Like thread_pool
 use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 use std::{
     ops::{DerefMut, Range},
@@ -401,7 +398,7 @@ impl SharedData {
     }
 }
 
-pub struct ThreadPoolEngine {
+pub struct ThreadPoolEngine2 {
     /// List of spawned threads with :
     /// - Orders channel : Sender to send orders (start_index, count). Thread-side recv blocking.
     /// - Sync channel : Receiver to syncronize end of frame. Main-thread recv-blocking
@@ -415,7 +412,7 @@ pub struct ThreadPoolEngine {
     shared: Arc<RwLock<SharedData>>,
 }
 
-impl Default for ThreadPoolEngine {
+impl Default for ThreadPoolEngine2 {
     fn default() -> Self {
         let shared: Arc<RwLock<SharedData>> = Default::default();
 
@@ -435,7 +432,7 @@ impl Default for ThreadPoolEngine {
     }
 }
 
-impl Drop for ThreadPoolEngine {
+impl Drop for ThreadPoolEngine2 {
     fn drop(&mut self) {
         self.thread_sync.drain(..).for_each(|worker| {
             // Sending count=0 to tell it to quit.
@@ -446,7 +443,7 @@ impl Drop for ThreadPoolEngine {
     }
 }
 
-impl ThreadPoolEngine {
+impl ThreadPoolEngine2 {
     fn rasterize_world<B: DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,

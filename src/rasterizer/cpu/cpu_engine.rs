@@ -8,7 +8,7 @@ use super::{
     super::settings::{EngineType, Settings},
     parallel::{
         ParIterEngine, ParIterEngine0, ParIterEngine1, ParIterEngine2, ParIterEngine3,
-        ParIterEngine4, ParIterEngine5, ThreadPoolEngine,
+        ParIterEngine4, ParIterEngine5, ThreadPoolEngine, ThreadPoolEngine1, ThreadPoolEngine2,
     },
     single_threaded::{
         IteratorEngine, OriginalEngine, SingleThreadedEngine, Steps2Engine, StepsEngine,
@@ -92,6 +92,9 @@ impl CPUEngine {
     }
 }
 
+/// Bests (esp. with many triangles, like structure scene)
+/// - Single : Steps 2
+/// - Multi-core : ParIter1 / ThreadPool
 enum AnyEngine {
     Original(OriginalEngine),
     Iterator(IteratorEngine),
@@ -100,6 +103,8 @@ enum AnyEngine {
     ParIter0(ParIterEngine0),
     ParIter1(ParIterEngine1),
     ThreadPool(ThreadPoolEngine),
+    ThreadPool1(ThreadPoolEngine1),
+    ThreadPool2(ThreadPoolEngine2),
     ParIter2(ParIterEngine2),
     ParIter3(ParIterEngine3),
     ParIter4(ParIterEngine4),
@@ -108,7 +113,8 @@ enum AnyEngine {
 
 impl Default for AnyEngine {
     fn default() -> Self {
-        AnyEngine::Steps2(Default::default())
+        // AnyEngine::Steps2(Default::default())
+        AnyEngine::ThreadPool(Default::default())
     }
 }
 
@@ -122,7 +128,9 @@ impl AnyEngine {
             AnyEngine::Steps2(_) => *self = AnyEngine::ParIter0(Default::default()),
             AnyEngine::ParIter0(_) => *self = AnyEngine::ParIter1(Default::default()),
             AnyEngine::ParIter1(_) => *self = AnyEngine::ThreadPool(Default::default()),
-            AnyEngine::ThreadPool(_) => *self = AnyEngine::ParIter2(Default::default()),
+            AnyEngine::ThreadPool(_) => *self = AnyEngine::ThreadPool1(Default::default()),
+            AnyEngine::ThreadPool1(_) => *self = AnyEngine::ThreadPool2(Default::default()),
+            AnyEngine::ThreadPool2(_) => *self = AnyEngine::ParIter2(Default::default()),
             AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
             AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
             AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
@@ -216,6 +224,26 @@ impl AnyEngine {
                 #[cfg(feature = "stats")]
                 stats,
             ),
+            AnyEngine::ThreadPool1(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ThreadPool2(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
             AnyEngine::ParIter2(e) => e.rasterize(
                 settings,
                 text_writer,
@@ -268,6 +296,8 @@ impl AnyEngine {
             AnyEngine::ParIter0(_) => EngineType::ParIter0,
             AnyEngine::ParIter1(_) => EngineType::ParIter1,
             AnyEngine::ThreadPool(_) => EngineType::ThreadPool,
+            AnyEngine::ThreadPool1(_) => EngineType::ThreadPool1,
+            AnyEngine::ThreadPool2(_) => EngineType::ThreadPool2,
             AnyEngine::ParIter2(_) => EngineType::ParIter2,
             AnyEngine::ParIter3(_) => EngineType::ParIter3,
             AnyEngine::ParIter4(_) => EngineType::ParIter4,

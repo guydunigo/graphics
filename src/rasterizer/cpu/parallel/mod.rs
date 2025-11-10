@@ -5,6 +5,8 @@ mod par_iter_3;
 mod par_iter_4;
 mod par_iter_5;
 mod thread_pool;
+mod thread_pool_1;
+mod thread_pool_2;
 
 use glam::Vec3;
 use rayon::prelude::*;
@@ -24,6 +26,8 @@ pub use par_iter_3::ParIterEngine3;
 pub use par_iter_4::ParIterEngine4;
 pub use par_iter_5::ParIterEngine5;
 pub use thread_pool::ThreadPoolEngine;
+pub use thread_pool_1::ThreadPoolEngine1;
+pub use thread_pool_2::ThreadPoolEngine2;
 use winit::dpi::PhysicalSize;
 
 #[cfg(feature = "stats")]
