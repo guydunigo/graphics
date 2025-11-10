@@ -1,5 +1,5 @@
 //! Like thread_pool, but we use an atomic array, so each thread merges its
-//! own buffer into it.
+//! own buffers into it.
 use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 use std::{
     ops::DerefMut,
@@ -35,9 +35,6 @@ use crate::{
 
 #[derive(Debug, Clone)]
 enum Msg {
-    Resize {
-        new_buf_len: usize,
-    },
     Compute {
         depth_color_buffer: Arc<[AtomicU64]>,
     },
@@ -79,8 +76,6 @@ struct ThreadLocalData {
     #[cfg(feature = "stats")]
     stats: Arc<RwLock<ThreadStats>>,
 
-    depth_buffer: Vec<f32>,
-
     indices: Vec<usize>,
     triangles: Vec<(Vec3, Vec3, Vec3)>,
     textures: Vec<Texture>,
@@ -106,7 +101,6 @@ impl ThreadLocalData {
 
             #[cfg(feature = "stats")]
             stats,
-            depth_buffer: Default::default(),
 
             indices: Default::default(),
             triangles: Default::default(),
@@ -122,33 +116,15 @@ impl ThreadLocalData {
             let msg = self.order_rx.recv().unwrap();
             // println!("Thread {} recieved msg : {:?}", self.thread_i, msg);
             match msg {
-                Msg::Resize { new_buf_len } => self.resize(new_buf_len),
                 Msg::Compute { depth_color_buffer } => {
                     self.rasterize_world(&depth_color_buffer);
                     self.end_tx.send(()).unwrap();
-                    self.clear();
+                    self.indices.clear();
                 }
                 Msg::Quit => break,
             }
         }
         println!("Thread {} stopping...", self.thread_i);
-    }
-
-    fn clear(&mut self) {
-        // let t_start = Instant::now();
-        // let t_lock = Instant::now();
-        self.depth_buffer.fill(f32::INFINITY);
-        // println!(
-        //     "Thread {} clear buffers : lock {}μs - tot {}μs",
-        //     self.thread_i,
-        //     t_lock.duration_since(t_start).as_micros(),
-        //     t_start.elapsed().as_micros()
-        // );
-    }
-
-    fn resize(&mut self, new_buf_len: usize) {
-        self.depth_buffer.resize(new_buf_len, f32::INFINITY);
-        self.indices.clear();
     }
 
     fn rasterize_world(&mut self, depth_color_buffer: &[AtomicU64]) {
@@ -301,7 +277,6 @@ impl ThreadLocalData {
                         p2,
                         material,
                     },
-                    &mut self.depth_buffer[..],
                     &depth_color_buffer,
                     #[cfg(feature = "stats")]
                     &mut stats,
@@ -431,24 +406,14 @@ impl Drop for ThreadPoolEngine1 {
 }
 
 impl ThreadPoolEngine1 {
-    fn rasterize_world<B: DerefMut<Target = [u32]>>(
+    fn rasterize_world(
         &mut self,
         settings: &Settings,
         world: &World,
-        buffer: &mut B,
         size: PhysicalSize<u32>,
         ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        self.thread_sync.iter().for_each(|worker| {
-            worker
-                .order_tx
-                .send(Msg::Resize {
-                    new_buf_len: buffer.len(),
-                })
-                .unwrap()
-        });
-
         // Fill triangles to work on :
         {
             // let t = Instant::now();
@@ -528,7 +493,6 @@ impl ThreadPoolEngine1 {
         self.rasterize_world(
             settings,
             world,
-            buffer,
             size,
             ratio_w_h,
             #[cfg(feature = "stats")]
@@ -653,7 +617,6 @@ fn populate_nodes_split(
 fn rasterize_triangle(
     settings: &Settings,
     tri_raster: &Triangle,
-    depth_buffer: &mut [f32],
     depth_color_buffer: &[AtomicU64],
     #[cfg(feature = "stats")] stats: &mut impl DerefMut<Target = ThreadStats>,
     z_near: f32,
@@ -724,10 +687,6 @@ fn rasterize_triangle(
 
             let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
 
-            if depth >= depth_buffer[index] {
-                return;
-            }
-
             #[cfg(feature = "stats")]
             {
                 was_drawn = true;
@@ -746,7 +705,6 @@ fn rasterize_triangle(
                 }
             };
 
-            depth_buffer[index] = depth;
             depth_color_buffer[index]
                 .fetch_min(col as u64 | depth_to_u64(depth), Ordering::Relaxed);
         });
