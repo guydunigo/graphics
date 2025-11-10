@@ -4,9 +4,10 @@
 //! Then we merge resulting buffers based on depth buffers comp.
 use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 use std::{
-    ops::DerefMut,
+    ops::{DerefMut, Range},
+    slice,
     sync::{
-        Arc, RwLock, RwLockReadGuard,
+        Arc, RwLock,
         mpsc::{Receiver, SyncSender, sync_channel},
     },
     thread::{JoinHandle, spawn},
@@ -38,13 +39,17 @@ use crate::rasterizer::Stats;
 
 const NB_THREADS: usize = 4;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 enum Msg {
     Resize { new_buf_len: usize },
     Compute,
+    Merge { dst_ptr_range: Range<*mut u32> },
     Clear,
     Quit,
 }
+
+// Pointers aren't supposed to be sent...
+unsafe impl Send for Msg {}
 
 #[cfg(not(feature = "stats"))]
 type Finished = ();
@@ -62,6 +67,8 @@ struct ThreadLocalData {
 
     buffer_and_depth: Arc<RwLock<(Vec<u32>, Vec<f32>)>>,
 
+    all_buffer_and_depth: Vec<Arc<RwLock<(Vec<u32>, Vec<f32>)>>>,
+
     indices: Vec<usize>,
     triangles: Vec<(Vec3, Vec3, Vec3)>,
     textures: Vec<Texture>,
@@ -77,7 +84,7 @@ impl ThreadLocalData {
         order_rx: Receiver<Msg>,
         end_tx: SyncSender<Finished>,
         shared: Arc<RwLock<SharedData>>,
-        buffer_and_depth: Arc<RwLock<(Vec<u32>, Vec<f32>)>>,
+        all_buffer_and_depth: Vec<Arc<RwLock<(Vec<u32>, Vec<f32>)>>>,
     ) -> Self {
         Self {
             thread_i,
@@ -85,7 +92,8 @@ impl ThreadLocalData {
             end_tx,
             shared,
 
-            buffer_and_depth,
+            buffer_and_depth: all_buffer_and_depth[thread_i].clone(),
+            all_buffer_and_depth,
 
             indices: Default::default(),
             triangles: Default::default(),
@@ -106,11 +114,37 @@ impl ThreadLocalData {
                     self.rasterize_world();
                     self.end_tx.send(()).unwrap();
                 }
+                Msg::Merge { dst_ptr_range } => {
+                    self.merge(dst_ptr_range);
+                    self.end_tx.send(()).unwrap();
+                }
                 Msg::Clear => self.clear(),
                 Msg::Quit => break,
             }
         }
         println!("Thread {} dying...", self.thread_i);
+    }
+
+    fn merge(&mut self, dst_ptr_range: Range<*mut u32>) {
+        let src_buffers: Vec<_> = self
+            .all_buffer_and_depth
+            .iter()
+            .map(|b| b.read().unwrap())
+            .collect();
+        let dst_buffer = unsafe { slice::from_mut_ptr_range(dst_ptr_range) };
+        dst_buffer
+            .iter_mut()
+            .enumerate()
+            .skip(self.thread_i)
+            .step_by(NB_THREADS)
+            .for_each(|(pix_i, b)| {
+                *b = src_buffers
+                    .iter()
+                    .map(|buffers| (buffers.0[pix_i], buffers.1[pix_i]))
+                    .min_by(|(_, depth1), (_, depth2)| f32::total_cmp(depth1, depth2))
+                    .map(|(pix, _)| pix)
+                    .unwrap();
+            });
     }
 
     fn clear(&mut self) {
@@ -309,25 +343,24 @@ struct WorkerThread {
     handle: JoinHandle<()>,
     order_tx: SyncSender<Msg>,
     end_rx: Receiver<()>,
-    buffer_and_depth: Arc<RwLock<(Vec<u32>, Vec<f32>)>>,
 }
 
 impl WorkerThread {
-    pub fn spawn(thread_i: usize, shared: Arc<RwLock<SharedData>>) -> Self {
+    pub fn spawn(
+        thread_i: usize,
+        all_buffer_and_depth: Vec<Arc<RwLock<(Vec<u32>, Vec<f32>)>>>,
+        shared: Arc<RwLock<SharedData>>,
+    ) -> Self {
         let (order_tx, order_rx) = sync_channel(1);
         let (end_tx, end_rx) = sync_channel(1);
 
-        let buffer_and_depth: Arc<RwLock<(Vec<u32>, Vec<f32>)>> = Default::default();
-
-        let mut th =
-            ThreadLocalData::new(thread_i, order_rx, end_tx, shared, buffer_and_depth.clone());
+        let mut th = ThreadLocalData::new(thread_i, order_rx, end_tx, shared, all_buffer_and_depth);
         let handle = spawn(move || th.rasterize_loop());
 
         return Self {
             handle,
             order_tx,
             end_rx,
-            buffer_and_depth,
         };
     }
 }
@@ -371,9 +404,11 @@ impl Default for ThreadPoolEngine {
     fn default() -> Self {
         let shared: Arc<RwLock<SharedData>> = Default::default();
 
+        let all_buffer_and_depth: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
+
         // TODO: based on cpu count ?
         let thread_sync = (0..NB_THREADS)
-            .map(|i| WorkerThread::spawn(i, shared.clone()))
+            .map(|i| WorkerThread::spawn(i, all_buffer_and_depth.clone(), shared.clone()))
             .collect();
 
         Self {
@@ -456,9 +491,9 @@ impl ThreadPoolEngine {
             .iter()
             .for_each(|worker| worker.end_rx.recv().unwrap());
 
-        // TODO: very inefficient merge
         let t_start_merge = Instant::now();
-        let buffers: Vec<RwLockReadGuard<_>> = self
+        /*
+        let buffers: Vec<_> = self
             .thread_sync
             .iter()
             .map(|t| t.buffer_and_depth.read().unwrap())
@@ -472,6 +507,20 @@ impl ThreadPoolEngine {
                 .map(|(pix, _)| pix)
                 .unwrap();
         });
+        */
+
+        let dst_ptr_range = buffer.as_mut_ptr_range();
+        self.thread_sync.iter().for_each(|worker| {
+            worker
+                .order_tx
+                .send(Msg::Merge {
+                    dst_ptr_range: dst_ptr_range.clone(),
+                })
+                .unwrap()
+        });
+        self.thread_sync
+            .iter()
+            .for_each(|worker| worker.end_rx.recv().unwrap());
         println!("Merged : {}μs", t_start_merge.elapsed().as_micros());
 
         self.thread_sync
