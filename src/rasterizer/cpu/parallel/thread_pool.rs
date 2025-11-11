@@ -401,205 +401,6 @@ impl SharedData {
     }
 }
 
-pub struct ThreadPoolEngine {
-    /// List of spawned threads with :
-    /// - Orders channel : Sender to send orders (start_index, count). Thread-side recv blocking.
-    /// - Sync channel : Receiver to syncronize end of frame. Main-thread recv-blocking
-    ///
-    /// The thread should only block on the order channel.
-    ///
-    /// After an order, there should be an sync channel recv before the next order, or a quit command.
-    thread_sync: Vec<WorkerThread>,
-    #[cfg(feature = "stats")]
-    all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
-    shared: Arc<RwLock<SharedData>>,
-}
-
-impl Default for ThreadPoolEngine {
-    fn default() -> Self {
-        let shared: Arc<RwLock<SharedData>> = Default::default();
-
-        let all_thread_shared: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
-
-        // TODO: based on cpu count ?
-        let thread_sync = (0..NB_THREADS)
-            .map(|i| WorkerThread::spawn(i, all_thread_shared.clone(), shared.clone()))
-            .collect();
-
-        Self {
-            thread_sync,
-            #[cfg(feature = "stats")]
-            all_thread_shared,
-            shared,
-        }
-    }
-}
-
-impl Drop for ThreadPoolEngine {
-    fn drop(&mut self) {
-        self.thread_sync.drain(..).for_each(|worker| {
-            // Sending count=0 to tell it to quit.
-            // Returns Err() if already disconnected : no need to report error.
-            let _ = worker.order_tx.send(Msg::Quit);
-            worker.handle.join().unwrap();
-        });
-    }
-}
-
-impl ThreadPoolEngine {
-    fn rasterize_world<B: DerefMut<Target = [u32]>>(
-        &mut self,
-        settings: &Settings,
-        world: &World,
-        buffer: &mut B,
-        size: PhysicalSize<u32>,
-        ratio_w_h: f32,
-        #[cfg(feature = "stats")] stats: &mut Stats,
-    ) {
-        self.thread_sync.iter().for_each(|worker| {
-            worker
-                .order_tx
-                .send(Msg::Resize {
-                    new_buf_len: buffer.len(),
-                })
-                .unwrap()
-        });
-
-        // Fill triangles to work on :
-        {
-            // let t = Instant::now();
-            let mut shared = self.shared.write().unwrap();
-            // Since we share, we can't drain, so we need to clean directly.
-            shared.clear();
-            world.scene.if_present(|s| {
-                // let t = Instant::now();
-                s.top_nodes().iter().for_each(|n| {
-                    populate_nodes_split(
-                        settings,
-                        &world.camera,
-                        size,
-                        ratio_w_h,
-                        &mut shared,
-                        &n.read().unwrap(),
-                    )
-                });
-                // println!("Populated nodes in : {}μs", t.elapsed().as_micros());
-            });
-            // if !shared.triangles.is_empty() {
-            //     println!("  -> After node closure : {}μs", t.elapsed().as_micros());
-            // }
-
-            shared.settings = *settings;
-            shared.size = size;
-            shared.ratio_w_h = ratio_w_h;
-            shared.camera = world.camera;
-            shared.sun_direction = world.sun_direction;
-
-            #[cfg(feature = "stats")]
-            {
-                stats.nb_triangles_tot = shared.triangles.len();
-            }
-        };
-
-        self.thread_sync
-            .iter()
-            .for_each(|worker| worker.order_tx.send(Msg::Compute).unwrap());
-        self.thread_sync
-            .iter()
-            .for_each(|worker| worker.end_rx.recv().unwrap());
-
-        let t_start_merge = Instant::now();
-        /*
-        let buffers: Vec<_> = self
-            .thread_sync
-            .iter()
-            .map(|t| t.thread_shared.read().unwrap())
-            .collect();
-        // buffer.fill(DEFAULT_BACKGROUND_COLOR);
-        buffer.iter_mut().enumerate().for_each(|(pix_i, b)| {
-            *b = buffers
-                .iter()
-                .map(|buffers| (buffers.0[pix_i], buffers.1[pix_i]))
-                .min_by(|(_, depth1), (_, depth2)| f32::total_cmp(depth1, depth2))
-                .map(|(pix, _)| pix)
-                .unwrap();
-        });
-        */
-
-        let dst_ptr_range = buffer.as_mut_ptr_range();
-        self.thread_sync.iter().for_each(|worker| {
-            worker
-                .order_tx
-                .send(Msg::Merge {
-                    dst_ptr_range: dst_ptr_range.clone(),
-                })
-                .unwrap()
-        });
-        self.thread_sync
-            .iter()
-            .for_each(|worker| worker.end_rx.recv().unwrap());
-        println!("Merged : {}μs", t_start_merge.elapsed().as_micros());
-
-        self.thread_sync
-            .iter()
-            .for_each(|worker| worker.order_tx.send(Msg::Clear).unwrap());
-
-        #[cfg(feature = "stats")]
-        self.all_thread_shared.iter().for_each(|t| {
-            let thread_shared = t.read().unwrap();
-            stats.nb_triangles_sight += thread_shared.nb_triangles_sight;
-            stats.nb_triangles_facing += thread_shared.nb_triangles_facing;
-            stats.nb_triangles_drawn += thread_shared.nb_triangles_drawn;
-            stats.nb_pixels_tested += thread_shared.nb_pixels_tested;
-            stats.nb_pixels_in += thread_shared.nb_pixels_in;
-            stats.nb_pixels_front += thread_shared.nb_pixels_front;
-            stats.nb_pixels_written += thread_shared.nb_pixels_written;
-        });
-    }
-
-    pub fn rasterize<B: DerefMut<Target = [u32]>>(
-        &mut self,
-        settings: &Settings,
-        text_writer: &TextWriter,
-        world: &World,
-        buffer: &mut B,
-        size: PhysicalSize<u32>,
-        app: &mut AppObserver,
-        #[cfg(feature = "stats")] stats: &mut Stats,
-    ) {
-        let t = Instant::now();
-        app.last_buffer_fill_micros = t.elapsed().as_micros();
-
-        let ratio_w_h = size.width as f32 / size.height as f32;
-
-        let t = Instant::now();
-        self.rasterize_world(
-            settings,
-            world,
-            buffer,
-            size,
-            ratio_w_h,
-            #[cfg(feature = "stats")]
-            stats,
-        );
-        app.last_rendering_micros = t.elapsed().as_micros();
-
-        {
-            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
-            let display = format_debug(
-                settings,
-                world,
-                app,
-                size,
-                cursor_color,
-                #[cfg(feature = "stats")]
-                stats,
-            );
-            text_writer.rasterize(buffer, size, font::PX, &display[..]);
-        }
-    }
-}
-
 // From steps2
 // TODO: rapporter dans steps2 ?
 fn populate_nodes_split(
@@ -810,5 +611,204 @@ fn rasterize_triangle<B: DerefMut<Target = ThreadLocalSharedData>>(
             tri_raster.p2,
             &tri_raster.material,
         );
+    }
+}
+
+pub struct ThreadPoolEngine {
+    /// List of spawned threads with :
+    /// - Orders channel : Sender to send orders (start_index, count). Thread-side recv blocking.
+    /// - Sync channel : Receiver to syncronize end of frame. Main-thread recv-blocking
+    ///
+    /// The thread should only block on the order channel.
+    ///
+    /// After an order, there should be an sync channel recv before the next order, or a quit command.
+    thread_sync: Vec<WorkerThread>,
+    #[cfg(feature = "stats")]
+    all_thread_shared: Vec<Arc<RwLock<ThreadLocalSharedData>>>,
+    shared: Arc<RwLock<SharedData>>,
+}
+
+impl Default for ThreadPoolEngine {
+    fn default() -> Self {
+        let shared: Arc<RwLock<SharedData>> = Default::default();
+
+        let all_thread_shared: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
+
+        // TODO: based on cpu count ?
+        let thread_sync = (0..NB_THREADS)
+            .map(|i| WorkerThread::spawn(i, all_thread_shared.clone(), shared.clone()))
+            .collect();
+
+        Self {
+            thread_sync,
+            #[cfg(feature = "stats")]
+            all_thread_shared,
+            shared,
+        }
+    }
+}
+
+impl Drop for ThreadPoolEngine {
+    fn drop(&mut self) {
+        self.thread_sync.drain(..).for_each(|worker| {
+            // Sending count=0 to tell it to quit.
+            // Returns Err() if already disconnected : no need to report error.
+            let _ = worker.order_tx.send(Msg::Quit);
+            worker.handle.join().unwrap();
+        });
+    }
+}
+
+impl ThreadPoolEngine {
+    fn rasterize_world<B: DerefMut<Target = [u32]>>(
+        &mut self,
+        settings: &Settings,
+        world: &World,
+        buffer: &mut B,
+        size: PhysicalSize<u32>,
+        ratio_w_h: f32,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    ) {
+        self.thread_sync.iter().for_each(|worker| {
+            worker
+                .order_tx
+                .send(Msg::Resize {
+                    new_buf_len: buffer.len(),
+                })
+                .unwrap()
+        });
+
+        // Fill triangles to work on :
+        {
+            // let t = Instant::now();
+            let mut shared = self.shared.write().unwrap();
+            // Since we share, we can't drain, so we need to clean directly.
+            shared.clear();
+            world.scene.if_present(|s| {
+                // let t = Instant::now();
+                s.top_nodes().iter().for_each(|n| {
+                    populate_nodes_split(
+                        settings,
+                        &world.camera,
+                        size,
+                        ratio_w_h,
+                        &mut shared,
+                        &n.read().unwrap(),
+                    )
+                });
+                // println!("Populated nodes in : {}μs", t.elapsed().as_micros());
+            });
+            // if !shared.triangles.is_empty() {
+            //     println!("  -> After node closure : {}μs", t.elapsed().as_micros());
+            // }
+
+            shared.settings = *settings;
+            shared.size = size;
+            shared.ratio_w_h = ratio_w_h;
+            shared.camera = world.camera;
+            shared.sun_direction = world.sun_direction;
+
+            #[cfg(feature = "stats")]
+            {
+                stats.nb_triangles_tot = shared.triangles.len();
+            }
+        };
+
+        self.thread_sync
+            .iter()
+            .for_each(|worker| worker.order_tx.send(Msg::Compute).unwrap());
+        self.thread_sync
+            .iter()
+            .for_each(|worker| worker.end_rx.recv().unwrap());
+
+        let t_start_merge = Instant::now();
+        /*
+        let buffers: Vec<_> = self
+            .thread_sync
+            .iter()
+            .map(|t| t.thread_shared.read().unwrap())
+            .collect();
+        // buffer.fill(DEFAULT_BACKGROUND_COLOR);
+        buffer.iter_mut().enumerate().for_each(|(pix_i, b)| {
+            *b = buffers
+                .iter()
+                .map(|buffers| (buffers.0[pix_i], buffers.1[pix_i]))
+                .min_by(|(_, depth1), (_, depth2)| f32::total_cmp(depth1, depth2))
+                .map(|(pix, _)| pix)
+                .unwrap();
+        });
+        */
+
+        let dst_ptr_range = buffer.as_mut_ptr_range();
+        self.thread_sync.iter().for_each(|worker| {
+            worker
+                .order_tx
+                .send(Msg::Merge {
+                    dst_ptr_range: dst_ptr_range.clone(),
+                })
+                .unwrap()
+        });
+        self.thread_sync
+            .iter()
+            .for_each(|worker| worker.end_rx.recv().unwrap());
+        println!("Merged : {}μs", t_start_merge.elapsed().as_micros());
+
+        self.thread_sync
+            .iter()
+            .for_each(|worker| worker.order_tx.send(Msg::Clear).unwrap());
+
+        #[cfg(feature = "stats")]
+        self.all_thread_shared.iter().for_each(|t| {
+            let thread_shared = t.read().unwrap();
+            stats.nb_triangles_sight += thread_shared.nb_triangles_sight;
+            stats.nb_triangles_facing += thread_shared.nb_triangles_facing;
+            stats.nb_triangles_drawn += thread_shared.nb_triangles_drawn;
+            stats.nb_pixels_tested += thread_shared.nb_pixels_tested;
+            stats.nb_pixels_in += thread_shared.nb_pixels_in;
+            stats.nb_pixels_front += thread_shared.nb_pixels_front;
+            stats.nb_pixels_written += thread_shared.nb_pixels_written;
+        });
+    }
+
+    pub fn rasterize<B: DerefMut<Target = [u32]>>(
+        &mut self,
+        settings: &Settings,
+        text_writer: &TextWriter,
+        world: &World,
+        buffer: &mut B,
+        size: PhysicalSize<u32>,
+        app: &mut AppObserver,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    ) {
+        let t = Instant::now();
+        app.last_buffer_fill_micros = t.elapsed().as_micros();
+
+        let ratio_w_h = size.width as f32 / size.height as f32;
+
+        let t = Instant::now();
+        self.rasterize_world(
+            settings,
+            world,
+            buffer,
+            size,
+            ratio_w_h,
+            #[cfg(feature = "stats")]
+            stats,
+        );
+        app.last_rendering_micros = t.elapsed().as_micros();
+
+        {
+            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
+            let display = format_debug(
+                settings,
+                world,
+                app,
+                size,
+                cursor_color,
+                #[cfg(feature = "stats")]
+                stats,
+            );
+            text_writer.rasterize(buffer, size, font::PX, &display[..]);
+        }
     }
 }

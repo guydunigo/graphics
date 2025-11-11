@@ -1,5 +1,5 @@
-//! Like thread_pool, but we use an atomic array, so each thread merges its
-//! own buffers into it.
+//! Like thread_pool, but we use an atomic array, so each thread directly writes into
+//! it.
 use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 use std::{
     ops::DerefMut,
@@ -48,19 +48,12 @@ unsafe impl Send for Msg {}
 #[cfg(feature = "stats")]
 #[derive(Default)]
 struct ThreadStats {
-    #[cfg(feature = "stats")]
     nb_triangles_sight: usize,
-    #[cfg(feature = "stats")]
     nb_triangles_facing: usize,
-    #[cfg(feature = "stats")]
     nb_triangles_drawn: usize,
-    #[cfg(feature = "stats")]
     nb_pixels_tested: usize,
-    #[cfg(feature = "stats")]
     nb_pixels_in: usize,
-    #[cfg(feature = "stats")]
     nb_pixels_front: usize,
-    #[cfg(feature = "stats")]
     nb_pixels_written: usize,
 }
 
@@ -305,7 +298,11 @@ struct WorkerThread {
 }
 
 impl WorkerThread {
-    pub fn spawn(thread_i: usize, shared: Arc<RwLock<SharedData>>) -> Self {
+    pub fn spawn(
+        thread_i: usize,
+        shared: Arc<RwLock<SharedData>>,
+        #[cfg(feature = "stats")] stats: Arc<RwLock<ThreadStats>>,
+    ) -> Self {
         let (order_tx, order_rx) = sync_channel(1);
         let (end_tx, end_rx) = sync_channel(1);
 
@@ -580,7 +577,8 @@ impl Default for ThreadPoolEngine2 {
         let shared: Arc<RwLock<SharedData>> = Default::default();
 
         #[cfg(feature = "stats")]
-        let all_stats: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
+        let all_stats: Vec<Arc<RwLock<ThreadStats>>> =
+            (0..NB_THREADS).map(|_| Default::default()).collect();
 
         // TODO: based on cpu count ?
         let thread_sync = (0..NB_THREADS)
@@ -589,7 +587,7 @@ impl Default for ThreadPoolEngine2 {
                     i,
                     shared.clone(),
                     #[cfg(feature = "stats")]
-                    all_stats[thread_i].clone(),
+                    all_stats[i].clone(),
                 )
             })
             .collect();
@@ -674,14 +672,14 @@ impl ThreadPoolEngine2 {
 
         #[cfg(feature = "stats")]
         self.all_stats.iter().for_each(|t| {
-            let stats = t.read().unwrap();
-            stats.nb_triangles_sight += stats.nb_triangles_sight;
-            stats.nb_triangles_facing += stats.nb_triangles_facing;
-            stats.nb_triangles_drawn += stats.nb_triangles_drawn;
-            stats.nb_pixels_tested += stats.nb_pixels_tested;
-            stats.nb_pixels_in += stats.nb_pixels_in;
-            stats.nb_pixels_front += stats.nb_pixels_front;
-            stats.nb_pixels_written += stats.nb_pixels_written;
+            let thread_stats = t.read().unwrap();
+            stats.nb_triangles_sight += thread_stats.nb_triangles_sight;
+            stats.nb_triangles_facing += thread_stats.nb_triangles_facing;
+            stats.nb_triangles_drawn += thread_stats.nb_triangles_drawn;
+            stats.nb_pixels_tested += thread_stats.nb_pixels_tested;
+            stats.nb_pixels_in += thread_stats.nb_pixels_in;
+            stats.nb_pixels_front += thread_stats.nb_pixels_front;
+            stats.nb_pixels_written += thread_stats.nb_pixels_written;
         });
     }
 

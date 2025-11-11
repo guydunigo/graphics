@@ -237,6 +237,20 @@ impl BoundingBox<u32> {
             max_z: max.z,
         }
     }
+
+    pub fn new_3((p0, p1, p2): (Vec3, Vec3, Vec3), corner: Vec3, size: PhysicalSize<u32>) -> Self {
+        // TODO: MAX_DEPTH
+        let max_vec = vec3(size.width as f32 - 1., size.height as f32 - 1., 1000.);
+        let min = (p0.min(p1).min(p2) - corner).clamp(Vec3::ZERO, max_vec);
+        let max = (p0.max(p1).max(p2) - corner).clamp(Vec3::ZERO, max_vec);
+        BoundingBox {
+            min_x: min.x as u32,
+            min_y: min.y as u32,
+            max_x: max.x as u32,
+            max_y: max.y as u32,
+            max_z: max.z,
+        }
+    }
 }
 
 impl<T: PartialEq> BoundingBox<T> {

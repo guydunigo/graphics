@@ -1,11 +1,11 @@
-//! Like thread_pool, but we use an atomic array, so each thread merges its
-//! own buffers into it.
+//! Like thread_pool, but the threads take care of different parts of the screen instead of
+//! splitting the triangles.
 use glam::{Mat4, Vec3, Vec4Swizzles, vec3};
 use std::{
-    ops::DerefMut,
+    ops::{DerefMut, Range},
+    slice,
     sync::{
         Arc, RwLock,
-        atomic::{AtomicU64, Ordering},
         mpsc::{Receiver, SyncSender, sync_channel},
     },
     thread::{JoinHandle, spawn},
@@ -21,23 +21,21 @@ use crate::{
     rasterizer::{
         cpu::{
             MINIMAL_AMBIANT_LIGHT, cursor_buffer_index, edge_function, format_debug,
-            parallel::{
-                clean_resize_buffer, depth_to_u64, draw_vertice_basic, thread_pool::NB_THREADS,
-                u64_to_color,
-            },
-            vec_cross_z,
+            parallel::thread_pool::NB_THREADS, single_threaded::draw_vertice_basic, vec_cross_z,
         },
         settings::Settings,
     },
-    scene::{BoundingBox, Camera, Node, Texture, Triangle, World, to_cam_tr, to_raster},
+    scene::{
+        BoundingBox, Camera, DEFAULT_BACKGROUND_COLOR, Node, Texture, Triangle, World, to_cam_tr,
+        to_raster,
+    },
     window::AppObserver,
 };
 
 #[derive(Debug, Clone)]
 enum Msg {
-    Compute {
-        depth_color_buffer: Arc<[AtomicU64]>,
-    },
+    Resize { new_size: PhysicalSize<u32> },
+    Compute { dst_ptr_range: Range<*mut u32> },
     Quit,
 }
 
@@ -48,20 +46,25 @@ unsafe impl Send for Msg {}
 #[cfg(feature = "stats")]
 #[derive(Default)]
 struct ThreadStats {
-    #[cfg(feature = "stats")]
     nb_triangles_sight: usize,
-    #[cfg(feature = "stats")]
     nb_triangles_facing: usize,
-    #[cfg(feature = "stats")]
     nb_triangles_drawn: usize,
-    #[cfg(feature = "stats")]
     nb_pixels_tested: usize,
-    #[cfg(feature = "stats")]
     nb_pixels_in: usize,
-    #[cfg(feature = "stats")]
     nb_pixels_front: usize,
-    #[cfg(feature = "stats")]
     nb_pixels_written: usize,
+}
+
+fn start_count_split(nb_items: usize, nb_groups: usize, index: usize) -> (usize, usize) {
+    let step = nb_items / nb_groups;
+    let remainder = nb_items % nb_groups;
+    let start = step * index + usize::min(remainder, index);
+    let mut count = step;
+    if remainder > 0 && index < remainder {
+        count += 1;
+    };
+
+    (start, count)
 }
 
 /// Data needed inside the thread
@@ -72,6 +75,11 @@ struct ThreadLocalData {
     end_tx: SyncSender<()>,
 
     shared: Arc<RwLock<SharedData>>,
+    depth_buffer: Vec<f32>,
+    buffer_start: usize,
+    buffer_count: usize,
+    corner: Vec3,
+    size: PhysicalSize<u32>,
 
     #[cfg(feature = "stats")]
     stats: Arc<RwLock<ThreadStats>>,
@@ -98,6 +106,11 @@ impl ThreadLocalData {
             order_rx,
             end_tx,
             shared,
+            depth_buffer: Default::default(),
+            corner: Vec3::ZERO,
+            size: Default::default(),
+            buffer_start: 0,
+            buffer_count: 0,
 
             #[cfg(feature = "stats")]
             stats,
@@ -116,8 +129,12 @@ impl ThreadLocalData {
             let msg = self.order_rx.recv().unwrap();
             // println!("Thread {} recieved msg : {:?}", self.thread_i, msg);
             match msg {
-                Msg::Compute { depth_color_buffer } => {
-                    self.rasterize_world(&depth_color_buffer);
+                Msg::Resize { new_size } => self.resize(new_size),
+                Msg::Compute { dst_ptr_range } => {
+                    let buffer = unsafe { slice::from_mut_ptr_range(dst_ptr_range) };
+                    self.rasterize_world(
+                        &mut buffer[self.buffer_start..self.buffer_start + self.buffer_count],
+                    );
                     self.end_tx.send(()).unwrap();
                     self.indices.clear();
                 }
@@ -127,7 +144,22 @@ impl ThreadLocalData {
         println!("Thread {} stopping...", self.thread_i);
     }
 
-    fn rasterize_world(&mut self, depth_color_buffer: &[AtomicU64]) {
+    fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        let (rows_start, rows_count) =
+            start_count_split(new_size.height as usize, NB_THREADS, self.thread_i);
+        self.buffer_start = rows_start * new_size.width as usize;
+        self.buffer_count = rows_count * new_size.width as usize;
+
+        self.corner = vec3(0., self.buffer_start as f32, 0.);
+        self.size = new_size;
+        self.size.height = rows_count as u32;
+
+        self.depth_buffer.fill(f32::INFINITY);
+        self.depth_buffer.resize(self.buffer_count, f32::INFINITY);
+    }
+
+    fn rasterize_world(&mut self, buffer: &mut [u32]) {
+        buffer.fill(DEFAULT_BACKGROUND_COLOR);
         // let t_start = Instant::now();
 
         let shared = self.shared.read().unwrap();
@@ -136,10 +168,7 @@ impl ThreadLocalData {
 
         // let t_lock = Instant::now();
 
-        // We will work on every NB_THREADS of triangle collection : 0, 3, 6, ...
-        self.indices
-            .extend((self.thread_i..shared.triangles.len()).step_by(NB_THREADS));
-
+        self.indices.extend(0..shared.triangles.len());
         // self.triangles.clear();
         // self.textures.clear();
 
@@ -162,7 +191,7 @@ impl ThreadLocalData {
         // self.bounding_boxes.reserve(self.triangles.len());
         while self.bounding_boxes.len() < self.indices.len() {
             let i = self.bounding_boxes.len();
-            let bb = BoundingBox::new_2(self.t_raster[i], shared.size);
+            let bb = BoundingBox::new_3(self.t_raster[i], self.corner, self.size);
             if !shared.settings.culling_triangles || bb.is_visible(shared.camera.z_near) {
                 self.bounding_boxes.push(bb);
             } else {
@@ -277,7 +306,8 @@ impl ThreadLocalData {
                         p2,
                         material,
                     },
-                    &depth_color_buffer,
+                    buffer,
+                    &mut self.depth_buffer[..],
                     #[cfg(feature = "stats")]
                     &mut stats,
                     shared.camera.z_near,
@@ -305,7 +335,11 @@ struct WorkerThread {
 }
 
 impl WorkerThread {
-    pub fn spawn(thread_i: usize, shared: Arc<RwLock<SharedData>>) -> Self {
+    pub fn spawn(
+        thread_i: usize,
+        shared: Arc<RwLock<SharedData>>,
+        #[cfg(feature = "stats")] stats: Arc<RwLock<ThreadStats>>,
+    ) -> Self {
         let (order_tx, order_rx) = sync_channel(1);
         let (end_tx, end_rx) = sync_channel(1);
 
@@ -441,7 +475,8 @@ fn populate_nodes_split(
 fn rasterize_triangle(
     settings: &Settings,
     tri_raster: &Triangle,
-    depth_color_buffer: &[AtomicU64],
+    mut buffer: &mut [u32],
+    depth_buffer: &mut [f32],
     #[cfg(feature = "stats")] stats: &mut impl DerefMut<Target = ThreadStats>,
     z_near: f32,
     size: PhysicalSize<u32>,
@@ -529,8 +564,8 @@ fn rasterize_triangle(
                 }
             };
 
-            depth_color_buffer[index]
-                .fetch_min(col as u64 | depth_to_u64(depth), Ordering::Relaxed);
+            buffer[index] = col;
+            depth_buffer[index] = depth;
         });
 
     #[cfg(feature = "stats")]
@@ -539,24 +574,9 @@ fn rasterize_triangle(
     }
 
     if settings.show_vertices {
-        draw_vertice_basic(
-            depth_color_buffer,
-            size,
-            tri_raster.p0,
-            &tri_raster.material,
-        );
-        draw_vertice_basic(
-            depth_color_buffer,
-            size,
-            tri_raster.p1,
-            &tri_raster.material,
-        );
-        draw_vertice_basic(
-            depth_color_buffer,
-            size,
-            tri_raster.p2,
-            &tri_raster.material,
-        );
+        draw_vertice_basic(&mut buffer, size, tri_raster.p0, &tri_raster.material);
+        draw_vertice_basic(&mut buffer, size, tri_raster.p1, &tri_raster.material);
+        draw_vertice_basic(&mut buffer, size, tri_raster.p2, &tri_raster.material);
     }
 }
 
@@ -572,8 +592,6 @@ pub struct ThreadPoolEngine1 {
     #[cfg(feature = "stats")]
     all_stats: Vec<Arc<RwLock<ThreadStats>>>,
     shared: Arc<RwLock<SharedData>>,
-    depth_color_buffer: Arc<[AtomicU64]>,
-    last_cursor_color: Option<u32>,
 }
 
 impl Default for ThreadPoolEngine1 {
@@ -581,7 +599,8 @@ impl Default for ThreadPoolEngine1 {
         let shared: Arc<RwLock<SharedData>> = Default::default();
 
         #[cfg(feature = "stats")]
-        let all_stats: Vec<_> = (0..NB_THREADS).map(|_| Default::default()).collect();
+        let all_stats: Vec<Arc<RwLock<ThreadStats>>> =
+            (0..NB_THREADS).map(|_| Default::default()).collect();
 
         // TODO: based on cpu count ?
         let thread_sync = (0..NB_THREADS)
@@ -590,7 +609,7 @@ impl Default for ThreadPoolEngine1 {
                     i,
                     shared.clone(),
                     #[cfg(feature = "stats")]
-                    all_stats[thread_i].clone(),
+                    all_stats[i].clone(),
                 )
             })
             .collect();
@@ -600,8 +619,6 @@ impl Default for ThreadPoolEngine1 {
             #[cfg(feature = "stats")]
             all_stats,
             shared,
-            depth_color_buffer: Default::default(),
-            last_cursor_color: Default::default(),
         }
     }
 }
@@ -618,31 +635,22 @@ impl Drop for ThreadPoolEngine1 {
 }
 
 impl ThreadPoolEngine1 {
-    pub fn rasterize<B: DerefMut<Target = [u32]>>(
+    fn rasterize_world<B: DerefMut<Target = [u32]>>(
         &mut self,
         settings: &Settings,
-        text_writer: &TextWriter,
         world: &World,
-        mut buffer: &mut B,
-        mut size: PhysicalSize<u32>,
-        app: &mut AppObserver,
+        buffer: &mut B,
+        size: PhysicalSize<u32>,
+        ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
-        let original_size = size;
+        self.thread_sync.iter().for_each(|worker| {
+            worker
+                .order_tx
+                .send(Msg::Resize { new_size: size })
+                .unwrap()
+        });
 
-        // If x4 is set :
-        let mut font_size = font::PX;
-        size.width *= settings.oversampling as u32;
-        size.height *= settings.oversampling as u32;
-        if settings.parallel_text {
-            font_size *= settings.oversampling as f32;
-        }
-
-        app.last_buffer_fill_micros = clean_resize_buffer(&mut self.depth_color_buffer, size);
-
-        let ratio_w_h = size.width as f32 / size.height as f32;
-
-        let t = Instant::now();
         // Fill triangles to work on :
         {
             // let t = Instant::now();
@@ -679,98 +687,64 @@ impl ThreadPoolEngine1 {
             }
         };
 
+        let dst_ptr_range = buffer.as_mut_ptr_range();
         self.thread_sync.iter().for_each(|worker| {
             worker
                 .order_tx
                 .send(Msg::Compute {
-                    depth_color_buffer: self.depth_color_buffer.clone(),
+                    dst_ptr_range: dst_ptr_range.clone(),
                 })
                 .unwrap()
         });
-
-        buffer.fill(0);
-        if settings.parallel_text {
-            let display = format_debug(
-                settings,
-                world,
-                app,
-                size,
-                self.last_cursor_color,
-                #[cfg(feature = "stats")]
-                stats,
-            );
-            // text_writer.rasterize_atomic(&self.depth_color_buffer, size, font_size, &display[..]);
-            text_writer.rasterize(&mut buffer, size, font_size, &display[..]);
-        }
-
         self.thread_sync
             .iter()
             .for_each(|worker| worker.end_rx.recv().unwrap());
 
         #[cfg(feature = "stats")]
         self.all_stats.iter().for_each(|t| {
-            let stats = t.read().unwrap();
-            stats.nb_triangles_sight += stats.nb_triangles_sight;
-            stats.nb_triangles_facing += stats.nb_triangles_facing;
-            stats.nb_triangles_drawn += stats.nb_triangles_drawn;
-            stats.nb_pixels_tested += stats.nb_pixels_tested;
-            stats.nb_pixels_in += stats.nb_pixels_in;
-            stats.nb_pixels_front += stats.nb_pixels_front;
-            stats.nb_pixels_written += stats.nb_pixels_written;
+            let thread_stats = t.read().unwrap();
+            stats.nb_triangles_sight += thread_stats.nb_triangles_sight;
+            stats.nb_triangles_facing += thread_stats.nb_triangles_facing;
+            stats.nb_triangles_drawn += thread_stats.nb_triangles_drawn;
+            stats.nb_pixels_tested += thread_stats.nb_pixels_tested;
+            stats.nb_pixels_in += thread_stats.nb_pixels_in;
+            stats.nb_pixels_front += thread_stats.nb_pixels_front;
+            stats.nb_pixels_written += thread_stats.nb_pixels_written;
         });
+    }
+
+    pub fn rasterize<B: DerefMut<Target = [u32]>>(
+        &mut self,
+        settings: &Settings,
+        text_writer: &TextWriter,
+        world: &World,
+        buffer: &mut B,
+        size: PhysicalSize<u32>,
+        app: &mut AppObserver,
+        #[cfg(feature = "stats")] stats: &mut Stats,
+    ) {
+        let ratio_w_h = size.width as f32 / size.height as f32;
+
+        let t = Instant::now();
+        self.rasterize_world(
+            settings,
+            world,
+            buffer,
+            size,
+            ratio_w_h,
+            #[cfg(feature = "stats")]
+            stats,
+        );
         app.last_rendering_micros = t.elapsed().as_micros();
 
-        // TODO: parallel (safe split ref vec)
-        let t = Instant::now();
-        if settings.oversampling > 1 {
-            let oversampling_2 = settings.oversampling * settings.oversampling;
-
-            let depth_color_buffer = &self.depth_color_buffer[..];
-            (0..((original_size.height * original_size.width) as usize))
-                .step_by(original_size.width as usize)
-                .for_each(|j| {
-                    let jx = j * oversampling_2;
-                    (0..(original_size.width as usize)).for_each(|i| {
-                        // println!(
-                        //     "{jx4},{ix4} {} {} {} {}",
-                        //     jx4 * 4 + ix4 * 2,
-                        //     jx4 * 4 + ix4 * 2 + 1,
-                        //     jx4 * 4 + size.width as usize + ix4 * 2,
-                        //     jx4 * 4 + size.width as usize + ix4 * 2 + 1,
-                        // );
-                        let ix = i * settings.oversampling;
-
-                        let color_avg: ColorF32 = (0..(settings.oversampling
-                            * size.width as usize))
-                            .step_by(size.width as usize)
-                            .flat_map(|jo| {
-                                (0..settings.oversampling).map(move |io| {
-                                    ColorF32::from_argb_u32(u64_to_color(
-                                        depth_color_buffer[jx + jo + ix + io]
-                                            .load(Ordering::Relaxed),
-                                    ))
-                                })
-                            })
-                            .sum();
-                        let color_avg = color_avg / oversampling_2 as f32;
-                        buffer[j + i] |= color_avg.as_color_u32();
-                    });
-                });
-        } else {
-            (0..(size.width * size.height) as usize).for_each(|i| {
-                buffer[i] |= u64_to_color(self.depth_color_buffer[i].load(Ordering::Relaxed));
-            });
-        }
-        app.last_buffer_copy_micros = t.elapsed().as_micros();
-
-        self.last_cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
-        if !settings.parallel_text {
+        {
+            let cursor_color = cursor_buffer_index(app.cursor(), size).map(|index| buffer[index]);
             let display = format_debug(
                 settings,
                 world,
                 app,
                 size,
-                self.last_cursor_color,
+                cursor_color,
                 #[cfg(feature = "stats")]
                 stats,
             );
