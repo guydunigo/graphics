@@ -145,11 +145,17 @@ impl Textures<'_> {
             scene_data_descriptor_layout,
         );
 
-        // TODO check sizes
+        // See `resources/input_structures.glsl` :
+        // - UNIFORM_BUFFER for SceneData
+        // - ''             for GLTFMaterialData
+        // - img sampler    for colorTex
+        // - ''             for metalRoughTex
         let sizes = [
             (vk::DescriptorType::UNIFORM_BUFFER, 2.),
             (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 2.),
         ];
+        // TODO: 10 ?
+        todo!("10 ?");
         let mut global_desc_alloc =
             DescriptorAllocatorGrowable::new(device.clone(), 10, &sizes[..]);
 

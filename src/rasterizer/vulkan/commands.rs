@@ -652,7 +652,6 @@ fn cmd_buffer(device: &Device, cmd_pool: vk::CommandPool) -> vk::CommandBuffer {
         .command_buffer_count(1)
         .command_pool(cmd_pool)
         .level(vk::CommandBufferLevel::PRIMARY);
-    // TODO: always take index 0 ?
     unsafe {
         device
             .allocate_command_buffers(&command_buffer_allocate_info)
