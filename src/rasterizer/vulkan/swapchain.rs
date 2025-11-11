@@ -238,6 +238,20 @@ struct SwapchainData {
 impl SwapchainData {
     pub fn new(base: &VulkanBase) -> Self {
         let present_mode = vk::PresentModeKHR::FIFO;
+        // FIFO = HARD V-Sync
+        //     - No tearing
+        //     - Forces to wait for next frame : limits framerate to screen
+        //     - Only one that is required by spec, so always here.
+        //     - If app is slower, goes to next step : 60 -> 30fps
+        // MAILBOX = OFF
+        //     - No tearing as well
+        //     - No cap on FPS
+        //     - When ready, displays the latest
+        //     - Only other one supported by my AMD Radeon RX 7800XT
+        // FIFO_RELAXED = Like FIFO, but if slower, displays immediately when available
+        //     - Tearing possible if slower than screen
+        //     - On 7800XT, uncaps FPS in practice -> MAILBOX ?
+        // FIFO_LATEST_READY = new ?
         // TODO: when implemented : MAILBOX : https://vkguide.dev/docs/new_chapter_1/vulkan_init_flow/
         // let present_mode = present_modes
         //     .iter()
