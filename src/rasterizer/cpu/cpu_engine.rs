@@ -94,7 +94,7 @@ impl CPUEngine {
 
 /// Bests (esp. with many triangles, like structure scene)
 /// - Single : Steps 2
-/// - Multi-core : ParIter1 / ThreadPool
+/// - Multi-core : ThreadPool2
 enum AnyEngine {
     Original(OriginalEngine),
     Iterator(IteratorEngine),
@@ -113,8 +113,8 @@ enum AnyEngine {
 
 impl Default for AnyEngine {
     fn default() -> Self {
-        // AnyEngine::Steps2(Default::default())
-        AnyEngine::ThreadPool(Default::default())
+        AnyEngine::Steps2(Default::default())
+        // AnyEngine::ThreadPool1(Default::default())
     }
 }
 
@@ -127,9 +127,9 @@ impl AnyEngine {
             // AnyEngine::Steps(_) => *self = AnyEngine::Steps2(Default::default()),
             AnyEngine::Steps2(_) => *self = AnyEngine::ParIter1(Default::default()),
             // AnyEngine::ParIter0(_) => *self = AnyEngine::ParIter1(Default::default()),
-            AnyEngine::ParIter1(_) => *self = AnyEngine::ThreadPool(Default::default()),
-            AnyEngine::ThreadPool(_) => *self = AnyEngine::ThreadPool1(Default::default()),
-            AnyEngine::ThreadPool1(_) => *self = AnyEngine::ThreadPool2(Default::default()),
+            AnyEngine::ParIter1(_) => *self = AnyEngine::ThreadPool2(Default::default()),
+            // AnyEngine::ThreadPool(_) => *self = AnyEngine::ThreadPool1(Default::default()),
+            // AnyEngine::ThreadPool1(_) => *self = AnyEngine::ThreadPool2(Default::default()),
             // AnyEngine::ThreadPool2(_) => *self = AnyEngine::ParIter2(Default::default()),
             // AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
             // AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),

@@ -34,8 +34,13 @@ use crate::{
 
 #[derive(Debug, Clone)]
 enum Msg {
-    Resize { new_size: PhysicalSize<u32> },
-    Compute { dst_ptr_range: Range<*mut u32> },
+    Resize {
+        new_size: PhysicalSize<u32>,
+        dst_ptr_range: Range<*mut u32>,
+    },
+    Compute {
+        dst_ptr_range: Range<*mut u32>,
+    },
     Quit,
 }
 
@@ -129,7 +134,13 @@ impl ThreadLocalData {
             let msg = self.order_rx.recv().unwrap();
             // println!("Thread {} recieved msg : {:?}", self.thread_i, msg);
             match msg {
-                Msg::Resize { new_size } => self.resize(new_size),
+                Msg::Resize {
+                    new_size,
+                    dst_ptr_range,
+                } => {
+                    let buffer = unsafe { slice::from_mut_ptr_range(dst_ptr_range) };
+                    self.resize(new_size, buffer);
+                }
                 Msg::Compute { dst_ptr_range } => {
                     let buffer = unsafe { slice::from_mut_ptr_range(dst_ptr_range) };
                     self.rasterize_world(
@@ -144,22 +155,24 @@ impl ThreadLocalData {
         println!("Thread {} stopping...", self.thread_i);
     }
 
-    fn resize(&mut self, new_size: PhysicalSize<u32>) {
+    fn resize(&mut self, new_size: PhysicalSize<u32>, buffer: &mut [u32]) {
         let (rows_start, rows_count) =
             start_count_split(new_size.height as usize, NB_THREADS, self.thread_i);
         self.buffer_start = rows_start * new_size.width as usize;
         self.buffer_count = rows_count * new_size.width as usize;
 
-        self.corner = vec3(0., self.buffer_start as f32, 0.);
+        self.corner = vec3(0., rows_start as f32, 0.);
         self.size = new_size;
         self.size.height = rows_count as u32;
 
         self.depth_buffer.fill(f32::INFINITY);
         self.depth_buffer.resize(self.buffer_count, f32::INFINITY);
+
+        buffer[self.buffer_start..self.buffer_start + self.buffer_count]
+            .fill(DEFAULT_BACKGROUND_COLOR);
     }
 
     fn rasterize_world(&mut self, buffer: &mut [u32]) {
-        buffer.fill(DEFAULT_BACKGROUND_COLOR);
         // let t_start = Instant::now();
 
         let shared = self.shared.read().unwrap();
@@ -306,6 +319,7 @@ impl ThreadLocalData {
                         p2,
                         material,
                     },
+                    self.buffer_start,
                     buffer,
                     &mut self.depth_buffer[..],
                     #[cfg(feature = "stats")]
@@ -475,6 +489,7 @@ fn populate_nodes_split(
 fn rasterize_triangle(
     settings: &Settings,
     tri_raster: &Triangle,
+    buffer_start: usize,
     mut buffer: &mut [u32],
     depth_buffer: &mut [f32],
     #[cfg(feature = "stats")] stats: &mut impl DerefMut<Target = ThreadStats>,
@@ -544,7 +559,12 @@ fn rasterize_triangle(
                 stats.nb_pixels_front += 1;
             }
 
-            let index = (pixel.x as usize) + (pixel.y as usize) * size.width as usize;
+            let index =
+                ((pixel.x as usize) + (pixel.y as usize) * size.width as usize) - buffer_start;
+
+            if depth >= depth_buffer[index] {
+                return;
+            }
 
             #[cfg(feature = "stats")]
             {
@@ -644,10 +664,14 @@ impl ThreadPoolEngine1 {
         ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
+        let dst_ptr_range = buffer.as_mut_ptr_range();
         self.thread_sync.iter().for_each(|worker| {
             worker
                 .order_tx
-                .send(Msg::Resize { new_size: size })
+                .send(Msg::Resize {
+                    new_size: size,
+                    dst_ptr_range: dst_ptr_range.clone(),
+                })
                 .unwrap()
         });
 
@@ -687,7 +711,6 @@ impl ThreadPoolEngine1 {
             }
         };
 
-        let dst_ptr_range = buffer.as_mut_ptr_range();
         self.thread_sync.iter().for_each(|worker| {
             worker
                 .order_tx

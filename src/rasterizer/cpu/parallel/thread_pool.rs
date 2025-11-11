@@ -721,7 +721,7 @@ impl ThreadPoolEngine {
             .iter()
             .for_each(|worker| worker.end_rx.recv().unwrap());
 
-        let t_start_merge = Instant::now();
+        // let t_start_merge = Instant::now();
         /*
         let buffers: Vec<_> = self
             .thread_sync
@@ -751,7 +751,7 @@ impl ThreadPoolEngine {
         self.thread_sync
             .iter()
             .for_each(|worker| worker.end_rx.recv().unwrap());
-        println!("Merged : {}μs", t_start_merge.elapsed().as_micros());
+        // println!("Merged : {}μs", t_start_merge.elapsed().as_micros());
 
         self.thread_sync
             .iter()
