@@ -294,8 +294,8 @@ impl ApplicationHandler for App<'_> {
                                         size.height / 2,
                                     ))
                                     .expect("Could not center cursor");
-                                self.cursor_grabbed = true;
                             }
+                            self.cursor_grabbed = true;
                         } else {
                             w.window
                                 .set_cursor_grab(CursorGrabMode::None)
