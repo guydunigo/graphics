@@ -6,16 +6,10 @@ use std::{
 };
 
 use ash::vk;
-use glam::{Mat4, Quat, Vec3, Vec4, Vec4Swizzles, vec3};
-use winit::{
-    dpi::PhysicalSize,
-    event::{ElementState, KeyEvent, WindowEvent},
-    keyboard::{KeyCode, PhysicalKey},
-    window::Window,
-};
+use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 use super::settings::Settings;
-use crate::{scene::World, window::AppObserver};
+use crate::{scene::Camera, window::AppObserver};
 
 mod base;
 use base::VulkanBase;
@@ -121,7 +115,6 @@ pub struct VulkanEngine<'a> {
 
     current_bg_effect: usize,
     bg_effects_data: Vec<ComputePushConstants>,
-    camera: Camera,
     current_scene: String,
 
     settings: VulkanSettings,
@@ -223,7 +216,6 @@ impl VulkanEngine<'_> {
 
             current_bg_effect: 0,
             bg_effects_data,
-            camera: Default::default(),
             current_scene: "structure".into(),
 
             settings: Default::default(),
@@ -239,7 +231,7 @@ impl VulkanEngine<'_> {
     pub fn rasterize(
         &mut self,
         _settings: &Settings,
-        #[cfg(feature = "cpu")] _world: &World,
+        camera: &Camera,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] _stats: &mut Stats,
     ) {
@@ -263,7 +255,7 @@ impl VulkanEngine<'_> {
                 format_debug(
                     app,
                     self.base.window.inner_size(),
-                    &self.camera,
+                    camera,
                     #[cfg(feature = "vulkan_stats")]
                     self.stats,
                 ),
@@ -283,7 +275,7 @@ impl VulkanEngine<'_> {
 
         #[cfg(feature = "vulkan_stats")]
         let t = Instant::now();
-        self.update_scene();
+        self.update_scene(camera);
         #[cfg(feature = "vulkan_stats")]
         {
             self.stats.scene_update_micros = t.elapsed().as_micros();
@@ -415,19 +407,18 @@ impl VulkanEngine<'_> {
 
     pub fn on_window_event(&mut self, event: &WindowEvent) {
         self.gui.on_window_event(event);
-        self.camera.on_window_event(event);
     }
 
     pub fn on_mouse_motion(&mut self, delta: (f64, f64), cursor_grabbed: bool) {
-        self.gui.on_mouse_motion(delta);
-        self.camera.on_mouse_motion(delta, cursor_grabbed);
+        if !cursor_grabbed {
+            self.gui.on_mouse_motion(delta);
+        }
     }
 
-    fn update_scene(&mut self) {
-        self.camera.update();
+    fn update_scene(&mut self, camera: &Camera) {
         self.scene.update_scene(
             self.swapchain.draw_extent(),
-            self.camera.view_mat(),
+            camera.view_mat(),
             &self.current_scene,
         );
     }
@@ -531,92 +522,6 @@ fn ui<'a>(
         });
 }
 
-// TODO: merge camera with general engine
-#[derive(Debug, Clone, Copy)]
-struct Camera {
-    vel: Vec3,
-    pitch: f32,
-    yaw: f32,
-
-    pos: Vec3,
-}
-
-impl Default for Camera {
-    fn default() -> Self {
-        Self {
-            vel: Default::default(),
-            pitch: Default::default(),
-            yaw: Default::default(),
-
-            pos: vec3(0., 0., 5.),
-            // pos: vec3(30., -0., -85.),
-        }
-    }
-}
-
-impl Camera {
-    fn view_mat(&self) -> Mat4 {
-        // to create a correct model view, we need to move the world in opposite
-        // direction to the camera
-        //  so we will create the camera model matrix and invert
-        let tr = Mat4::from_translation(self.pos);
-        let rot = self.rot_mat();
-        (tr * rot).inverse()
-    }
-
-    fn rot_mat(&self) -> Mat4 {
-        // fairly typical FPS style camera. we join the pitch and yaw rotations into
-        // the final rotation matrix
-        let pitch = Quat::from_axis_angle(vec3(1., 0., 0.), self.pitch);
-        let yaw = Quat::from_axis_angle(vec3(0., -1., 0.), self.yaw);
-
-        Mat4::from_quat(yaw * pitch)
-    }
-
-    // TODO: doesn't take into account time delta.
-    fn update(&mut self) {
-        let rot = self.rot_mat();
-        self.pos += (rot * Vec4::from((self.vel * 0.5, 0.))).xyz();
-    }
-
-    fn on_window_event(&mut self, event: &WindowEvent) {
-        if let WindowEvent::KeyboardInput {
-            event:
-                KeyEvent {
-                    physical_key: PhysicalKey::Code(key),
-                    state,
-                    ..
-                },
-            ..
-        } = event
-        {
-            match state {
-                ElementState::Pressed => match key {
-                    KeyCode::KeyW => self.vel.z = -1.,
-                    KeyCode::KeyS => self.vel.z = 1.,
-                    KeyCode::KeyA => self.vel.x = -1.,
-                    KeyCode::KeyD => self.vel.x = 1.,
-                    _ => (),
-                },
-                ElementState::Released => match key {
-                    KeyCode::KeyW => self.vel.z = 0.,
-                    KeyCode::KeyS => self.vel.z = 0.,
-                    KeyCode::KeyA => self.vel.x = 0.,
-                    KeyCode::KeyD => self.vel.x = 0.,
-                    _ => (),
-                },
-            }
-        }
-    }
-
-    fn on_mouse_motion(&mut self, (delta_x, delta_y): (f64, f64), cursor_grabbed: bool) {
-        if cursor_grabbed {
-            self.yaw += delta_x as f32 / 200.;
-            self.pitch -= delta_y as f32 / 200.;
-        }
-    }
-}
-
 fn format_debug(
     app: &AppObserver,
     size: PhysicalSize<u32>,
@@ -628,13 +533,15 @@ fn format_debug(
     #[cfg(not(feature = "vulkan_stats"))]
     let stats = "Stats disabled";
     format!(
-        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\nCamera : {:?}\n{}",
+        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\nCamera : {} p: {} y: {}\n{}",
         app.fps_avg().round(),
         app.last_full_render_loop_micros(),
         app.frame_avg_micros(),
         size.width,
         size.height,
-        camera,
+        camera.pos,
+        camera.pitch,
+        camera.yaw,
         stats,
     )
 }

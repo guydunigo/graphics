@@ -1,13 +1,18 @@
+#[cfg(feature = "vulkan_validation_layers")]
 use std::{
     borrow::Cow,
-    ffi::{self, CStr, c_char},
+    ffi::{self},
+};
+use std::{
+    ffi::{CStr, c_char},
     ops::Deref,
     rc::Rc,
 };
 
+#[cfg(feature = "vulkan_validation_layers")]
+use ash::ext::debug_utils;
 use ash::{
     Device, Entry, Instance,
-    ext::debug_utils,
     khr::{surface, swapchain},
     vk,
 };
@@ -157,13 +162,17 @@ unsafe extern "system" fn vulkan_debug_callback(
 }
 
 fn extension_names<W: Deref<Target = Window>>(window: &W) -> Vec<*const c_char> {
-    let mut extension_names =
+    let extension_names =
         ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw())
             .unwrap()
             .to_vec();
 
     #[cfg(feature = "vulkan_validation_layers")]
-    extension_names.push(debug_utils::NAME.as_ptr());
+    let extension_names = {
+        let mut extension_names = extension_names;
+        extension_names.push(debug_utils::NAME.as_ptr());
+        extension_names
+    };
 
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     {

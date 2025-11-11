@@ -5,13 +5,18 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{font::TextWriter, scene::World, window::AppObserver};
 
 use super::{
-    parallel::{ParIterEngine, ParIterEngine2, ParIterEngine3, ParIterEngine4, ParIterEngine5},
-    settings::{EngineType, Settings},
-    single_threaded::{IteratorEngine, OriginalEngine, SingleThreadedEngine},
+    super::settings::{EngineType, Settings},
+    parallel::{
+        ParIterEngine, ParIterEngine0, ParIterEngine1, ParIterEngine2, ParIterEngine3,
+        ParIterEngine4, ParIterEngine5, ThreadPoolEngine, ThreadPoolEngine1, ThreadPoolEngine2,
+    },
+    single_threaded::{
+        IteratorEngine, OriginalEngine, SingleThreadedEngine, Steps2Engine, StepsEngine,
+    },
 };
 
 #[cfg(feature = "stats")]
-use super::Stats;
+use crate::rasterizer::cpu::Stats;
 
 pub struct CPUEngine {
     window: Rc<Window>,
@@ -34,6 +39,7 @@ impl CPUEngine {
         }
     }
 
+    #[cfg(all(feature = "vulkan", feature = "cpu"))]
     pub fn window(&self) -> &Rc<Window> {
         &self.window
     }
@@ -86,10 +92,19 @@ impl CPUEngine {
     }
 }
 
-#[derive(Debug)]
+/// Bests (esp. with many triangles, like structure scene)
+/// - Single : Steps 2
+/// - Multi-core : ThreadPool2
 enum AnyEngine {
     Original(OriginalEngine),
     Iterator(IteratorEngine),
+    Steps(StepsEngine),
+    Steps2(Steps2Engine),
+    ParIter0(ParIterEngine0),
+    ParIter1(ParIterEngine1),
+    ThreadPool(ThreadPoolEngine),
+    ThreadPool1(ThreadPoolEngine1),
+    ThreadPool2(ThreadPoolEngine2),
     ParIter2(ParIterEngine2),
     ParIter3(ParIterEngine3),
     ParIter4(ParIterEngine4),
@@ -98,7 +113,8 @@ enum AnyEngine {
 
 impl Default for AnyEngine {
     fn default() -> Self {
-        AnyEngine::Original(Default::default())
+        AnyEngine::Steps2(Default::default())
+        // AnyEngine::ThreadPool1(Default::default())
     }
 }
 
@@ -106,13 +122,20 @@ impl AnyEngine {
     /// Returns true if looping back to first
     pub fn set_next(&mut self) -> bool {
         match self {
-            AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
-            AnyEngine::Iterator(_) => *self = AnyEngine::ParIter2(Default::default()),
-            AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
-            AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
-            AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
-            AnyEngine::ParIter5(_) => {
-                *self = AnyEngine::Original(Default::default());
+            // AnyEngine::Original(_) => *self = AnyEngine::Iterator(Default::default()),
+            // AnyEngine::Iterator(_) => *self = AnyEngine::Steps(Default::default()),
+            // AnyEngine::Steps(_) => *self = AnyEngine::Steps2(Default::default()),
+            AnyEngine::Steps2(_) => *self = AnyEngine::ParIter1(Default::default()),
+            // AnyEngine::ParIter0(_) => *self = AnyEngine::ParIter1(Default::default()),
+            AnyEngine::ParIter1(_) => *self = AnyEngine::ThreadPool2(Default::default()),
+            // AnyEngine::ThreadPool(_) => *self = AnyEngine::ThreadPool1(Default::default()),
+            // AnyEngine::ThreadPool1(_) => *self = AnyEngine::ThreadPool2(Default::default()),
+            // AnyEngine::ThreadPool2(_) => *self = AnyEngine::ParIter2(Default::default()),
+            // AnyEngine::ParIter2(_) => *self = AnyEngine::ParIter3(Default::default()),
+            // AnyEngine::ParIter3(_) => *self = AnyEngine::ParIter4(Default::default()),
+            // AnyEngine::ParIter4(_) => *self = AnyEngine::ParIter5(Default::default()),
+            _ => {
+                *self = AnyEngine::Steps2(Default::default());
                 return true;
             }
         }
@@ -142,6 +165,76 @@ impl AnyEngine {
                 stats,
             ),
             AnyEngine::Iterator(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::Steps(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::Steps2(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ParIter0(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ParIter1(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ThreadPool(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ThreadPool1(e) => e.rasterize(
+                settings,
+                text_writer,
+                world,
+                buffer,
+                size,
+                app,
+                #[cfg(feature = "stats")]
+                stats,
+            ),
+            AnyEngine::ThreadPool2(e) => e.rasterize(
                 settings,
                 text_writer,
                 world,
@@ -198,6 +291,13 @@ impl AnyEngine {
         match self {
             AnyEngine::Original(_) => EngineType::Original,
             AnyEngine::Iterator(_) => EngineType::Iterator,
+            AnyEngine::Steps(_) => EngineType::Steps,
+            AnyEngine::Steps2(_) => EngineType::Steps2,
+            AnyEngine::ParIter0(_) => EngineType::ParIter0,
+            AnyEngine::ParIter1(_) => EngineType::ParIter1,
+            AnyEngine::ThreadPool(_) => EngineType::ThreadPool,
+            AnyEngine::ThreadPool1(_) => EngineType::ThreadPool1,
+            AnyEngine::ThreadPool2(_) => EngineType::ThreadPool2,
             AnyEngine::ParIter2(_) => EngineType::ParIter2,
             AnyEngine::ParIter3(_) => EngineType::ParIter3,
             AnyEngine::ParIter4(_) => EngineType::ParIter4,

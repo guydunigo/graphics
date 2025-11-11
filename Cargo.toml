@@ -7,11 +7,11 @@ include = ["src/**/*"]
 [dependencies]
 ash = { version = "0.38.0", optional = true }
 ash-window = { version = "0.13.0", optional = true }
-egui = { version = "0.31.1", optional = true }
-egui-ash-renderer = { version = "0.8.0", features = ["vk-mem", "dynamic-rendering"], optional = true }
-egui-winit = { version = "0.31.1", default-features = false, optional = true }
+egui = { version = "0.32.0", optional = true }
+egui-ash-renderer = { version = "0.9.0", features = ["vk-mem", "dynamic-rendering"], optional = true }
+egui-winit = { version = "0.32.0", default-features = false, optional = true }
 fontdue = { version = "0.9.3", features = ["std"], optional = true }
-glam = { version = "0.30.3", optional = true }
+glam = "0.30.3"
 obj-rs = "0.7.4"
 rand = "0.9.1"
 rayon = { version = "1.10.0", optional = true }
@@ -19,8 +19,7 @@ softbuffer = { version = "0.4.6", optional = true }
 vk-mem = { version = "0.4.0", optional = true }
 winit = "0.30.11"
 shaderc = { version = "0.9.1", optional = true }
-# TODO: gltf features ?
-gltf = { version = "1.4.1", optional = true }
+gltf = "1.4.1"
 image = { version = "0.25.6", default-features = false, optional = true }
 
 [profile.dev.package."*"]
@@ -45,8 +44,8 @@ cpu=[
 ]
 android = ["winit/android-native-activity"]
 vulkan=[
-    "ash", "ash-window", "egui", "egui-ash-renderer", "egui-winit", "glam",
-    "gltf", "image", "vk-mem",
+    "ash", "ash-window", "egui", "egui-ash-renderer", "egui-winit",
+    "image", "vk-mem",
 ]
 vulkan_shaderc = ["shaderc"]
 # All vulkan_* features need vulkan
@@ -56,6 +55,6 @@ vulkan_dbg_mem = []
 vulkan_stats = []
 vulkan_validation_layers = []
 
-# default = ["cpu"]
-default = ["vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]
-# default = ["vulkan", "vulkan_stats", "vulkan_validation_layers"]
+default = ["cpu"]
+# default = ["cpu", "vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]
+# No shader compile : default = ["vulkan", "vulkan_stats", "vulkan_validation_layers"]

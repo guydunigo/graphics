@@ -1,13 +1,18 @@
 use std::{rc::Rc, time::Instant};
 
+#[cfg(feature = "cpu")]
+use glam::{Vec3, vec3};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
-    event::{DeviceEvent, DeviceId, ElementState, KeyEvent, MouseButton, WindowEvent},
+    event::{DeviceEvent, DeviceId, ElementState, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, KeyCode, PhysicalKey},
     window::{CursorGrabMode, Window, WindowId},
 };
+
+#[cfg(feature = "cpu")]
+use glam::Mat4;
 
 #[cfg(target_os = "linux")]
 use winit::platform::x11::ActiveEventLoopExtX11;
@@ -17,11 +22,11 @@ use winit::platform::android::{EventLoopBuilderExtAndroid, activity::AndroidApp}
 
 #[cfg(feature = "stats")]
 use crate::rasterizer::Stats;
-use crate::{
-    maths::Rotation,
-    rasterizer::{Engine, Settings},
-    scene::World,
-};
+use crate::rasterizer::{Engine, Settings};
+#[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+use crate::scene::Camera;
+#[cfg(feature = "cpu")]
+use crate::scene::World;
 
 const BLENDING_RATIO: f32 = 0.01;
 
@@ -39,6 +44,7 @@ pub struct AppObserver {
 }
 
 impl AppObserver {
+    #[cfg(feature = "cpu")]
     pub fn cursor(&self) -> &Option<PhysicalPosition<f64>> {
         &self.cursor
     }
@@ -47,6 +53,7 @@ impl AppObserver {
         self.last_full_render_loop_micros
     }
 
+    #[cfg(feature = "cpu")]
     pub fn last_frame_micros(&self) -> u128 {
         self.last_frame_micros
     }
@@ -92,16 +99,21 @@ pub struct InitializedWindow<'a> {
 
 impl InitializedWindow<'_> {
     pub fn new(window: Rc<Window>) -> Self {
+        let engine = Engine::new(window.clone());
         Self {
-            window: window.clone(),
-            settings: Default::default(),
-            engine: Engine::new(window),
+            window,
+            settings: Settings {
+                engine_type: engine.as_engine_type(),
+                ..Default::default()
+            },
+            engine,
         }
     }
 
     pub fn rasterize(
         &mut self,
         #[cfg(feature = "cpu")] world: &World,
+        #[cfg(all(not(feature = "cpu"), feature = "vulkan"))] camera: &Camera,
         app: &mut AppObserver,
         #[cfg(feature = "stats")] stats: &mut Stats,
     ) {
@@ -109,6 +121,8 @@ impl InitializedWindow<'_> {
             &self.settings,
             #[cfg(feature = "cpu")]
             world,
+            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+            camera,
             app,
             #[cfg(feature = "stats")]
             stats,
@@ -125,6 +139,8 @@ pub struct App<'a> {
     window: Option<InitializedWindow<'a>>,
     #[cfg(feature = "cpu")]
     world: World,
+    #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+    camera: Camera,
     cursor: Option<PhysicalPosition<f64>>,
     cursor_grabbed: bool,
     last_full_render_loop_micros: u128,
@@ -143,6 +159,8 @@ impl Default for App<'_> {
             window: Default::default(),
             #[cfg(feature = "cpu")]
             world: Default::default(),
+            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+            camera: Default::default(),
             cursor: Default::default(),
             cursor_grabbed: Default::default(),
             last_full_render_loop_micros: Default::default(),
@@ -189,11 +207,16 @@ impl App<'_> {
             .as_micros();
         self.last_frame_start_time = last_frame_start_time;
 
-        self.frame_avg_micros = (self.frame_avg_micros as f32 * (1. - BLENDING_RATIO)
-            + self.last_frame_micros as f32 * BLENDING_RATIO)
-            as u128;
-        self.fps_avg = self.fps_avg * (1. - BLENDING_RATIO)
-            + BLENDING_RATIO * 1_000_000. / (self.last_frame_micros as f32);
+        let fps = 1_000_000. / (self.last_frame_micros as f32);
+        if (self.fps_avg - fps).abs() > 10. {
+            self.frame_avg_micros = self.last_frame_micros;
+            self.fps_avg = fps;
+        } else {
+            self.frame_avg_micros = (self.frame_avg_micros as f32 * (1. - BLENDING_RATIO)
+                + self.last_frame_micros as f32 * BLENDING_RATIO)
+                as u128;
+            self.fps_avg = self.fps_avg * (1. - BLENDING_RATIO) + BLENDING_RATIO * fps;
+        }
     }
 }
 
@@ -209,6 +232,10 @@ impl ApplicationHandler for App<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        #[cfg(feature = "cpu")]
+        self.world.camera.on_window_event(&event);
+        #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+        self.camera.on_window_event(&event);
         self.window.as_mut().unwrap().engine.on_window_event(&event);
         match event {
             WindowEvent::CloseRequested
@@ -278,77 +305,128 @@ impl ApplicationHandler for App<'_> {
                         }
                     }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ControlLeft => self.world.camera.move_sight(0., 1., 0.),
+                    KeyCode::ArrowLeft => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write().unwrap().transform(&Mat4::from_rotation_y(-0.1));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ShiftLeft => self.world.camera.move_sight(0., -1., 0.),
+                    KeyCode::ArrowRight => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write().unwrap().transform(&Mat4::from_rotation_y(0.1));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::KeyW => self.world.camera.move_sight(0., 0., 1.),
+                    KeyCode::ArrowUp => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write().unwrap().transform(&Mat4::from_rotation_x(-0.1));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::KeyS => self.world.camera.move_sight(0., 0., -1.),
+                    KeyCode::ArrowDown => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write().unwrap().transform(&Mat4::from_rotation_x(0.1));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::KeyA => self.world.camera.move_sight(-1., 0., 0.),
+                    KeyCode::NumpadAdd => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write()
+                                    .unwrap()
+                                    .transform(&Mat4::from_scale(Vec3::splat(1.1)));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::KeyD => self.world.camera.move_sight(1., 0., 0.),
+                    KeyCode::NumpadSubtract => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write()
+                                    .unwrap()
+                                    .transform(&Mat4::from_scale(Vec3::splat(0.9)));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ArrowLeft => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0., -0.1, 0.)),
+                    KeyCode::Numpad4 => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write()
+                                    .unwrap()
+                                    .transform(&Mat4::from_translation(vec3(-0.1, 0., 0.)));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ArrowRight => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0., 0.1, 0.)),
+                    KeyCode::Numpad6 => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write()
+                                    .unwrap()
+                                    .transform(&Mat4::from_translation(vec3(0.1, 0., 0.)));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ArrowUp => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(-0.1, 0., 0.)),
+                    KeyCode::Numpad8 => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write()
+                                    .unwrap()
+                                    .transform(&Mat4::from_translation(vec3(0., 0., -0.1)));
+                            }
+                        });
+                    }
                     #[cfg(feature = "cpu")]
-                    KeyCode::ArrowDown => self
-                        .world
-                        .meshes
-                        .iter_mut()
-                        .for_each(|m| m.rot *= &Rotation::from_angles(0.1, 0., 0.)),
-                    // TODO: parallel structures
-                    // KeyCode::ArrowLeft => self.world.meshes().iter().for_each(|m| {
-                    //     m.write().unwrap().rot *= &Rotation::from_angles(0., -0.1, 0.)
-                    // }),
-                    // KeyCode::ArrowRight => self.world.meshes().iter().for_each(|m| {
-                    //     m.write().unwrap().rot *= &Rotation::from_angles(0., 0.1, 0.)
-                    // }),
-                    // KeyCode::ArrowUp => self.world.meshes().iter().for_each(|m| {
-                    //     m.write().unwrap().rot *= &Rotation::from_angles(-0.1, 0., 0.)
-                    // }),
-                    // KeyCode::ArrowDown => self.world.meshes().iter().for_each(|m| {
-                    //     m.write().unwrap().rot *= &Rotation::from_angles(0.1, 0., 0.)
-                    // }),
+                    KeyCode::Numpad2 => {
+                        self.world.scene.if_present(|s| {
+                            if let Some(m) = s.get_named_node("suzanne") {
+                                m.write()
+                                    .unwrap()
+                                    .transform(&Mat4::from_translation(vec3(0., 0., 0.1)));
+                            }
+                        });
+                    }
                     KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,
                     KeyCode::Digit1 => w.set_next_engine(),
-                    KeyCode::Digit2 => w.settings.sort_triangles.next(),
-                    KeyCode::Digit3 => w.settings.parallel_text = !w.settings.parallel_text,
-                    KeyCode::Digit4 => w.settings.next_oversampling(),
-                    #[cfg(feature = "cpu")]
+                    // KeyCode::Digit2 => w.settings.sort_triangles.next(),
+                    KeyCode::Digit2 => w.settings.parallel_text = !w.settings.parallel_text,
+                    KeyCode::Digit3 => w.settings.next_oversampling(),
+                    KeyCode::Digit4 => w.settings.culling_meshes = !w.settings.culling_meshes,
+                    KeyCode::Digit5 => w.settings.culling_surfaces = !w.settings.culling_surfaces,
+                    KeyCode::Digit6 => w.settings.culling_triangles = !w.settings.culling_triangles,
+                    KeyCode::Digit7 => w.settings.vertex_color = !w.settings.vertex_color,
+                    KeyCode::Digit8 => {
+                        w.settings.vertex_color_normal = !w.settings.vertex_color_normal
+                    }
+                    KeyCode::Digit9 => {
+                        self.world.load_next_scene();
+                    }
                     KeyCode::Digit0 => self.world = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
                     _ => (),
                 }
             }
-            #[cfg(feature = "cpu")]
-            WindowEvent::MouseInput {
-                button: MouseButton::Right,
-                state: ElementState::Pressed,
-                ..
-            } => self.world.camera.reset_rot(),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = Some(position);
             }
             WindowEvent::RedrawRequested => {
                 self.update_last_frame_micros();
+                // TODO: forward update and events to world to manage itself ?
+                #[cfg(feature = "cpu")]
+                self.world.camera.update(self.last_frame_micros);
+                #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+                self.camera.update(self.last_frame_micros);
 
                 #[cfg(feature = "stats")]
                 let mut stats = Stats::default();
@@ -366,6 +444,8 @@ impl ApplicationHandler for App<'_> {
                 w.rasterize(
                     #[cfg(feature = "cpu")]
                     &self.world,
+                    #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+                    &self.camera,
                     &mut obs,
                     #[cfg(feature = "stats")]
                     &mut stats,
@@ -394,17 +474,17 @@ impl ApplicationHandler for App<'_> {
         event: DeviceEvent,
     ) {
         if let DeviceEvent::MouseMotion { delta } = event {
+            #[cfg(feature = "cpu")]
+            self.world
+                .camera
+                .on_mouse_motion(delta, self.cursor_grabbed);
+            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
+            self.camera.on_mouse_motion(delta, self.cursor_grabbed);
             self.window
                 .as_mut()
                 .unwrap()
                 .engine
                 .on_mouse_motion(delta, self.cursor_grabbed);
-            #[cfg(feature = "cpu")]
-            if self.cursor_grabbed {
-                self.world
-                    .camera
-                    .rotate_from_mouse(delta.0 as f32, delta.1 as f32);
-            }
         }
     }
 }

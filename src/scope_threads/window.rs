@@ -21,7 +21,7 @@ use winit::{
 };
 
 #[cfg(feature = "stats")]
-use crate::rasterizer::Stats;
+use crate::rasterizer::cpu::Stats;
 use crate::{
     font::TextWriter,
     rasterizer::{Settings, u64_to_color},

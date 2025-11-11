@@ -1,9 +1,14 @@
+mod par_iter_0;
+mod par_iter_1;
 mod par_iter_2;
 mod par_iter_3;
 mod par_iter_4;
 mod par_iter_5;
-mod scene;
+mod thread_pool;
+mod thread_pool_1;
+mod thread_pool_2;
 
+use glam::Vec3;
 use rayon::prelude::*;
 use std::{
     ops::DerefMut,
@@ -14,10 +19,15 @@ use std::{
     time::Instant,
 };
 
+pub use par_iter_0::ParIterEngine0;
+pub use par_iter_1::ParIterEngine1;
 pub use par_iter_2::ParIterEngine2;
 pub use par_iter_3::ParIterEngine3;
 pub use par_iter_4::ParIterEngine4;
 pub use par_iter_5::ParIterEngine5;
+pub use thread_pool::ThreadPoolEngine;
+pub use thread_pool_1::ThreadPoolEngine1;
+pub use thread_pool_2::ThreadPoolEngine2;
 use winit::dpi::PhysicalSize;
 
 #[cfg(feature = "stats")]
@@ -27,14 +37,13 @@ use std::sync::atomic::{AtomicBool, AtomicUsize};
 
 use crate::{
     font::{self, TextWriter},
-    maths::{Vec3f, Vec4u},
-    scene::{DEFAULT_BACKGROUND_COLOR, Texture, Triangle, World},
+    maths::ColorF32,
+    rasterizer::{Settings, cpu::populate_nodes},
+    scene::{BoundingBox, Camera, DEFAULT_BACKGROUND_COLOR, Texture},
     window::AppObserver,
 };
 
-use super::{
-    Rect, buffer_index, cursor_buffer_index, edge_function, format_debug, settings::Settings,
-};
+use super::{Triangle, buffer_index, cursor_buffer_index, edge_function, format_debug};
 
 const DEPTH_PRECISION: f32 = 2048.;
 const DEFAULT_DEPTH: u32 = u32::MAX;
@@ -44,11 +53,15 @@ pub trait ParIterEngine {
     fn depth_color_buffer(&self) -> &Arc<[AtomicU64]>;
     fn depth_color_buffer_mut(&mut self) -> &mut Arc<[AtomicU64]>;
 
+    fn triangles_mut(&mut self) -> &mut Vec<Triangle>;
+
     fn rasterize_world(
+        &mut self,
         settings: &Settings,
-        world: &World,
-        depth_color_buffer: &[AtomicU64],
+        camera: &Camera,
+        sun_direction: Vec3,
         size: PhysicalSize<u32>,
+        ratio_w_h: f32,
         #[cfg(feature = "stats")] stats: &ParStats,
     );
 
@@ -64,7 +77,6 @@ pub trait ParIterEngine {
     ) {
         let original_size = size;
 
-        // If x4 is set :
         let mut font_size = font::PX;
         size.width *= settings.oversampling as u32;
         size.height *= settings.oversampling as u32;
@@ -74,17 +86,43 @@ pub trait ParIterEngine {
 
         app.last_buffer_fill_micros = clean_resize_buffer(self.depth_color_buffer_mut(), size);
 
-        let depth_color_buffer = self.depth_color_buffer();
+        {
+            // TODO: let t = Instant::now();
+            let triangles = self.triangles_mut();
+            triangles.clear();
+            world.scene.if_present(|s| {
+                s.top_nodes()
+                    .iter()
+                    .for_each(|n| populate_nodes(triangles, &n.read().unwrap()))
+            });
+
+            /*
+            // TODO: Can't sort, not from camera view
+            match settings.sort_triangles {
+                TriangleSorting::BackToFront => {
+                    triangles.sort_by_key(|t| -t.min_z() as u32);
+                }
+                TriangleSorting::FrontToBack => {
+                    triangles.sort_by_key(|t| t.min_z() as u32);
+                }
+                _ => (),
+            }
+            */
+            // TODO: println!("{}", t.elapsed().as_micros()); // ~100 micros
+        }
+
+        let ratio_w_h = size.width as f32 / size.height as f32;
 
         {
             let t = Instant::now();
             #[cfg(feature = "stats")]
             let par_stats = ParStats::from(&*stats);
-            Self::rasterize_world(
+            self.rasterize_world(
                 settings,
-                world,
-                depth_color_buffer,
+                &world.camera,
+                world.sun_direction,
                 size,
+                ratio_w_h,
                 #[cfg(feature = "stats")]
                 &par_stats,
             );
@@ -92,6 +130,8 @@ pub trait ParIterEngine {
             par_stats.update_stats(stats);
             app.last_rendering_micros = t.elapsed().as_micros();
         }
+
+        let depth_color_buffer = self.depth_color_buffer();
 
         if settings.parallel_text {
             let cursor_color = cursor_buffer_index(app.cursor(), size)
@@ -127,11 +167,12 @@ pub trait ParIterEngine {
                         // );
                         let ix = i * settings.oversampling;
 
-                        let color_avg: Vec4u = (0..(settings.oversampling * size.width as usize))
+                        let color_avg: ColorF32 = (0..(settings.oversampling
+                            * size.width as usize))
                             .step_by(size.width as usize)
                             .flat_map(|jo| {
                                 (0..settings.oversampling).map(move |io| {
-                                    Vec4u::from_color_u32(u64_to_color(
+                                    ColorF32::from_argb_u32(u64_to_color(
                                         depth_color_buffer[jx + jo + ix + io]
                                             .load(Ordering::Relaxed),
                                     ))
@@ -173,10 +214,9 @@ fn rasterize_triangle(
     size: PhysicalSize<u32>,
     settings: &Settings,
     #[cfg(feature = "stats")] stats: &ParStats,
-    bb: &Rect,
-    light: f32,
-    p01: Vec3f,
-    p20: Vec3f,
+    bb: &BoundingBox<u32>,
+    p01: Vec3,
+    p20: Vec3,
 ) {
     #[cfg(feature = "stats")]
     let was_drawn = AtomicBool::new(false);
@@ -187,7 +227,7 @@ fn rasterize_triangle(
 
     (bb.min_x..=bb.max_x)
         .flat_map(|x| {
-            (bb.min_y..=bb.max_y).map(move |y| Vec3f {
+            (bb.min_y..=bb.max_y).map(move |y| Vec3 {
                 x: x as f32,
                 y: y as f32,
                 z: 0.,
@@ -240,16 +280,15 @@ fn rasterize_triangle(
 
             let depth_u64 = depth_to_u64(depth);
 
-            let col = match tri_raster.texture {
+            let col = match tri_raster.material {
                 Texture::Color(col) => col,
                 Texture::VertexColor(c0, c1, c2) => {
-                    // TODO: Optimize color calculus
-                    let col_2 = Vec4u::from_color_u32(c2) / tri_raster.p2.z;
+                    let col_2 = ColorF32::from_argb_u32(c2) / tri_raster.p2.z;
 
                     ((col_2
-                        + (Vec4u::from_color_u32(c0) / tri_raster.p0.z - col_2) * a12
-                        + (Vec4u::from_color_u32(c1) / tri_raster.p1.z - col_2) * a20)
-                        * (depth * light))
+                        + (ColorF32::from_argb_u32(c0) / tri_raster.p0.z - col_2) * a12
+                        + (ColorF32::from_argb_u32(c1) / tri_raster.p1.z - col_2) * a20)
+                        * depth)
                         .as_color_u32()
                 }
             } as u64
@@ -273,9 +312,24 @@ fn rasterize_triangle(
     }
 
     if settings.show_vertices {
-        draw_vertice_basic(depth_color_buffer, size, tri_raster.p0, &tri_raster.texture);
-        draw_vertice_basic(depth_color_buffer, size, tri_raster.p1, &tri_raster.texture);
-        draw_vertice_basic(depth_color_buffer, size, tri_raster.p2, &tri_raster.texture);
+        draw_vertice_basic(
+            depth_color_buffer,
+            size,
+            tri_raster.p0,
+            &tri_raster.material,
+        );
+        draw_vertice_basic(
+            depth_color_buffer,
+            size,
+            tri_raster.p1,
+            &tri_raster.material,
+        );
+        draw_vertice_basic(
+            depth_color_buffer,
+            size,
+            tri_raster.p2,
+            &tri_raster.material,
+        );
     }
 }
 
@@ -358,7 +412,7 @@ impl From<&Stats> for ParStats {
 fn draw_vertice_basic(
     depth_color_buffer: &[AtomicU64],
     size: PhysicalSize<u32>,
-    v: Vec3f,
+    v: Vec3,
     texture: &Texture,
 ) {
     if v.x >= 1.
@@ -370,9 +424,9 @@ fn draw_vertice_basic(
         let color = match texture {
             Texture::Color(col) => *col,
             // TODO: Better color calculus
-            Texture::VertexColor(c0, c1, c2) => ((Vec4u::from_color_u32(*c0)
-                + Vec4u::from_color_u32(*c1)
-                + Vec4u::from_color_u32(*c2))
+            Texture::VertexColor(c0, c1, c2) => ((ColorF32::from_argb_u32(*c0)
+                + ColorF32::from_argb_u32(*c1)
+                + ColorF32::from_argb_u32(*c2))
                 / 3.)
                 .as_color_u32(),
         } as u64;

@@ -21,11 +21,10 @@ use super::{
     allocated::{AllocatedBuffer, AllocatedImage, MyMemoryUsage},
     commands::VulkanCommands,
     descriptors::DescriptorAllocatorGrowable,
-    scene::{
-        Bounds, GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable, Vertex,
-    },
+    scene::{GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable},
     textures::{MaterialConstants, MaterialInstance, MaterialPass, MaterialResources, Textures},
 };
+use crate::scene::{Bounds, Vertex};
 
 /// Override colors with normal value
 const OVERRIDE_COLORS: bool = false;
@@ -237,7 +236,7 @@ impl LoadedGLTF {
             &mut descriptor_pool,
         );
 
-        let (meshes, meshes_vec) =
+        let (meshes_vec, meshes) =
             load_meshes(&device, commands, &document, buffers, materials_vec);
 
         let mut nodes = HashMap::new();
@@ -280,7 +279,7 @@ impl LoadedGLTF {
         // Searching for parent-less nodes
         let top_nodes = nodes_vec
             .iter()
-            .filter(|n| n.borrow().node_data().parent.upgrade().is_none())
+            .filter(|n| n.borrow().node_data().parent.strong_count() == 0)
             .cloned()
             .inspect(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY))
             .collect();
@@ -419,7 +418,7 @@ fn load_meshes(
     document: &Document,
     buffers: Vec<buffer::Data>,
     materials_vec: Vec<Rc<MaterialInstance>>,
-) -> (HashMap<String, Rc<MeshAsset>>, Vec<Rc<MeshAsset>>) {
+) -> (Vec<Rc<MeshAsset>>, HashMap<String, Rc<MeshAsset>>) {
     let mut meshes = HashMap::new();
     let meshes_vec = {
         // In common to prevent reallocating much
@@ -486,7 +485,7 @@ fn load_meshes(
                             material: materials_vec[primitive.material().index().unwrap_or(0)]
                                 .clone(),
 
-                            bounds: Bounds::new(&vertices[initial_vtx..]),
+                            bounds: Bounds::from_vertices(&vertices[initial_vtx..]),
                         }
                     })
                     .collect();
@@ -508,7 +507,7 @@ fn load_meshes(
             .collect()
     };
 
-    (meshes, meshes_vec)
+    (meshes_vec, meshes)
 }
 
 fn load_image(

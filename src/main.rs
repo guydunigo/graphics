@@ -1,3 +1,4 @@
+#![feature(slice_from_ptr_range)]
 mod font;
 mod maths;
 mod rasterizer;
