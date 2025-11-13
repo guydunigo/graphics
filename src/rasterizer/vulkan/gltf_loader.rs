@@ -182,7 +182,7 @@ impl LoadedGLTF {
 
         // TODO: we can estimate closely the needs dependending on the file
         // TODO check sizes
-        let sizes = [
+        let sizes = vec![
             (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 3.),
             (vk::DescriptorType::UNIFORM_BUFFER, 3.),
             (vk::DescriptorType::STORAGE_BUFFER, 1.),
@@ -190,7 +190,7 @@ impl LoadedGLTF {
         // TODO: count ? get len directly ? .as_json().materials.len()
         let materials_len = document.materials().count();
         let mut descriptor_pool =
-            DescriptorAllocatorGrowable::new(device.clone(), materials_len as u32, &sizes[..]);
+            DescriptorAllocatorGrowable::new(device.clone(), materials_len as u32, sizes);
 
         // Chargement dans l'ordre des dépendences
 

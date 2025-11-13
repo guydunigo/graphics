@@ -72,7 +72,7 @@ impl FrameData {
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
 
         // TODO check sizes
-        let sizes = [
+        let sizes = vec![
             (vk::DescriptorType::STORAGE_IMAGE, 3.),
             (vk::DescriptorType::STORAGE_BUFFER, 3.),
             (vk::DescriptorType::UNIFORM_BUFFER, 3.),
@@ -81,7 +81,7 @@ impl FrameData {
         let descriptors = RefCell::new(DescriptorAllocatorGrowable::new(
             device.clone(),
             1000,
-            &sizes[..],
+            sizes,
         ));
 
         Self {

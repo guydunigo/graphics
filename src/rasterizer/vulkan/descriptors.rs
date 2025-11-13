@@ -1,5 +1,5 @@
 use ash::{Device, vk};
-use std::rc::Rc;
+use std::{collections::LinkedList, rc::Rc};
 
 const MAX_SETS_PER_POOL: u32 = 4092;
 
@@ -83,11 +83,10 @@ pub struct DescriptorAllocatorGrowable {
 }
 
 impl DescriptorAllocatorGrowable {
-    pub fn new(device: Rc<Device>, max_sets: u32, pool_ratios: &[PoolSizeRatio]) -> Self {
+    pub fn new(device: Rc<Device>, max_sets: u32, pool_ratios: Vec<PoolSizeRatio>) -> Self {
         let mut res = Self {
             device_copy: device,
-            // TODO: clone
-            ratios: pool_ratios.into(),
+            ratios: pool_ratios,
             full: Default::default(),
             ready: Default::default(),
             sets_per_pool: max_sets,
@@ -206,19 +205,10 @@ impl Drop for DescriptorAllocatorGrowable {
 }
 
 #[derive(Default, Debug, Clone)]
-struct AppendOnlyVec<T>(Vec<T>);
-
-impl<T> AppendOnlyVec<T> {
-    pub fn push_and_ref(&mut self, value: T) -> &T {
-        self.0.push(value);
-        self.0.last().unwrap()
-    }
-}
-
-#[derive(Default, Debug, Clone)]
 pub struct DescriptorWriter<'a> {
-    image_infos: AppendOnlyVec<vk::DescriptorImageInfo>,
-    buffer_infos: AppendOnlyVec<vk::DescriptorBufferInfo>,
+    // Uses [`LinkedList`] to prevent pointer move on Vec reallocation.
+    image_infos: LinkedList<vk::DescriptorImageInfo>,
+    buffer_infos: LinkedList<vk::DescriptorBufferInfo>,
     /// **Warning** : This references [`image_infos`] and [`buffer_infos`], please don't try to
     /// clear their items before clearing writes !
     writes: Vec<vk::WriteDescriptorSet<'a>>,
@@ -228,8 +218,8 @@ impl<'a> DescriptorWriter<'a> {
     pub fn clear(&mut self) {
         self.writes.clear();
         // This is okay because we clear self.writes (so references to them) first :
-        self.buffer_infos.0.clear();
-        self.image_infos.0.clear();
+        self.buffer_infos.clear();
+        self.image_infos.clear();
     }
 
     // This should be fine as long as we don't remove the item from {image,buffer}_infos.
@@ -255,7 +245,7 @@ impl<'a> DescriptorWriter<'a> {
             .image_view(image_view)
             .image_layout(image_layout);
 
-        let info_ref = self.image_infos.push_and_ref(info);
+        let info_ref = self.image_infos.push_front_mut(info);
         let info_slice = Self::unsafe_ref_to_slice_cut_lifetime(info_ref);
 
         let write = vk::WriteDescriptorSet::default()
@@ -281,7 +271,7 @@ impl<'a> DescriptorWriter<'a> {
             .offset(offset)
             .range(size);
 
-        let info_ref = self.buffer_infos.push_and_ref(info);
+        let info_ref = self.buffer_infos.push_front_mut(info);
         let info_slice = Self::unsafe_ref_to_slice_cut_lifetime(info_ref);
 
         let write = vk::WriteDescriptorSet::default()
