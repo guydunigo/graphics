@@ -173,6 +173,8 @@ impl Drop for Scene<'_> {
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
+// TODO Dynamic alignment on VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment, see textures.MaterialConstants
+#[repr(align(256))]
 pub struct GpuSceneData {
     pub view: Mat4,
     pub proj: Mat4,

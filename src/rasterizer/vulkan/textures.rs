@@ -417,8 +417,14 @@ impl MaterialInstance {
 
 #[derive(Clone, Copy)]
 #[repr(C)]
-// TODO: align 256, and in copy slices, ... ?
-// #[repr(align(256))]
+// If descriptorType is VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER or VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, the offset member of each element of pBufferInfo must be a multiple of VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment (https://www.khronos.org/registry/vulkan/specs/1.3-extensions/html/vkspec.html#VUID-VkWriteDescriptorSet-descriptorType-00327)
+//
+// 256 is always safe in the meantime, but may waste memory
+// minUniformBufferOffsetAlignment :
+// - On 7800XT : 16 (like computer, so no warning reported...)
+// - On work Intel(R) UHD Graphics 620 (WHL GT2) : 64 (needs annotation)
+// TODO: dynamic, see : https://vkguide.dev/docs/chapter-4/descriptors_code_more/
+#[repr(align(256))]
 pub struct MaterialConstants {
     pub color_factors: Vec4,
     pub metal_rough_factors: Vec4,
