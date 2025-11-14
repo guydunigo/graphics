@@ -180,8 +180,14 @@ impl LoadedGLTF {
             })
             .collect();
 
-        // TODO: we can estimate closely the needs dependending on the file
-        // TODO check sizes
+        // - vertices : 1 storage buffer
+        // - MaterialConstants : uniform buffer
+        // - actual Texture : img sampl
+        // See texture : 2 image sampler + 2 uniform
+        // - GpuSceneData uniform
+        // - GLTFMaterialData uniform
+        // - colorTexture img samp
+        // - metalRoughTexture img samp
         let sizes = vec![
             (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 3.),
             (vk::DescriptorType::UNIFORM_BUFFER, 3.),

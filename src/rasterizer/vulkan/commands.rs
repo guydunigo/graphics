@@ -71,7 +71,7 @@ impl FrameData {
         let fence_render = unsafe { device.create_fence(fence_create_info, None).unwrap() };
         let sem_swapchain = unsafe { device.create_semaphore(sem_create_info, None).unwrap() };
 
-        // TODO check sizes
+        // TODO: Sizes ?
         let sizes = vec![
             (vk::DescriptorType::STORAGE_IMAGE, 3.),
             (vk::DescriptorType::STORAGE_BUFFER, 3.),

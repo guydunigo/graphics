@@ -146,7 +146,7 @@ impl Textures<'_> {
         );
 
         // See `resources/input_structures.glsl` :
-        // - UNIFORM_BUFFER for SceneData
+        // - UNIFORM_BUFFER for GpuSceneData
         // - ''             for GLTFMaterialData
         // - img sampler    for colorTex
         // - ''             for metalRoughTex

@@ -113,9 +113,8 @@ impl DescriptorAllocatorGrowable {
         )
     }
 
-    // TODO: look online, seems weird...
     // why continue creating bigger pools, aren't we creating empty ones anyway ?
-    // We are not re-allocating existing.
+    // We are not re-allocating existing...
     fn allocate_p_next<T: vk::ExtendsDescriptorSetAllocateInfo>(
         &mut self,
         layout: vk::DescriptorSetLayout,
