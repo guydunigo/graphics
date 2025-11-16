@@ -15,10 +15,9 @@ use super::{
     swapchain::VulkanSwapchain,
     textures::{MaterialInstance, MaterialPass, Textures},
 };
-use crate::scene::{Bounds, Vertex};
 
 use ash::{Device, vk};
-use glam::{Mat4, Vec4, vec4};
+use glam::{Mat4, Vec3, Vec4, Vec4Swizzles, vec3, vec4};
 
 // TODO: proper resource path mngmt and all
 const SCENES: &[(&str, &str)] = &[
@@ -168,6 +167,85 @@ impl Drop for Scene<'_> {
             self.device_copy
                 .destroy_descriptor_set_layout(self.data_descriptor_layout, None);
         }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Vertex {
+    pub position: Vec3,
+    pub uv_x: f32,
+    pub normal: Vec3,
+    pub uv_y: f32,
+    pub color: Vec4,
+}
+
+impl Default for Vertex {
+    fn default() -> Self {
+        Self {
+            position: Default::default(),
+            uv_x: Default::default(),
+            normal: vec3(1., 0., 0.),
+            uv_y: Default::default(),
+            color: vec4(1., 1., 1., 1.),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Bounds {
+    pub origin: Vec3,
+    pub extents: Vec3,
+    // pub sphere_radius: f32,
+}
+
+impl Bounds {
+    pub fn from_vertices(vertices: &[Vertex]) -> Self {
+        let (min, max) = vertices.iter().fold(
+            (vertices[0].position, vertices[0].position),
+            |(min, max), p| (min.min(p.position), max.max(p.position)),
+        );
+
+        let extents = (max - min) / 2.;
+        Self {
+            origin: (max + min) / 2.,
+            extents,
+            // sphere_radius: extents.length(),
+        }
+    }
+
+    // TODO: is it optimal ?
+    // TODO: glitchy for large objects in front and behind camera
+    /// From vulkan guide
+    pub fn is_visible(&self, view_proj: &Mat4, transform: &Mat4) -> bool {
+        let corners = [
+            vec3(1., 1., 1.),
+            vec3(1., 1., -1.),
+            vec3(1., -1., 1.),
+            vec3(1., -1., -1.),
+            vec3(-1., 1., 1.),
+            vec3(-1., 1., -1.),
+            vec3(-1., -1., 1.),
+            vec3(-1., -1., -1.),
+        ];
+
+        let matrix = view_proj * transform;
+
+        let min = Vec3::splat(1.5);
+        let max = Vec3::splat(-1.5);
+        let (min, max) = corners.iter().fold((min, max), |(min, max), c| {
+            let v = matrix * (self.origin + c * self.extents).extend(1.);
+            let v = v.xyz() / v.w;
+            (min.min(v), max.max(v))
+        });
+
+        // Clip space box in view
+        min.z <= 1. && max.z >= 0. && min.x <= 1. && max.x >= -1. && min.y <= 1. && max.y >= -1.
+    }
+
+    pub fn clip_space_origin_depth(&self, view_proj: &Mat4, transform: &Mat4) -> f32 {
+        let projected_origin = view_proj * transform * self.origin.extend(1.);
+        projected_origin.z
     }
 }
 

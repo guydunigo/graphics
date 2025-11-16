@@ -1,7 +1,5 @@
 use std::{rc::Rc, time::Instant};
 
-#[cfg(feature = "cpu")]
-use glam::{Vec3, vec3};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalPosition,
@@ -11,51 +9,48 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
-#[cfg(feature = "cpu")]
-use glam::Mat4;
-
 #[cfg(target_os = "linux")]
 use winit::platform::x11::ActiveEventLoopExtX11;
 
 #[cfg(target_os = "android")]
 use winit::platform::android::{EventLoopBuilderExtAndroid, activity::AndroidApp};
 
-#[cfg(feature = "stats")]
-use crate::rasterizer::Stats;
-use crate::rasterizer::{Engine, Settings};
-#[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
-use crate::scene::Camera;
-#[cfg(feature = "cpu")]
-use crate::scene::World;
+use crate::rasterizer::{Camera, Engine, Settings};
 
 const BLENDING_RATIO: f32 = 0.01;
 
 /// App data infos to be used and displayed, mostly for debugging
-#[derive(Default, Debug, Clone, Copy)]
-pub struct AppObserver {
-    cursor: Option<PhysicalPosition<f64>>,
+// TODO: check what is actually used here
+#[derive(Debug, Clone, Copy)]
+pub struct WindowStats {
+    last_frame_start_time: Instant,
     last_full_render_loop_micros: u128,
     last_frame_micros: u128,
     frame_avg_micros: u128,
     fps_avg: f32,
-    pub last_buffer_fill_micros: u128,
-    pub last_rendering_micros: u128,
-    pub last_buffer_copy_micros: u128,
+    last_rasterize_micros: u128,
 }
 
-impl AppObserver {
-    #[cfg(feature = "cpu")]
-    pub fn cursor(&self) -> &Option<PhysicalPosition<f64>> {
-        &self.cursor
+impl Default for WindowStats {
+    fn default() -> Self {
+        Self {
+            last_frame_start_time: Instant::now(),
+            last_full_render_loop_micros: Default::default(),
+            last_frame_micros: Default::default(),
+            frame_avg_micros: Default::default(),
+            fps_avg: Default::default(),
+            last_rasterize_micros: Default::default(),
+        }
+    }
+}
+
+impl WindowStats {
+    pub fn last_rasterize_micros(&self) -> u128 {
+        self.last_rasterize_micros
     }
 
     pub fn last_full_render_loop_micros(&self) -> u128 {
         self.last_full_render_loop_micros
-    }
-
-    #[cfg(feature = "cpu")]
-    pub fn last_frame_micros(&self) -> u128 {
-        self.last_frame_micros
     }
 
     pub fn frame_avg_micros(&self) -> u128 {
@@ -66,113 +61,47 @@ impl AppObserver {
         self.fps_avg
     }
 
-    fn from(value: &App) -> Self {
-        AppObserver {
-            cursor: value.cursor,
-            last_full_render_loop_micros: value.last_full_render_loop_micros,
-            last_frame_micros: value.last_frame_micros,
-            frame_avg_micros: value.frame_avg_micros,
-            fps_avg: value.fps_avg,
-            last_buffer_fill_micros: value.last_buffer_fill_micros,
-            last_rendering_micros: value.last_rendering_micros,
-            last_buffer_copy_micros: value.last_buffer_copy_micros,
-        }
-    }
+    pub fn update_last_frame_micros(&mut self) {
+        let last_frame_start_time = Instant::now();
+        self.last_frame_micros = last_frame_start_time
+            .duration_since(self.last_frame_start_time)
+            .as_micros();
+        self.last_frame_start_time = last_frame_start_time;
 
-    fn update_app(&self, app: &mut App) {
-        app.cursor = self.cursor;
-        app.last_full_render_loop_micros = self.last_full_render_loop_micros;
-        app.last_frame_micros = self.last_frame_micros;
-        app.frame_avg_micros = self.frame_avg_micros;
-        app.fps_avg = self.fps_avg;
-        app.last_buffer_fill_micros = self.last_buffer_fill_micros;
-        app.last_rendering_micros = self.last_rendering_micros;
-        app.last_buffer_copy_micros = self.last_buffer_copy_micros;
+        let fps = 1_000_000. / (self.last_frame_micros as f32);
+        if (self.fps_avg - fps).abs() > 10. {
+            self.frame_avg_micros = self.last_frame_micros;
+            self.fps_avg = fps;
+        } else {
+            self.frame_avg_micros = (self.frame_avg_micros as f32 * (1. - BLENDING_RATIO)
+                + self.last_frame_micros as f32 * BLENDING_RATIO)
+                as u128;
+            self.fps_avg = self.fps_avg * (1. - BLENDING_RATIO) + BLENDING_RATIO * fps;
+        }
     }
 }
 
 pub struct InitializedWindow<'a> {
     window: Rc<Window>,
-    settings: Settings,
     engine: Engine<'a>,
 }
 
 impl InitializedWindow<'_> {
     pub fn new(window: Rc<Window>) -> Self {
-        let engine = Engine::new(window.clone());
         Self {
+            engine: Engine::new(window.clone()),
             window,
-            settings: Settings {
-                engine_type: engine.as_engine_type(),
-                ..Default::default()
-            },
-            engine,
         }
-    }
-
-    pub fn rasterize(
-        &mut self,
-        #[cfg(feature = "cpu")] world: &World,
-        #[cfg(all(not(feature = "cpu"), feature = "vulkan"))] camera: &Camera,
-        app: &mut AppObserver,
-        #[cfg(feature = "stats")] stats: &mut Stats,
-    ) {
-        self.engine.rasterize(
-            &self.settings,
-            #[cfg(feature = "cpu")]
-            world,
-            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
-            camera,
-            app,
-            #[cfg(feature = "stats")]
-            stats,
-        );
-    }
-
-    pub fn set_next_engine(&mut self) {
-        self.engine.set_next();
-        self.settings.engine_type = self.engine.as_engine_type();
     }
 }
 
+#[derive(Default)]
 pub struct App<'a> {
     window: Option<InitializedWindow<'a>>,
-    #[cfg(feature = "cpu")]
-    world: World,
-    #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
     camera: Camera,
-    cursor: Option<PhysicalPosition<f64>>,
     cursor_grabbed: bool,
-    last_full_render_loop_micros: u128,
-    last_frame_start_time: Instant,
-    last_frame_micros: u128,
-    frame_avg_micros: u128,
-    fps_avg: f32,
-    last_buffer_fill_micros: u128,
-    last_rendering_micros: u128,
-    last_buffer_copy_micros: u128,
-}
-
-impl Default for App<'_> {
-    fn default() -> Self {
-        Self {
-            window: Default::default(),
-            #[cfg(feature = "cpu")]
-            world: Default::default(),
-            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
-            camera: Default::default(),
-            cursor: Default::default(),
-            cursor_grabbed: Default::default(),
-            last_full_render_loop_micros: Default::default(),
-            last_frame_start_time: Instant::now(),
-            last_frame_micros: Default::default(),
-            frame_avg_micros: Default::default(),
-            fps_avg: 60.,
-            last_buffer_fill_micros: Default::default(),
-            last_rendering_micros: Default::default(),
-            last_buffer_copy_micros: Default::default(),
-        }
-    }
+    settings: Settings,
+    stats: WindowStats,
 }
 
 impl App<'_> {
@@ -199,25 +128,6 @@ impl App<'_> {
         let mut app = App::default();
         event_loop.run_app(&mut app).unwrap();
     }
-
-    pub fn update_last_frame_micros(&mut self) {
-        let last_frame_start_time = Instant::now();
-        self.last_frame_micros = last_frame_start_time
-            .duration_since(self.last_frame_start_time)
-            .as_micros();
-        self.last_frame_start_time = last_frame_start_time;
-
-        let fps = 1_000_000. / (self.last_frame_micros as f32);
-        if (self.fps_avg - fps).abs() > 10. {
-            self.frame_avg_micros = self.last_frame_micros;
-            self.fps_avg = fps;
-        } else {
-            self.frame_avg_micros = (self.frame_avg_micros as f32 * (1. - BLENDING_RATIO)
-                + self.last_frame_micros as f32 * BLENDING_RATIO)
-                as u128;
-            self.fps_avg = self.fps_avg * (1. - BLENDING_RATIO) + BLENDING_RATIO * fps;
-        }
-    }
 }
 
 impl ApplicationHandler for App<'_> {
@@ -232,9 +142,6 @@ impl ApplicationHandler for App<'_> {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        #[cfg(feature = "cpu")]
-        self.world.camera.on_window_event(&event);
-        #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
         self.camera.on_window_event(&event);
         self.window.as_mut().unwrap().engine.on_window_event(&event);
         match event {
@@ -249,7 +156,6 @@ impl ApplicationHandler for App<'_> {
                     },
                 ..
             } => {
-                // TODO: drop surface = cleaner ?
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput {
@@ -304,154 +210,22 @@ impl ApplicationHandler for App<'_> {
                             self.cursor_grabbed = false;
                         }
                     }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::ArrowLeft => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write().unwrap().transform(&Mat4::from_rotation_y(-0.1));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::ArrowRight => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write().unwrap().transform(&Mat4::from_rotation_y(0.1));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::ArrowUp => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write().unwrap().transform(&Mat4::from_rotation_x(-0.1));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::ArrowDown => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write().unwrap().transform(&Mat4::from_rotation_x(0.1));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::NumpadAdd => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write()
-                                    .unwrap()
-                                    .transform(&Mat4::from_scale(Vec3::splat(1.1)));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::NumpadSubtract => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write()
-                                    .unwrap()
-                                    .transform(&Mat4::from_scale(Vec3::splat(0.9)));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::Numpad4 => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write()
-                                    .unwrap()
-                                    .transform(&Mat4::from_translation(vec3(-0.1, 0., 0.)));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::Numpad6 => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write()
-                                    .unwrap()
-                                    .transform(&Mat4::from_translation(vec3(0.1, 0., 0.)));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::Numpad8 => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write()
-                                    .unwrap()
-                                    .transform(&Mat4::from_translation(vec3(0., 0., -0.1)));
-                            }
-                        });
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::Numpad2 => {
-                        self.world.scene.if_present(|s| {
-                            if let Some(m) = s.get_named_node("suzanne") {
-                                m.write()
-                                    .unwrap()
-                                    .transform(&Mat4::from_translation(vec3(0., 0., 0.1)));
-                            }
-                        });
-                    }
-                    KeyCode::Backquote => w.settings.show_vertices = !w.settings.show_vertices,
-                    KeyCode::Digit1 => w.set_next_engine(),
-                    // KeyCode::Digit2 => w.settings.sort_triangles.next(),
-                    KeyCode::Digit2 => w.settings.parallel_text = !w.settings.parallel_text,
-                    KeyCode::Digit3 => w.settings.next_oversampling(),
-                    KeyCode::Digit4 => w.settings.culling_meshes = !w.settings.culling_meshes,
-                    KeyCode::Digit5 => w.settings.culling_surfaces = !w.settings.culling_surfaces,
-                    KeyCode::Digit6 => w.settings.culling_triangles = !w.settings.culling_triangles,
-                    KeyCode::Digit7 => w.settings.vertex_color = !w.settings.vertex_color,
-                    KeyCode::Digit8 => {
-                        w.settings.vertex_color_normal = !w.settings.vertex_color_normal
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::Digit9 => {
-                        self.world.load_next_scene();
-                    }
-                    #[cfg(feature = "cpu")]
-                    KeyCode::Digit0 => self.world = Default::default(),
+                    KeyCode::Digit0 => self.camera = Default::default(),
                     // KeyCode::Space => self.world.camera.pos = Vec3f::new(4., 1., -10.),
                     // KeyCode::KeyH => self.world.triangles.iter().nth(4).iter().for_each(|f| {
                     _ => (),
                 }
             }
-            WindowEvent::CursorMoved { position, .. } => {
-                self.cursor = Some(position);
-            }
             WindowEvent::RedrawRequested => {
-                self.update_last_frame_micros();
-                // TODO: forward update and events to world to manage itself ?
-                #[cfg(feature = "cpu")]
-                self.world.camera.update(self.last_frame_micros);
-                #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
-                self.camera.update(self.last_frame_micros);
-
-                #[cfg(feature = "stats")]
-                let mut stats = Stats::default();
-
-                // Redraw the application.
-                //
-                // It's preferable for applications that do not render continuously to render in
-                // this event rather than in AboutToWait, since rendering in here allows
-                // the program to gracefully handle redraws requested by the OS.
-
-                let mut obs = AppObserver::from(self);
+                self.stats.update_last_frame_micros();
+                self.camera.update(self.stats.last_frame_micros);
 
                 let w = self.window.as_mut().unwrap();
 
-                w.rasterize(
-                    #[cfg(feature = "cpu")]
-                    &self.world,
-                    #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
-                    &self.camera,
-                    &mut obs,
-                    #[cfg(feature = "stats")]
-                    &mut stats,
-                );
+                let t = Instant::now();
+                w.engine
+                    .rasterize(&self.settings, &self.camera, &self.stats);
+                self.stats.last_rasterize_micros = t.elapsed().as_micros();
 
                 // Queue a RedrawRequested event.
                 //
@@ -460,10 +234,8 @@ impl ApplicationHandler for App<'_> {
                 // can render here instead.
                 w.window.request_redraw();
 
-                obs.update_app(self);
-
-                self.last_full_render_loop_micros =
-                    self.last_frame_start_time.elapsed().as_micros();
+                self.stats.last_full_render_loop_micros =
+                    self.stats.last_frame_start_time.elapsed().as_micros();
             }
             _ => (),
         }
@@ -476,11 +248,6 @@ impl ApplicationHandler for App<'_> {
         event: DeviceEvent,
     ) {
         if let DeviceEvent::MouseMotion { delta } = event {
-            #[cfg(feature = "cpu")]
-            self.world
-                .camera
-                .on_mouse_motion(delta, self.cursor_grabbed);
-            #[cfg(all(not(feature = "cpu"), feature = "vulkan"))]
             self.camera.on_mouse_motion(delta, self.cursor_grabbed);
             self.window
                 .as_mut()
