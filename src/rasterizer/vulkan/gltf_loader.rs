@@ -121,12 +121,13 @@ pub struct LoadedGLTF {
     device_copy: Rc<Device>,
 
     meshes: HashMap<String, Rc<MeshAsset>>,
-    nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
+    /// Named nodes
+    pub nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
     // images: HashMap<String, Rc<AllocatedImage>>,
     images: Vec<Rc<AllocatedImage>>,
     materials: HashMap<String, Rc<MaterialInstance>>,
 
-    top_nodes: Vec<Rc<RefCell<dyn Node>>>,
+    pub top_nodes: Vec<Rc<RefCell<dyn Node>>>,
 
     samplers: Vec<vk::Sampler>,
 

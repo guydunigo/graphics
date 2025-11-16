@@ -410,7 +410,7 @@ pub struct NodeData {
     pub parent: Weak<RefCell<dyn Node>>,
     pub children: Vec<Rc<RefCell<dyn Node>>>,
     pub local_transform: Mat4,
-    world_transform: Mat4,
+    pub world_transform: Mat4,
 }
 
 impl Default for NodeData {

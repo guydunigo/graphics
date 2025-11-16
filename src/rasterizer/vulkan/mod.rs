@@ -1,15 +1,17 @@
 #[cfg(feature = "vulkan_stats")]
 use std::time::Instant;
 use std::{
+    collections::HashMap,
     rc::Rc,
     sync::{Arc, Mutex},
 };
 
 use ash::vk;
+use glam::Mat4;
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 use super::settings::Settings;
-use crate::{scene::Camera, window::AppObserver};
+use crate::{rasterizer::vulkan::gltf_loader::LoadedGLTF, scene::Camera, window::AppObserver};
 
 mod base;
 use base::VulkanBase;
@@ -120,6 +122,8 @@ pub struct VulkanEngine<'a> {
     settings: VulkanSettings,
     #[cfg(feature = "vulkan_stats")]
     stats: VulkanStats,
+
+    selected_node: String,
 }
 
 impl Drop for VulkanEngine<'_> {
@@ -216,11 +220,13 @@ impl VulkanEngine<'_> {
 
             current_bg_effect: 0,
             bg_effects_data,
-            current_scene: "structure".into(),
+            current_scene: "basicmesh".into(),
 
             settings: Default::default(),
             #[cfg(feature = "vulkan_stats")]
             stats,
+
+            selected_node: Default::default(),
         }
     }
 
@@ -264,8 +270,9 @@ impl VulkanEngine<'_> {
                 &self.swapchain.effects.bg_effects[..],
                 &mut self.bg_effects_data,
                 &mut self.current_scene,
-                self.scene.loaded_scenes.keys(),
+                &self.scene.loaded_scenes,
                 &mut self.settings,
+                &mut self.selected_node,
             )
         });
         #[cfg(feature = "vulkan_stats")]
@@ -432,8 +439,9 @@ fn ui<'a>(
     bg_effects: &[ComputeEffect],
     bg_effects_data: &mut [ComputePushConstants],
     current_scene: &mut String,
-    scenes: impl Iterator<Item = &'a String>,
+    scenes: &HashMap<String, LoadedGLTF>,
     settings: &mut VulkanSettings,
+    selected_node: &mut String,
 ) {
     egui::Window::new("Debug")
         .default_open(false)
@@ -516,9 +524,124 @@ fn ui<'a>(
         .default_open(false)
         .show(ctx, |ui| {
             ui.label("Selected scene :");
-            scenes.for_each(|n| {
+            scenes.keys().for_each(|n| {
                 ui.radio_value(current_scene, n.clone(), n);
             });
+        });
+    egui::Window::new("Scene nodes")
+        .default_open(false)
+        .show(ctx, |ui| {
+            let scene = scenes.get(current_scene).unwrap();
+            egui::ScrollArea::vertical()
+                .max_height(200.)
+                .auto_shrink(true)
+                .show(ui, |ui| {
+                    scene.nodes.iter().for_each(|(k, _)| {
+                        ui.radio_value(selected_node, k.clone(), k);
+                    });
+                });
+
+            // If the selected node exists (from this scene).
+            if let Some(node) = scene.nodes.get(selected_node) {
+                let mut node = node.borrow_mut();
+                let node_data = node.node_data_mut();
+                let local_tr_copy = node_data.local_transform;
+                egui::Grid::new("data").num_columns(4).show(ui, |ui| {
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.x_axis.x)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.y_axis.x)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.z_axis.x)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.w_axis.x)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.end_row();
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.x_axis.y)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.y_axis.y)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.z_axis.y)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.w_axis.y)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.end_row();
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.x_axis.z)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.y_axis.z)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.z_axis.z)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.w_axis.z)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.end_row();
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.x_axis.w)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.y_axis.w)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.z_axis.w)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.add(
+                        egui::DragValue::new(&mut node_data.local_transform.w_axis.w)
+                            .speed(0.01)
+                            .range(0.0..=5.0),
+                    );
+                    ui.end_row();
+                });
+                // If parameters were modified, update it (and its children) :
+                if node_data.local_transform != local_tr_copy {
+                    let parent_transform = if let Some(parent) = node_data.parent.upgrade() {
+                        parent.borrow().node_data().world_transform
+                    } else {
+                        Mat4::IDENTITY
+                    };
+                    node.refresh_transform(&parent_transform);
+                }
+            }
         });
 }
 
