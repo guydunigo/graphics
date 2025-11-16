@@ -6,9 +6,6 @@ use winit::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct Camera {
-    pub z_near: f32,
-    pub canvas_side: f32,
-
     pub pos: Vec3,
     pub vel: Vec3,
 
@@ -19,9 +16,6 @@ pub struct Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            z_near: 0.5,
-            canvas_side: 0.1,
-
             pos: vec3(1., 1., 12.),
             // Vulkan : pos: vec3(0., 0., 5.),
             // structure scene : pos: vec3(30., -0., -85.),

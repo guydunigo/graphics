@@ -9,7 +9,7 @@ use glam::Vec4;
 use vk_mem::Allocator;
 
 use super::{
-    allocated::{AllocatedBuffer, AllocatedImage, MyMemoryUsage},
+    allocated::AllocatedImage,
     commands::VulkanCommands,
     descriptors::{DescriptorAllocatorGrowable, DescriptorLayoutBuilder, DescriptorWriter},
     gfx_pipeline::{GpuDrawPushConstants, PipelineBuilder},
@@ -21,15 +21,15 @@ pub struct Textures<'a> {
     device_copy: Rc<Device>,
 
     pub white: Rc<AllocatedImage>,
-    pub grey: Rc<AllocatedImage>,
-    pub black: Rc<AllocatedImage>,
+    // pub grey: Rc<AllocatedImage>,
+    // pub black: Rc<AllocatedImage>,
     pub error_checkerboard: Rc<AllocatedImage>,
 
     pub default_sampler_linear: vk::Sampler,
     pub default_sampler_nearest: vk::Sampler,
 
-    pub default_material: Rc<MaterialInstance>,
-    _material_constants: AllocatedBuffer,
+    // default_material: Rc<MaterialInstance>,
+    // material_constants: AllocatedBuffer,
     pub metal_rough_material: GltfMetallicRoughness<'a>,
     _global_desc_alloc: DescriptorAllocatorGrowable,
 }
@@ -66,32 +66,32 @@ impl Textures<'_> {
         };
 
         let black_data = glam::U8Vec4::splat(0).to_array();
-        let black = {
-            AllocatedImage::new_and_upload(
-                commands,
-                device.clone(),
-                allocator.clone(),
-                extent,
-                format,
-                usages,
-                false,
-                &black_data[..],
-            )
-        };
+        // let black = {
+        //     AllocatedImage::new_and_upload(
+        //         commands,
+        //         device.clone(),
+        //         allocator.clone(),
+        //         extent,
+        //         format,
+        //         usages,
+        //         false,
+        //         &black_data[..],
+        //     )
+        // };
 
-        let grey = {
-            let data = glam::U8Vec4::splat((255. * 0.66) as u8).to_array();
-            AllocatedImage::new_and_upload(
-                commands,
-                device.clone(),
-                allocator.clone(),
-                extent,
-                format,
-                usages,
-                false,
-                &data[..],
-            )
-        };
+        // let grey = {
+        //     let data = glam::U8Vec4::splat((255. * 0.66) as u8).to_array();
+        //     AllocatedImage::new_and_upload(
+        //         commands,
+        //         device.clone(),
+        //         allocator.clone(),
+        //         extent,
+        //         format,
+        //         usages,
+        //         false,
+        //         &data[..],
+        //     )
+        // };
 
         let error_checkerboard = {
             let extent = vk::Extent3D {
@@ -137,7 +137,7 @@ impl Textures<'_> {
             unsafe { device.create_sampler(&create_info, None).unwrap() }
         };
 
-        let mut metal_rough_material = GltfMetallicRoughness::new(
+        let metal_rough_material = GltfMetallicRoughness::new(
             device.clone(),
             shaders,
             *swapchain.draw_format(),
@@ -154,27 +154,27 @@ impl Textures<'_> {
             (vk::DescriptorType::UNIFORM_BUFFER, 2.),
             (vk::DescriptorType::COMBINED_IMAGE_SAMPLER, 2.),
         ];
-        let mut global_desc_alloc = DescriptorAllocatorGrowable::new(device.clone(), 10, sizes);
+        let global_desc_alloc = DescriptorAllocatorGrowable::new(device.clone(), 10, sizes);
 
-        let (material_constants, default_material) = metal_rough_material.create_material(
-            allocator.clone(),
-            &mut global_desc_alloc,
-            &error_checkerboard,
-            default_sampler_nearest,
-        );
+        // let (material_constants, default_material) = metal_rough_material.create_material(
+        //     allocator.clone(),
+        //     &mut global_desc_alloc,
+        //     &error_checkerboard,
+        //     default_sampler_nearest,
+        // );
 
         Self {
             device_copy: device,
 
             white: Rc::new(white),
-            grey: Rc::new(grey),
-            black: Rc::new(black),
+            // grey: Rc::new(grey),
+            // black: Rc::new(black),
             error_checkerboard: Rc::new(error_checkerboard),
             default_sampler_linear,
             default_sampler_nearest,
 
-            default_material: Rc::new(default_material),
-            _material_constants: material_constants,
+            // default_material: Rc::new(default_material),
+            // material_constants: material_constants,
             metal_rough_material,
             _global_desc_alloc: global_desc_alloc,
         }
@@ -347,6 +347,7 @@ impl GltfMetallicRoughness<'_> {
         mat_data
     }
 
+    /*
     pub fn create_material(
         &mut self,
         allocator: Arc<Mutex<Allocator>>,
@@ -384,7 +385,7 @@ impl GltfMetallicRoughness<'_> {
         );
 
         (material_constants, instance)
-    }
+    }*/
 }
 
 /// The fields are supposed to be destroyed by the parent class GltfMetallicRoughness
@@ -396,7 +397,7 @@ pub struct MaterialPipeline {
 pub enum MaterialPass {
     MainColor,
     Transparent,
-    Other,
+    // Other,
 }
 
 pub struct MaterialInstance {

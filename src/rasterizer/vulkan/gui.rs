@@ -10,7 +10,7 @@ use egui_ash_renderer::{DynamicRendering, Options, Renderer};
 use winit::{event::WindowEvent, window::Window};
 
 use super::{base::VulkanBase, commands::FRAME_OVERLAP};
-use crate::font::{FONT, FONT_NAME};
+use crate::rasterizer::{FONT, FONT_NAME};
 
 pub struct GeneratedUi(Vec<ClippedShape>, TexturesDelta, f32);
 

@@ -1,3 +1,5 @@
+// TODO: reenable warning ?
+#![allow(clippy::too_many_arguments)]
 #[cfg(feature = "vulkan_stats")]
 use std::time::Instant;
 use std::{
@@ -10,8 +12,10 @@ use ash::vk;
 use glam::Mat4;
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
-use super::settings::Settings;
-use crate::{rasterizer::vulkan::gltf_loader::LoadedGLTF, scene::Camera, window::AppObserver};
+use crate::{
+    rasterizer::{Camera, Settings, vulkan::gltf_loader::LoadedGLTF},
+    window::WindowStats,
+};
 
 mod base;
 use base::VulkanBase;
@@ -32,9 +36,6 @@ mod gltf_loader;
 mod scene;
 mod textures;
 use scene::Scene;
-
-#[cfg(feature = "stats")]
-use super::Stats;
 
 // TODO: merge with stats + AppObserver ?
 #[cfg(feature = "vulkan_stats")]
@@ -230,17 +231,7 @@ impl VulkanEngine<'_> {
         }
     }
 
-    pub fn window(&self) -> &Rc<Window> {
-        &self.base.window
-    }
-
-    pub fn rasterize(
-        &mut self,
-        _settings: &Settings,
-        camera: &Camera,
-        app: &mut AppObserver,
-        #[cfg(feature = "stats")] _stats: &mut Stats,
-    ) {
+    pub fn rasterize(&mut self, _settings: &Settings, camera: &Camera, window_stats: &WindowStats) {
         #[cfg(feature = "vulkan_stats")]
         let t = Instant::now();
         self.swapchain.resize_if_necessary(
@@ -259,7 +250,7 @@ impl VulkanEngine<'_> {
             ui(
                 ctx,
                 format_debug(
-                    app,
+                    window_stats,
                     self.base.window.inner_size(),
                     camera,
                     #[cfg(feature = "vulkan_stats")]
@@ -357,7 +348,7 @@ impl VulkanEngine<'_> {
         current_frame.draw_geometries(
             &self.settings,
             &self.swapchain,
-            &self.scene.view_proj(),
+            self.scene.view_proj(),
             &self.scene.main_draw_ctx,
             global_desc,
             #[cfg(feature = "vulkan_stats")]
@@ -417,6 +408,7 @@ impl VulkanEngine<'_> {
     }
 
     pub fn on_mouse_motion(&mut self, delta: (f64, f64), cursor_grabbed: bool) {
+        // Prevents mouse to reappear on top of egui
         if !cursor_grabbed {
             self.gui.on_mouse_motion(delta);
         }
@@ -431,7 +423,7 @@ impl VulkanEngine<'_> {
     }
 }
 
-fn ui<'a>(
+fn ui(
     ctx: &egui::Context,
     debug: String,
     current_bg_effect: &mut usize,
@@ -618,7 +610,7 @@ fn ui<'a>(
 }
 
 fn format_debug(
-    app: &AppObserver,
+    window_stats: &WindowStats,
     size: PhysicalSize<u32>,
     camera: &Camera,
     #[cfg(feature = "vulkan_stats")] stats: VulkanStats,
@@ -628,10 +620,11 @@ fn format_debug(
     #[cfg(not(feature = "vulkan_stats"))]
     let stats = "Stats disabled";
     format!(
-        "fps : {} |  r {}μs / f {}μs\nWindow : {}x{}\nCamera : {} p: {} y: {}\n{}",
-        app.fps_avg().round(),
-        app.last_full_render_loop_micros(),
-        app.frame_avg_micros(),
+        "fps : {} |  rast {}μs / r {}μs / f {}μs\nWindow : {}x{}\nCamera : {} p: {} y: {}\n{}",
+        window_stats.fps_avg().round(),
+        window_stats.last_rasterize_micros(),
+        window_stats.last_full_render_loop_micros(),
+        window_stats.frame_avg_micros(),
         size.width,
         size.height,
         camera.pos,

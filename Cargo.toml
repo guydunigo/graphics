@@ -10,12 +10,9 @@ ash-window = { version = "0.13.0", optional = true }
 egui = { version = "0.33.0", optional = true }
 egui-ash-renderer = { version = "0.10.0", features = ["vk-mem", "dynamic-rendering"], optional = true }
 egui-winit = { version = "0.33.0", default-features = false, optional = true }
-fontdue = { version = "0.9.3", features = ["std"], optional = true }
 glam = "0.30.9"
 obj-rs = "0.7.4"
 rand = "0.9.2"
-rayon = { version = "1.11.0", optional = true }
-softbuffer = { version = "0.4.6", optional = true }
 vk-mem = { version = "0.5.0", optional = true }
 winit = "0.30.12"
 shaderc = { version = "0.10.1", optional = true }
@@ -38,10 +35,6 @@ crate-type = ["cdylib"]
 # features = ["android-native-activity"]
 
 [features]
-stats = []
-cpu=[
-    "softbuffer", "rayon", "fontdue"
-]
 android = ["winit/android-native-activity"]
 vulkan=[
     "ash", "ash-window", "egui", "egui-ash-renderer", "egui-winit",
@@ -55,6 +48,5 @@ vulkan_dbg_mem = []
 vulkan_stats = []
 vulkan_validation_layers = []
 
-# default = ["cpu"]
 default = ["vulkan", "vulkan_stats", "vulkan_validation_layers", "vulkan_shaderc"]
 # No shader compile : default = ["vulkan", "vulkan_stats", "vulkan_validation_layers"]

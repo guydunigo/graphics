@@ -21,10 +21,11 @@ use super::{
     allocated::{AllocatedBuffer, AllocatedImage, MyMemoryUsage},
     commands::VulkanCommands,
     descriptors::DescriptorAllocatorGrowable,
-    scene::{GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable},
+    scene::{
+        Bounds, GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable, Vertex,
+    },
     textures::{MaterialConstants, MaterialInstance, MaterialPass, MaterialResources, Textures},
 };
-use crate::scene::{Bounds, Vertex};
 
 /// Override colors with normal value
 const OVERRIDE_COLORS: bool = false;
@@ -120,20 +121,20 @@ pub fn load_gltf_meshes(
 pub struct LoadedGLTF {
     device_copy: Rc<Device>,
 
-    meshes: HashMap<String, Rc<MeshAsset>>,
+    _meshes: HashMap<String, Rc<MeshAsset>>,
     /// Named nodes
     pub nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
     // images: HashMap<String, Rc<AllocatedImage>>,
-    images: Vec<Rc<AllocatedImage>>,
-    materials: HashMap<String, Rc<MaterialInstance>>,
+    _images: Vec<Rc<AllocatedImage>>,
+    _materials: HashMap<String, Rc<MaterialInstance>>,
 
     pub top_nodes: Vec<Rc<RefCell<dyn Node>>>,
 
     samplers: Vec<vk::Sampler>,
 
-    descriptor_pool: DescriptorAllocatorGrowable,
+    _descriptor_pool: DescriptorAllocatorGrowable,
 
-    material_data_buffer: AllocatedBuffer,
+    _material_data_buffer: AllocatedBuffer,
 }
 
 impl Drop for LoadedGLTF {
@@ -293,14 +294,14 @@ impl LoadedGLTF {
 
         Self {
             device_copy: device.clone(),
-            meshes,
+            _meshes: meshes,
             nodes,
-            images,
-            materials,
+            _images: images,
+            _materials: materials,
             top_nodes,
             samplers,
-            descriptor_pool,
-            material_data_buffer,
+            _descriptor_pool: descriptor_pool,
+            _material_data_buffer: material_data_buffer,
         }
     }
 }
