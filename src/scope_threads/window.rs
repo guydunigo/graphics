@@ -21,7 +21,7 @@ use winit::{
 };
 
 #[cfg(feature = "stats")]
-use crate::rasterizer::Stats;
+use crate::rasterizer::cpu::Stats;
 use crate::{
     font::TextWriter,
     rasterizer::{Settings, u64_to_color},
@@ -260,7 +260,7 @@ impl ApplicationHandler for App {
 
                 let buffers_fill = Instant::now();
                 gfx.resize();
-                let buffers_fill = Instant::now().duration_since(buffers_fill).as_millis();
+                let buffers_fill = t.elapsed().as_millis();
 
                 let rendering_time = Instant::now();
                 self.threads.install(|| {
@@ -273,7 +273,7 @@ impl ApplicationHandler for App {
                         &stats,
                     );
                 });
-                let rendering_time = Instant::now().duration_since(rendering_time).as_millis();
+                let rendering_time = t.elapsed().as_millis();
 
                 self.threads.install(|| {
                     let cam_rot = self.world.camera.rot();
@@ -333,7 +333,7 @@ impl ApplicationHandler for App {
 
                     buffer
                 };
-                self.last_copy_buffer = Instant::now().duration_since(copy_buffer).as_millis();
+                self.last_copy_buffer = t.elapsed().as_millis();
 
                 buffer
                     .present()
@@ -346,8 +346,7 @@ impl ApplicationHandler for App {
                 // can render here instead.
                 gfx.window.request_redraw();
 
-                self.last_rendering_duration =
-                    Instant::now().duration_since(frame_start_time).as_millis();
+                self.last_rendering_duration = t.elapsed().as_millis();
             }
             _ => (),
         }

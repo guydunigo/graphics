@@ -1,17 +1,20 @@
-use super::any_engine::AnyEngine;
-
 #[derive(Debug, Clone, Copy)]
 pub struct Settings {
     /// Over-print all vertices
     pub show_vertices: bool,
     /// NOTE: There might be a decoupling, it is just for testing.
-    engine_type: EngineType,
+    pub engine_type: EngineType,
     /// Sort triangles by point with mininum Z value
     ///
     /// Not implemented everywhere
-    pub sort_triangles: TriangleSorting,
+    // pub sort_triangles: TriangleSorting,
     pub parallel_text: bool,
     pub oversampling: usize,
+    pub culling_meshes: bool,
+    pub culling_surfaces: bool,
+    pub culling_triangles: bool,
+    pub vertex_color: bool,
+    pub vertex_color_normal: bool,
 }
 
 impl Default for Settings {
@@ -19,26 +22,19 @@ impl Default for Settings {
         Self {
             show_vertices: Default::default(),
             engine_type: Default::default(),
-            sort_triangles: Default::default(),
+            // sort_triangles: Default::default(),
             parallel_text: true,
             oversampling: 1,
+            culling_meshes: true,
+            culling_surfaces: true,
+            culling_triangles: true,
+            vertex_color: false,
+            vertex_color_normal: false,
         }
     }
 }
 
 impl Settings {
-    pub fn set_engine_type(&mut self, engine: &AnyEngine) {
-        match engine {
-            AnyEngine::Original(_) => self.engine_type = EngineType::Original,
-            AnyEngine::Iterator(_) => self.engine_type = EngineType::Iterator,
-            AnyEngine::ParIter2(_) => self.engine_type = EngineType::ParIter2,
-            AnyEngine::ParIter3(_) => self.engine_type = EngineType::ParIter3,
-            AnyEngine::ParIter4(_) => self.engine_type = EngineType::ParIter4,
-            AnyEngine::ParIter5(_) => self.engine_type = EngineType::ParIter5,
-            AnyEngine::Vulkan(_) => self.engine_type = EngineType::Vulkan,
-        }
-    }
-
     pub fn next_oversampling(&mut self) {
         self.oversampling = match self.oversampling {
             1 => 2,
@@ -51,16 +47,26 @@ impl Settings {
 
 #[derive(Default, Debug, Clone, Copy)]
 pub enum EngineType {
-    Original,
     #[default]
+    None,
+    Original,
     Iterator,
+    Steps,
+    Steps2,
+    ParIter0,
+    ParIter1,
+    ThreadPool,
+    ThreadPool1,
+    ThreadPool2,
     ParIter2,
     ParIter3,
     ParIter4,
     ParIter5,
+    #[cfg(feature = "vulkan")]
     Vulkan,
 }
 
+/*
 #[derive(Default, Debug, Clone, Copy)]
 pub enum TriangleSorting {
     #[default]
@@ -78,3 +84,4 @@ impl TriangleSorting {
         }
     }
 }
+*/
