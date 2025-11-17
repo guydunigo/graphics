@@ -36,6 +36,7 @@ mod gltf_loader;
 mod scene;
 mod textures;
 use scene::Scene;
+mod crucru;
 
 // TODO: merge with stats + AppObserver ?
 #[cfg(feature = "vulkan_stats")]

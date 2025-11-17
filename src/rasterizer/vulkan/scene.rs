@@ -22,10 +22,10 @@ use glam::{Mat4, Vec3, Vec4, Vec4Swizzles, vec3, vec4};
 // TODO: proper resource path mngmt and all
 const SCENES: &[(&str, &str)] = &[
     ("basicmesh", "./resources/basicmesh.glb"),
-    ("structure", "./resources/structure.glb"),
-    ("helmet", "./resources/DamagedHelmet.glb"),
-    ("corridor", "./resources/Sponza/Sponza.gltf"),
-    ("house2", "./resources/house2.glb"),
+    // ("structure", "./resources/structure.glb"),
+    // ("helmet", "./resources/DamagedHelmet.glb"),
+    // ("corridor", "./resources/Sponza/Sponza.gltf"),
+    // ("house2", "./resources/house2.glb"),
 ];
 
 pub struct Scene<'a> {
