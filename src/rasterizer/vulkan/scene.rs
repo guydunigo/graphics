@@ -457,141 +457,73 @@ pub trait Renderable {
     fn draw(&self, top_mat: &Mat4, ctx: &mut DrawContext);
 }
 
-pub trait Node: Renderable {
-    fn refresh_transform(&mut self, parent_mat: &Mat4);
-
-    fn node_data(&self) -> &NodeData;
-    fn node_data_mut(&mut self) -> &mut NodeData;
-}
-
-struct EmptyNode;
-impl Renderable for EmptyNode {
-    fn draw(&self, _top_mat: &Mat4, _ctx: &mut DrawContext) {
-        unreachable!()
-    }
-}
-impl Node for EmptyNode {
-    fn refresh_transform(&mut self, _parent_mat: &Mat4) {
-        unreachable!()
-    }
-    fn node_data(&self) -> &NodeData {
-        unreachable!();
-    }
-    fn node_data_mut(&mut self) -> &mut NodeData {
-        unreachable!();
-    }
-}
-
-// TODO: or have Node contain a dyn Renderable/Node like MeshNode
-pub struct NodeData {
+pub struct Node {
     /// If there is no parent or it was destroyed, weak won't upgrade.
-    pub parent: Weak<RefCell<dyn Node>>,
-    pub children: Vec<Rc<RefCell<dyn Node>>>,
+    pub parent: Weak<RefCell<Node>>,
+    pub children: Vec<Rc<RefCell<Node>>>,
     pub local_transform: Mat4,
     pub world_transform: Mat4,
+
+    pub mesh: Option<Rc<MeshAsset>>,
 }
 
-impl Default for NodeData {
+impl Default for Node {
     fn default() -> Self {
-        let parent: Weak<RefCell<EmptyNode>> = Weak::new();
+        let parent: Weak<RefCell<Node>> = Weak::new();
         Self {
             parent,
             children: Default::default(),
             local_transform: Default::default(),
             world_transform: Default::default(),
+            mesh: Default::default(),
         }
     }
 }
 
-impl Renderable for NodeData {
-    fn draw(&self, top_mat: &Mat4, ctx: &mut DrawContext) {
-        self.children
-            .iter()
-            .for_each(|c| c.borrow().draw(top_mat, ctx));
+impl Node {
+    pub fn with_mesh(mesh: Rc<MeshAsset>) -> Self {
+        Self {
+            mesh: Some(mesh),
+            ..Default::default()
+        }
     }
-}
 
-impl Node for NodeData {
-    fn refresh_transform(&mut self, parent_mat: &Mat4) {
+    pub fn refresh_transform(&mut self, parent_mat: &Mat4) {
         self.world_transform = parent_mat * self.local_transform;
         self.children
             .iter()
             .for_each(|c| c.borrow_mut().refresh_transform(&self.world_transform));
     }
-    fn node_data(&self) -> &NodeData {
-        self
-    }
-    fn node_data_mut(&mut self) -> &mut NodeData {
-        self
-    }
 }
 
-pub struct MeshNode {
-    node: NodeData,
-
-    mesh: Rc<MeshAsset>,
-}
-
-impl From<Rc<MeshAsset>> for MeshNode {
-    fn from(mesh: Rc<MeshAsset>) -> Self {
-        Self {
-            node: Default::default(),
-            mesh,
-        }
-    }
-}
-
-// impl MeshNode {
-//     pub fn new(mesh: Rc<MeshAsset>, local_transform: Mat4, world_transform: Mat4) -> Self {
-//         let parent: Weak<RefCell<EmptyNode>> = Weak::new();
-//         MeshNode {
-//             node: NodeData {
-//                 parent,
-//                 children: Default::default(),
-//                 local_transform,
-//                 world_transform,
-//             },
-//             mesh: mesh,
-//         }
-//     }
-// }
-
-impl Renderable for MeshNode {
+impl Renderable for Node {
     fn draw(&self, top_mat: &Mat4, ctx: &mut DrawContext) {
-        let node_mat = top_mat * self.node.world_transform;
+        if let Some(mesh) = &self.mesh {
+            let node_mat = top_mat * self.world_transform;
 
-        self.mesh.surfaces.iter().for_each(|s| {
-            let def = RenderObject {
-                index_count: s.count,
-                first_index: s.start_index,
-                index_buffer: *self.mesh.index_buffer(),
-                material: s.material.clone(),
+            mesh.surfaces.iter().for_each(|s| {
+                let def = RenderObject {
+                    index_count: s.count,
+                    first_index: s.start_index,
+                    index_buffer: *mesh.index_buffer(),
+                    material: s.material.clone(),
 
-                bounds: s.bounds,
+                    bounds: s.bounds,
 
-                transform: node_mat,
-                vertex_buffer_addr: self.mesh.vertex_buffer_address(),
-            };
+                    transform: node_mat,
+                    vertex_buffer_addr: mesh.vertex_buffer_address(),
+                };
 
-            if let MaterialPass::Transparent = s.material.pass_type() {
-                ctx.transparent_surfaces.push(def);
-            } else {
-                ctx.opaque_surfaces.push(def);
-            }
-        });
+                if let MaterialPass::Transparent = s.material.pass_type() {
+                    ctx.transparent_surfaces.push(def);
+                } else {
+                    ctx.opaque_surfaces.push(def);
+                }
+            });
+        }
 
-        self.node.draw(top_mat, ctx);
-    }
-}
-
-impl Node for MeshNode {
-    fn refresh_transform(&mut self, parent_mat: &Mat4) {
-        self.node.refresh_transform(parent_mat);
-    }
-    fn node_data(&self) -> &NodeData {
-        &self.node
-    }
-    fn node_data_mut(&mut self) -> &mut NodeData {
-        &mut self.node
+        self.children
+            .iter()
+            .for_each(|c| c.borrow().draw(top_mat, ctx));
     }
 }

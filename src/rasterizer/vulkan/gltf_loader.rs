@@ -21,9 +21,7 @@ use super::{
     allocated::{AllocatedBuffer, AllocatedImage, MyMemoryUsage},
     commands::VulkanCommands,
     descriptors::DescriptorAllocatorGrowable,
-    scene::{
-        Bounds, GeoSurface, GpuMeshBuffers, MeshAsset, MeshNode, Node, NodeData, Renderable, Vertex,
-    },
+    scene::{Bounds, GeoSurface, GpuMeshBuffers, MeshAsset, Node, Renderable, Vertex},
     textures::{MaterialConstants, MaterialInstance, MaterialPass, MaterialResources, Textures},
 };
 
@@ -123,12 +121,12 @@ pub struct LoadedGLTF {
 
     _meshes: HashMap<String, Rc<MeshAsset>>,
     /// Named nodes
-    pub nodes: HashMap<String, Rc<RefCell<dyn Node>>>,
+    pub nodes: HashMap<String, Rc<RefCell<Node>>>,
     // images: HashMap<String, Rc<AllocatedImage>>,
     _images: Vec<Rc<AllocatedImage>>,
     _materials: HashMap<String, Rc<MaterialInstance>>,
 
-    pub top_nodes: Vec<Rc<RefCell<dyn Node>>>,
+    pub top_nodes: Vec<Rc<RefCell<Node>>>,
 
     samplers: Vec<vk::Sampler>,
 
@@ -248,22 +246,22 @@ impl LoadedGLTF {
             load_meshes(&device, commands, &document, buffers, materials_vec);
 
         let mut nodes = HashMap::new();
-        let nodes_vec: Vec<Rc<RefCell<dyn Node>>> = document
+        let nodes_vec: Vec<Rc<RefCell<Node>>> = document
             .nodes()
             .map(|node| {
-                let new_node: Rc<RefCell<dyn Node>> = if let Some(mesh) = node.mesh() {
-                    Rc::new(RefCell::new(MeshNode::from(
+                let new_node: Rc<RefCell<Node>> = if let Some(mesh) = node.mesh() {
+                    Rc::new(RefCell::new(Node::with_mesh(
                         meshes_vec[mesh.index()].clone(),
                     )))
                 } else {
-                    Rc::new(RefCell::new(NodeData::default()))
+                    Default::default()
                 };
 
                 if let Some(name) = node.name() {
                     nodes.insert(name.into(), new_node.clone());
                 }
 
-                new_node.borrow_mut().node_data_mut().local_transform =
+                new_node.borrow_mut().local_transform =
                     Mat4::from_cols_array_2d(&node.transform().matrix());
 
                 new_node
@@ -274,12 +272,11 @@ impl LoadedGLTF {
         zip(document.nodes(), nodes_vec.iter()).for_each(|(node, new_node)| {
             new_node
                 .borrow_mut()
-                .node_data_mut()
                 .children
                 .extend(node.children().map(|c| {
                     let new_c = &nodes_vec[c.index()];
                     // We hope a node can't be its own parent, otherwise borrow_mut would panic.
-                    new_c.borrow_mut().node_data_mut().parent = Rc::downgrade(new_node);
+                    new_c.borrow_mut().parent = Rc::downgrade(new_node);
                     new_c.clone()
                 }));
         });
@@ -287,7 +284,7 @@ impl LoadedGLTF {
         // Searching for parent-less nodes
         let top_nodes = nodes_vec
             .iter()
-            .filter(|n| n.borrow().node_data().parent.strong_count() == 0)
+            .filter(|n| n.borrow().parent.strong_count() == 0)
             .cloned()
             .inspect(|n| n.borrow_mut().refresh_transform(&Mat4::IDENTITY))
             .collect();

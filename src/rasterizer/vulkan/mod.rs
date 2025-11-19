@@ -536,70 +536,36 @@ fn ui(
             // If the selected node exists (from this scene).
             if let Some(node) = scene.nodes.get(selected_node) {
                 let mut node = node.borrow_mut();
-                let node_data = node.node_data_mut();
-                let local_tr_copy = node_data.local_transform;
+                let local_tr_copy = node.local_transform;
                 egui::Grid::new("data").num_columns(4).show(ui, |ui| {
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.x_axis.x).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.y_axis.x).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.z_axis.x).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.w_axis.x).speed(0.01),
-                    );
+                    ui.add(egui::DragValue::new(&mut node.local_transform.x_axis.x).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.y_axis.x).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.z_axis.x).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.w_axis.x).speed(0.01));
                     ui.end_row();
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.x_axis.y).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.y_axis.y).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.z_axis.y).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.w_axis.y).speed(0.01),
-                    );
+                    ui.add(egui::DragValue::new(&mut node.local_transform.x_axis.y).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.y_axis.y).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.z_axis.y).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.w_axis.y).speed(0.01));
                     ui.end_row();
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.x_axis.z).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.y_axis.z).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.z_axis.z).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.w_axis.z).speed(0.01),
-                    );
+                    ui.add(egui::DragValue::new(&mut node.local_transform.x_axis.z).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.y_axis.z).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.z_axis.z).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.w_axis.z).speed(0.01));
                     ui.end_row();
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.x_axis.w).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.y_axis.w).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.z_axis.w).speed(0.01),
-                    );
-                    ui.add(
-                        egui::DragValue::new(&mut node_data.local_transform.w_axis.w).speed(0.01),
-                    );
+                    ui.add(egui::DragValue::new(&mut node.local_transform.x_axis.w).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.y_axis.w).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.z_axis.w).speed(0.01));
+                    ui.add(egui::DragValue::new(&mut node.local_transform.w_axis.w).speed(0.01));
                     ui.end_row();
                 });
                 if ui.button("rotate").clicked() {
-                    node_data.local_transform =
-                        Mat4::from_rotation_x(1.) * node_data.local_transform;
+                    node.local_transform = Mat4::from_rotation_x(1.) * node.local_transform;
                 }
                 // If parameters were modified, update it (and its children) :
-                if node_data.local_transform != local_tr_copy {
-                    let parent_transform = if let Some(parent) = node_data.parent.upgrade() {
-                        parent.borrow().node_data().world_transform
+                if node.local_transform != local_tr_copy {
+                    let parent_transform = if let Some(parent) = node.parent.upgrade() {
+                        parent.borrow().world_transform
                     } else {
                         Mat4::IDENTITY
                     };
